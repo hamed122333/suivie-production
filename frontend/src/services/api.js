@@ -39,6 +39,7 @@ export const taskAPI = {
   create: (data) => api.post('/tasks', data),
   update: (id, data) => api.put(`/tasks/${id}`, data),
   updateStatus: (id, status, reasonBlocked) => api.put(`/tasks/${id}/status`, { status, reasonBlocked }),
+  patchBoard: (columnOrders) => api.patch('/tasks/board', { columnOrders }),
   delete: (id) => api.delete(`/tasks/${id}`),
 };
 

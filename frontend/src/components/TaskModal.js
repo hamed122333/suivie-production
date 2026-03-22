@@ -1,96 +1,103 @@
 import React, { useState, useEffect } from 'react';
 
-const TaskModal = ({ isOpen, task, onClose, onSave, users }) => {
-  const [formData, setFormData] = useState({
+const TaskModal = ({ task, users, onSave, onClose, isAdmin }) => {
+  const [form, setForm] = useState({
     title: '',
     description: '',
+    assignedTo: '',
     priority: 'MEDIUM',
-    assignee: '',
-    status: 'TODO',
-    blocked_reason: ''
   });
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (task) {
-      setFormData({
-        title: task.title,
+      setForm({
+        title: task.title || '',
         description: task.description || '',
+        assignedTo: task.assigned_to || '',
         priority: task.priority || 'MEDIUM',
-        assignee: task.assignee || '',
-        status: task.status || 'TODO',
-        blocked_reason: task.blocked_reason || ''
-      });
-    } else {
-      setFormData({
-        title: '', description: '', priority: 'MEDIUM', assignee: '', status: 'TODO', blocked_reason: ''
       });
     }
-  }, [task, isOpen]);
+  }, [task]);
 
-  if (!isOpen) return null;
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave({ ...formData, id: task ? task.id : undefined });
+    if (!form.title.trim()) {
+      setError('Title is required');
+      return;
+    }
+    setError('');
+    await onSave({
+      title: form.title.trim(),
+      description: form.description.trim(),
+      assignedTo: form.assignedTo === '' || form.assignedTo == null ? null : parseInt(form.assignedTo, 10),
+      priority: form.priority,
+    });
   };
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
-    }}>
-      <div style={{ backgroundColor: 'white', padding: 20, borderRadius: 8, width: '400px', maxHeight: '90vh', overflowY: 'auto' }}>
-        <h2>{task ? 'Edit Task' : 'New Task'}</h2>
+    <div className="modal-overlay">
+      <div className="modal-content">
+        <div className="modal-header">
+          <h3 className="modal-title">{task ? '✏️ Edit Task' : '➕ New Task'}</h3>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
         <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: 10 }}>
-                <label>Title</label>
-                <input required name="title" value={formData.title} onChange={handleChange} style={{ width: '100%', padding: 8 }} />
+          {error && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', padding: '0.5rem', marginBottom: '1rem', color: '#dc2626', fontSize: '0.875rem' }}>
+              {error}
             </div>
-            <div style={{ marginBottom: 10 }}>
-                <label>Description</label>
-                <textarea name="description" value={formData.description} onChange={handleChange} style={{ width: '100%', padding: 8 }} />
-            </div>
-            <div style={{ marginBottom: 10 }}>
-                <label>Assignee</label>
-                <select name="assignee" value={formData.assignee} onChange={handleChange} style={{ width: '100%', padding: 8 }}>
-                    <option value="">Unassigned</option>
-                    {users.map(u => <option key={u.id} value={u.username}>{u.username}</option>)}
-                </select>
-            </div>
-            <div style={{ marginBottom: 10 }}>
-                <label>Priority</label>
-                <select name="priority" value={formData.priority} onChange={handleChange} style={{ width: '100%', padding: 8 }}>
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                </select>
-            </div>
-            {task && (
-                 <div style={{ marginBottom: 10 }}>
-                    <label>Status</label>
-                    <select name="status" value={formData.status} onChange={handleChange} style={{ width: '100%', padding: 8 }}>
-                        <option value="TODO">To Do</option>
-                        <option value="IN_PROGRESS">In Progress</option>
-                        <option value="DONE">Done</option>
-                        <option value="BLOCKED">Blocked</option>
-                    </select>
-                </div>
-            )}
-            {formData.status === 'BLOCKED' && (
-                <div style={{ marginBottom: 10 }}>
-                    <label style={{ color: 'red' }}>Blocked Reason</label>
-                    <input required name="blocked_reason" value={formData.blocked_reason} onChange={handleChange} style={{ width: '100%', padding: 8, border: '1px solid red' }} />
-                </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
-                <button type="button" onClick={onClose} style={{ padding: '8px 16px' }}>Cancel</button>
-                <button type="submit" style={{ padding: '8px 16px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: 4 }}>Save</button>
-            </div>
+          )}
+          <div className="form-group">
+            <label>Title *</label>
+            <input
+              type="text"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder="Task title..."
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Description</label>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Task description (optional)..."
+              rows={3}
+              style={{ resize: 'vertical' }}
+            />
+          </div>
+          <div className="form-group">
+            <label>Assign to</label>
+            <select
+              value={form.assignedTo}
+              onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}
+            >
+              <option value="">Unassigned</option>
+              {users.map(u => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Priority</label>
+            <select
+              value={form.priority}
+              onChange={(e) => setForm({ ...form, priority: e.target.value })}
+            >
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+              <option value="URGENT">Urgent</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary">
+              {task ? 'Update Task' : 'Create Task'}
+            </button>
+          </div>
         </form>
       </div>
     </div>
@@ -98,4 +105,3 @@ const TaskModal = ({ isOpen, task, onClose, onSave, users }) => {
 };
 
 export default TaskModal;
-

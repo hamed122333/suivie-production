@@ -1,6 +1,29 @@
 const TaskModel = require('../models/taskModel');
 
 const taskController = {
+  async reorderBoard(req, res) {
+    try {
+      const { columnOrders } = req.body;
+      if (!columnOrders || typeof columnOrders !== 'object') {
+        return res.status(400).json({ error: 'columnOrders object is required' });
+      }
+      await TaskModel.reorderBoard(columnOrders);
+      const tasks = await TaskModel.getAll({});
+      res.json(tasks);
+    } catch (err) {
+      if (
+        err.message &&
+        (err.message.includes('Board order') ||
+          err.message.includes('Duplicate') ||
+          err.message.includes('Invalid task'))
+      ) {
+        return res.status(400).json({ error: err.message });
+      }
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  },
+
   async getAll(req, res) {
     try {
       const filters = {};

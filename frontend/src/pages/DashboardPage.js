@@ -6,7 +6,8 @@ const StatCard = ({ label, value, icon, color, bg }) => (
     background: 'white',
     borderRadius: '10px',
     padding: '1.25rem',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    boxShadow: '0 1px 2px rgba(9, 30, 66, 0.08)',
+    border: '1px solid #dfe1e6',
     borderLeft: `4px solid ${color}`,
     display: 'flex',
     alignItems: 'center',
@@ -15,7 +16,7 @@ const StatCard = ({ label, value, icon, color, bg }) => (
     <div style={{ fontSize: '2rem', background: bg, padding: '0.5rem', borderRadius: '8px' }}>{icon}</div>
     <div>
       <div style={{ fontSize: '2rem', fontWeight: '700', color, lineHeight: '1' }}>{value}</div>
-      <div style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.25rem' }}>{label}</div>
+      <div style={{ fontSize: '0.875rem', color: '#5e6c84', marginTop: '0.25rem' }}>{label}</div>
     </div>
   </div>
 );
@@ -45,50 +46,53 @@ const DashboardPage = () => {
 
   if (loading) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-        Loading dashboard...
+      <div style={{ padding: '2rem', textAlign: 'center', color: '#5e6c84' }}>
+        Chargement des indicateurs…
       </div>
     );
   }
 
   const statusLabels = {
-    TODO: { label: 'To Do', color: '#6b7280' },
-    IN_PROGRESS: { label: 'In Progress', color: '#2563eb' },
-    DONE: { label: 'Done', color: '#16a34a' },
-    BLOCKED: { label: 'Blocked', color: '#dc2626' },
+    TODO: { label: 'À faire', color: '#6b7280' },
+    IN_PROGRESS: { label: 'En cours', color: '#0052cc' },
+    DONE: { label: 'Terminé', color: '#006644' },
+    BLOCKED: { label: 'Bloqué', color: '#bf2600' },
   };
 
   return (
     <div style={{ padding: '1.5rem', maxWidth: '1200px', margin: '0 auto' }}>
-      <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#111827', marginBottom: '1.5rem' }}>
-        📊 Dashboard
+      <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#172b4d', marginBottom: '0.35rem' }}>
+        Vue d’ensemble
       </h2>
+      <p style={{ fontSize: '0.875rem', color: '#5e6c84', marginBottom: '1.5rem' }}>
+        Indicateurs et dernières tâches (style rapports Jira).
+      </p>
 
       {/* Stats Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-        <StatCard label="Tasks Today" value={stats?.todayTotal || 0} icon="📅" color="#7c3aed" bg="#ede9fe" />
-        <StatCard label="Total Tasks" value={stats?.grandTotal || 0} icon="📋" color="#2563eb" bg="#dbeafe" />
-        <StatCard label="Completed" value={stats?.totalDone || 0} icon="✅" color="#16a34a" bg="#dcfce7" />
-        <StatCard label="In Progress" value={stats?.totalInProgress || 0} icon="⚙️" color="#d97706" bg="#fef3c7" />
-        <StatCard label="Blocked" value={stats?.totalBlocked || 0} icon="🚫" color="#dc2626" bg="#fee2e2" />
-        <StatCard label="Pending" value={stats?.totalTodo || 0} icon="📌" color="#6b7280" bg="#f3f4f6" />
+        <StatCard label="Tâches aujourd’hui" value={stats?.todayTotal || 0} icon="📅" color="#7c3aed" bg="#ede9fe" />
+        <StatCard label="Total des tâches" value={stats?.grandTotal || 0} icon="📋" color="#0052cc" bg="#deebff" />
+        <StatCard label="Terminées" value={stats?.totalDone || 0} icon="✅" color="#006644" bg="#e3fcef" />
+        <StatCard label="En cours" value={stats?.totalInProgress || 0} icon="⚙️" color="#d97706" bg="#fef3c7" />
+        <StatCard label="Bloquées" value={stats?.totalBlocked || 0} icon="🚫" color="#bf2600" bg="#ffebe6" />
+        <StatCard label="À faire" value={stats?.totalTodo || 0} icon="📌" color="#6b7280" bg="#f4f5f7" />
       </div>
 
       {/* Recent Tasks */}
-      <div style={{ background: 'white', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
-        <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f3f4f6', fontWeight: '600', color: '#111827' }}>
-          📋 Recent Tasks
+      <div style={{ background: 'white', borderRadius: '10px', boxShadow: '0 1px 2px rgba(9, 30, 66, 0.08)', border: '1px solid #dfe1e6', overflow: 'hidden' }}>
+        <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f4f5f7', fontWeight: '600', color: '#172b4d' }}>
+          Tâches récentes
         </div>
         {recentTasks.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>No tasks yet</div>
+          <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>Aucune tâche pour le moment</div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
             <thead>
               <tr style={{ background: '#f9fafb' }}>
-                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#6b7280', fontWeight: '600' }}>Title</th>
-                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#6b7280', fontWeight: '600' }}>Assigned To</th>
-                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#6b7280', fontWeight: '600' }}>Priority</th>
-                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#6b7280', fontWeight: '600' }}>Status</th>
+                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#5e6c84', fontWeight: '600' }}>Titre</th>
+                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#5e6c84', fontWeight: '600' }}>Assigné</th>
+                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#5e6c84', fontWeight: '600' }}>Priorité</th>
+                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#5e6c84', fontWeight: '600' }}>Statut</th>
               </tr>
             </thead>
             <tbody>

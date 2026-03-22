@@ -17,7 +17,7 @@ const ProtectedRoute = ({ children }) => {
 const Layout = ({ children }) => (
   <>
     <Header />
-    <main>{children}</main>
+    <main className="app-main">{children}</main>
   </>
 );
 
@@ -27,6 +27,11 @@ const AppRoutes = () => {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/kanban" replace /> : <LoginPage />} />
       <Route path="/dashboard" element={
+        <ProtectedRoute>
+          <Layout><DashboardPage /></Layout>
+        </ProtectedRoute>
+      } />
+      <Route path="/reports" element={
         <ProtectedRoute>
           <Layout><DashboardPage /></Layout>
         </ProtectedRoute>

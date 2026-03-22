@@ -1,16 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import KanbanBoard from '../components/KanbanBoard';
-import { taskAPI, userAPI } from '../services/api';
+import KanbanToolbar from '../components/KanbanToolbar';
+import { taskAPI, userAPI, dashboardAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const KanbanPage = () => {
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filterUser, setFilterUser] = useState('');
+  const [search, setSearch] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin } = useAuth();
 
-  const fetchTasks = async (userId) => {
+  const fetchTasks = useCallback(async (userId) => {
     try {
       const params = {};
       if (userId) params.assignedTo = userId;
@@ -19,61 +25,93 @@ const KanbanPage = () => {
     } catch (err) {
       console.error('Failed to fetch tasks', err);
     }
-  };
+  }, []);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await dashboardAPI.getStats();
+      setStats(res.data);
+    } catch (err) {
+      console.error('Failed to fetch stats', err);
+    }
+  }, []);
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([fetchTasks(filterUser), fetchStats()]);
+  }, [fetchTasks, fetchStats, filterUser]);
 
   useEffect(() => {
-    const fetchInitialData = async () => {
+    const q = searchParams.get('q') || '';
+    setSearch(q);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const load = async () => {
       try {
-        const [tasksRes, usersRes] = await Promise.all([
+        const [tasksRes, usersRes, statsRes] = await Promise.all([
           taskAPI.getAll({}),
           userAPI.getAll(),
+          dashboardAPI.getStats(),
         ]);
         setTasks(tasksRes.data);
         setUsers(usersRes.data);
+        setStats(statsRes.data);
       } catch (err) {
         console.error('Failed to load data', err);
       } finally {
         setLoading(false);
       }
     };
-    fetchInitialData();
+    load();
   }, []);
 
   useEffect(() => {
     if (!loading) {
       fetchTasks(filterUser);
     }
-  }, [filterUser]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filterUser, loading, fetchTasks]);
+
+  const handleSearchChange = (value) => {
+    setSearch(value);
+    if (value.trim()) {
+      setSearchParams({ q: value.trim() });
+    } else {
+      setSearchParams({});
+    }
+  };
 
   if (loading) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-        Loading tasks...
+      <div className="page-loading">
+        <div className="page-loading__spinner" aria-hidden />
+        <p>Chargement du tableau…</p>
       </div>
     );
   }
 
   return (
-    <div style={{ height: 'calc(100vh - 60px)', display: 'flex', flexDirection: 'column' }}>
-      {/* Filter bar */}
-      {isAdmin && (
-        <div style={{ padding: '0.5rem 1rem', background: 'white', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <label style={{ fontSize: '0.875rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
-            🔍 Filter by user:
-            <select
-              value={filterUser}
-              onChange={(e) => setFilterUser(e.target.value)}
-              style={{ width: 'auto', padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
-            >
-              <option value="">All users</option>
-              {users.map(u => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-      )}
-      <KanbanBoard tasks={tasks} users={users} onTasksChange={() => fetchTasks(filterUser)} />
+    <div className="kanban-page">
+      <KanbanToolbar
+        search={search}
+        onSearchChange={handleSearchChange}
+        priority={priorityFilter}
+        onPriorityChange={setPriorityFilter}
+        filterUser={filterUser}
+        onFilterUserChange={setFilterUser}
+        users={users}
+        isAdmin={isAdmin}
+        stats={stats}
+        onRefresh={refreshAll}
+      />
+      <KanbanBoard
+        tasks={tasks}
+        setTasks={setTasks}
+        users={users}
+        filterQuery={search}
+        filterPriority={priorityFilter}
+        onTasksChange={() => fetchTasks(filterUser)}
+        onStatsRefresh={fetchStats}
+      />
     </div>
   );
 };

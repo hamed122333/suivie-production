@@ -3,6 +3,7 @@ const router = express.Router();
 const taskController = require('../controllers/taskController');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 
+router.patch('/board', authenticate, requireAdmin, taskController.reorderBoard);
 router.get('/', authenticate, taskController.getAll);
 router.get('/:id', authenticate, taskController.getById);
 router.post('/', authenticate, requireAdmin, taskController.create);
