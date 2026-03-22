@@ -16,7 +16,6 @@ const statusConfig = {
 
 const TaskCard = ({ task, onStatusChange, onEdit, onDelete, isAdmin, isDragging }) => {
   const priority = priorityConfig[task.priority] || priorityConfig.MEDIUM;
-  const status = statusConfig[task.status] || statusConfig.TODO;
 
   const formatDate = (dateStr) => {
     const d = new Date(dateStr);

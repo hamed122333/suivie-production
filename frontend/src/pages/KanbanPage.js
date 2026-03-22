@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import KanbanBoard from '../components/KanbanBoard';
 import { taskAPI, userAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -10,22 +10,22 @@ const KanbanPage = () => {
   const [filterUser, setFilterUser] = useState('');
   const { isAdmin } = useAuth();
 
-  const fetchTasks = useCallback(async () => {
+  const fetchTasks = async (userId) => {
     try {
       const params = {};
-      if (filterUser) params.assignedTo = filterUser;
+      if (userId) params.assignedTo = userId;
       const res = await taskAPI.getAll(params);
       setTasks(res.data);
     } catch (err) {
       console.error('Failed to fetch tasks', err);
     }
-  }, [filterUser]);
+  };
 
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
         const [tasksRes, usersRes] = await Promise.all([
-          taskAPI.getAll(filterUser ? { assignedTo: filterUser } : {}),
+          taskAPI.getAll({}),
           userAPI.getAll(),
         ]);
         setTasks(tasksRes.data);
@@ -40,8 +40,10 @@ const KanbanPage = () => {
   }, []);
 
   useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    if (!loading) {
+      fetchTasks(filterUser);
+    }
+  }, [filterUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
@@ -71,7 +73,7 @@ const KanbanPage = () => {
           </label>
         </div>
       )}
-      <KanbanBoard tasks={tasks} users={users} onTasksChange={fetchTasks} />
+      <KanbanBoard tasks={tasks} users={users} onTasksChange={() => fetchTasks(filterUser)} />
     </div>
   );
 };
