@@ -41,6 +41,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Suivi Production API running' });
 });
 
+// Root route
+app.get('/', (req, res) => {
+  res.send('API Suivi Production is running. Access the frontend app instead.');
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

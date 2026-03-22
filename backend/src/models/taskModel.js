@@ -70,7 +70,7 @@ const TaskModel = {
          assigned_to = COALESCE($3, assigned_to),
          priority = COALESCE($4, priority),
          status = COALESCE($5, status),
-         reason_blocked = $6,
+         blocked_reason = $6,
          updated_at = NOW()
        WHERE id = $7
        RETURNING *`,
@@ -83,12 +83,13 @@ const TaskModel = {
     const task = await this.getById(id);
     if (!task) return null;
 
-    if (userRole !== 'admin' && task.assigned_to !== userId) {
-      throw new Error('Not authorized to update this task');
-    }
+    // MVP: Allow any authenticated user to update status (removed strict ownership check)
+    // if (userRole !== 'admin' && task.assigned_to !== userId) {
+    //   throw new Error('Not authorized to update this task');
+    // }
 
     const result = await pool.query(
-      `UPDATE tasks SET status = $1, reason_blocked = $2, updated_at = NOW()
+      `UPDATE tasks SET status = $1, blocked_reason = $2, updated_at = NOW()
        WHERE id = $3
        RETURNING *`,
       [status, reasonBlocked, id]
