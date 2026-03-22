@@ -1,24 +1,53 @@
-import logo from './logo.svg';
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Header from './components/Header';
+import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
+import KanbanPage from './pages/KanbanPage';
 import './App.css';
+
+const ProtectedRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+};
+
+const Layout = ({ children }) => (
+  <>
+    <Header />
+    <main>{children}</main>
+  </>
+);
+
+const AppRoutes = () => {
+  const { user } = useAuth();
+  return (
+    <Routes>
+      <Route path="/login" element={user ? <Navigate to="/kanban" replace /> : <LoginPage />} />
+      <Route path="/dashboard" element={
+        <ProtectedRoute>
+          <Layout><DashboardPage /></Layout>
+        </ProtectedRoute>
+      } />
+      <Route path="/kanban" element={
+        <ProtectedRoute>
+          <Layout><KanbanPage /></Layout>
+        </ProtectedRoute>
+      } />
+      <Route path="/" element={<Navigate to="/kanban" replace />} />
+    </Routes>
+  );
+};
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 
