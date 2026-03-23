@@ -3,7 +3,9 @@ const TaskModel = require('../models/taskModel');
 const dashboardController = {
   async getStats(req, res) {
     try {
-      const stats = await TaskModel.getDashboardStats();
+      const raw = req.query.workspaceId || req.query.workspace;
+      const workspaceId = raw ? parseInt(raw, 10) : null;
+      const stats = await TaskModel.getDashboardStats(Number.isInteger(workspaceId) ? workspaceId : null);
       res.json({
         todayTotal: parseInt(stats.today_total),
         totalDone: parseInt(stats.total_done),

@@ -2,10 +2,12 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Header from './components/Header';
+import Sidebar from './components/Sidebar';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import KanbanPage from './pages/KanbanPage';
 import './App.css';
+import { WorkspaceProvider } from './context/WorkspaceContext';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -17,7 +19,10 @@ const ProtectedRoute = ({ children }) => {
 const Layout = ({ children }) => (
   <>
     <Header />
-    <main className="app-main">{children}</main>
+    <div className="app-layout">
+      <Sidebar />
+      <main className="app-main">{children}</main>
+    </div>
   </>
 );
 
@@ -49,9 +54,11 @@ const AppRoutes = () => {
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <WorkspaceProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </WorkspaceProvider>
     </AuthProvider>
   );
 }

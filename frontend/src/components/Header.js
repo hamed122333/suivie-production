@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import './Header.css';
 
 const Header = () => {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isSuperAdmin, isPlanner } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -106,7 +106,7 @@ const Header = () => {
                 <div className="app-header__dropdown-user">
                   <strong>{user?.name}</strong>
                   <span className="app-header__dropdown-role">
-                    {isAdmin ? 'Administrateur' : 'Utilisateur'}
+                    {isSuperAdmin ? 'Commercial (Super Admin)' : isPlanner ? 'Planificateur' : 'Utilisateur'}
                   </span>
                 </div>
                 <button type="button" className="app-header__dropdown-item" onClick={() => { logout(); setMenuOpen(false); }}>

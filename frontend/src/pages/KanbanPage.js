@@ -4,41 +4,41 @@ import KanbanBoard from '../components/KanbanBoard';
 import KanbanToolbar from '../components/KanbanToolbar';
 import { taskAPI, userAPI, dashboardAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 
 const KanbanPage = () => {
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [filterUser, setFilterUser] = useState('');
   const [search, setSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isAdmin } = useAuth();
+  const { isPlanner } = useAuth();
+  const { workspaceId, loadingWorkspaces } = useWorkspace();
 
-  const fetchTasks = useCallback(async (userId) => {
+  const fetchTasks = useCallback(
+    async (wsId) => {
     try {
       const params = {};
-      if (userId) params.assignedTo = userId;
+      if (wsId) params.workspaceId = wsId;
       const res = await taskAPI.getAll(params);
       setTasks(res.data);
     } catch (err) {
       console.error('Failed to fetch tasks', err);
     }
-  }, []);
+    },
+    [setTasks]
+  );
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await dashboardAPI.getStats();
+      const res = await dashboardAPI.getStats(workspaceId);
       setStats(res.data);
     } catch (err) {
       console.error('Failed to fetch stats', err);
     }
-  }, []);
-
-  const refreshAll = useCallback(async () => {
-    await Promise.all([fetchTasks(filterUser), fetchStats()]);
-  }, [fetchTasks, fetchStats, filterUser]);
+  }, [workspaceId]);
 
   useEffect(() => {
     const q = searchParams.get('q') || '';
@@ -48,14 +48,8 @@ const KanbanPage = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const [tasksRes, usersRes, statsRes] = await Promise.all([
-          taskAPI.getAll({}),
-          userAPI.getAll(),
-          dashboardAPI.getStats(),
-        ]);
-        setTasks(tasksRes.data);
+        const usersRes = await userAPI.getAll();
         setUsers(usersRes.data);
-        setStats(statsRes.data);
       } catch (err) {
         console.error('Failed to load data', err);
       } finally {
@@ -66,10 +60,11 @@ const KanbanPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!loading) {
-      fetchTasks(filterUser);
-    }
-  }, [filterUser, loading, fetchTasks]);
+    if (loadingWorkspaces) return;
+    if (!workspaceId) return;
+    setLoading(true);
+    Promise.all([fetchTasks(workspaceId), fetchStats()]).finally(() => setLoading(false));
+  }, [workspaceId, loadingWorkspaces, fetchTasks, fetchStats]);
 
   const handleSearchChange = (value) => {
     setSearch(value);
@@ -96,20 +91,19 @@ const KanbanPage = () => {
         onSearchChange={handleSearchChange}
         priority={priorityFilter}
         onPriorityChange={setPriorityFilter}
-        filterUser={filterUser}
-        onFilterUserChange={setFilterUser}
         users={users}
-        isAdmin={isAdmin}
+        isAdmin={isPlanner}
         stats={stats}
-        onRefresh={refreshAll}
+        onRefresh={() => Promise.all([fetchTasks(workspaceId), fetchStats()])}
       />
       <KanbanBoard
         tasks={tasks}
         setTasks={setTasks}
         users={users}
+        workspaceId={workspaceId}
         filterQuery={search}
         filterPriority={priorityFilter}
-        onTasksChange={() => fetchTasks(filterUser)}
+        onTasksChange={() => fetchTasks(workspaceId)}
         onStatsRefresh={fetchStats}
       />
     </div>

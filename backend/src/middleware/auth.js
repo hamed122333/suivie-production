@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 
+const hasRole = (userRole, allowed) => allowed.includes(userRole);
+
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -15,11 +17,15 @@ const authenticate = (req, res, next) => {
   }
 };
 
-const requireAdmin = (req, res, next) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
+const requireRoles = (roles, errorMessage = 'Access denied') => (req, res, next) => {
+  if (!req.user?.role || !hasRole(req.user.role, roles)) {
+    return res.status(403).json({ error: errorMessage });
   }
   next();
 };
 
-module.exports = { authenticate, requireAdmin };
+const requireSuperAdmin = requireRoles(['super_admin'], 'Super admin access required');
+const requirePlanner = requireRoles(['planner'], 'Planner access required');
+const requireSuperAdminOrPlanner = requireRoles(['super_admin', 'planner'], 'Planner or super admin access required');
+
+module.exports = { authenticate, requireRoles, requireSuperAdmin, requirePlanner, requireSuperAdminOrPlanner };

@@ -16,6 +16,10 @@ const COLUMNS = [
 const DRAG_MIME = 'application/x-suivi-task';
 
 function sortInColumn(a, b) {
+  const rank = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+  const ra = rank[a.priority] ?? 9;
+  const rb = rank[b.priority] ?? 9;
+  if (ra !== rb) return ra - rb;
   const pa = a.board_position ?? 0;
   const pb = b.board_position ?? 0;
   if (pa !== pb) return pa - pb;
@@ -87,11 +91,12 @@ const KanbanBoard = ({
   setTasks,
   users,
   onTasksChange,
+  workspaceId,
   filterQuery = '',
   filterPriority = '',
   onStatsRefresh,
 }) => {
-  const { isAdmin } = useAuth();
+  const { isSuperAdmin, isPlanner } = useAuth();
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [blockModal, setBlockModal] = useState({
@@ -145,6 +150,7 @@ const KanbanBoard = ({
   };
 
   const handleDragStart = (e, task) => {
+    if (!isPlanner) return;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData(DRAG_MIME, JSON.stringify({ id: task.id, status: task.status }));
     e.dataTransfer.setData('text/plain', JSON.stringify({ id: task.id, status: task.status }));
@@ -182,7 +188,7 @@ const KanbanBoard = ({
   const persistBoard = async (nextTasks) => {
     const columnOrders = buildColumnOrders(nextTasks);
     try {
-      const res = await taskAPI.patchBoard(columnOrders);
+      const res = await taskAPI.patchBoard({ workspaceId, columnOrders });
       setTasks(res.data);
       if (onStatsRefresh) await onStatsRefresh();
     } catch (err) {
@@ -208,7 +214,7 @@ const KanbanBoard = ({
       return;
     }
 
-    if (isAdmin) {
+    if (isPlanner) {
       const next = applyMove(tasks, draggedId, targetStatus, insertBeforeId);
       const before = JSON.stringify(buildColumnOrders(tasks));
       const after = JSON.stringify(buildColumnOrders(next));
@@ -219,11 +225,9 @@ const KanbanBoard = ({
       setTasks(next);
       await persistBoard(next);
     } else {
-      if (task.status === targetStatus) {
-        clearDragHighlights();
-        return;
-      }
-      await updateStatus(task, targetStatus);
+      setErrorShort('Seul le planificateur peut changer le statut.');
+      clearDragHighlights();
+      return;
     }
     clearDragHighlights();
   };
@@ -249,12 +253,12 @@ const KanbanBoard = ({
   const handleStatusChange = (task, newStatus) => {
     if (newStatus === 'BLOCKED') {
       setBlockModal({ open: true, task, targetStatus: newStatus });
-    } else if (isAdmin) {
+    } else if (isPlanner) {
       const next = applyMove(tasks, task.id, newStatus, null);
       setTasks(next);
       persistBoard(next);
     } else {
-      updateStatus(task, newStatus);
+      setErrorShort('Seul le planificateur peut changer le statut.');
     }
   };
 
@@ -270,7 +274,7 @@ const KanbanBoard = ({
       if (editingTask) {
         await taskAPI.update(editingTask.id, formData);
       } else {
-        const res = await taskAPI.create(formData);
+        const res = await taskAPI.create({ ...formData, workspaceId });
         const created = res.data;
         if (createDefaultStatus && createDefaultStatus !== 'TODO') {
           await taskAPI.updateStatus(created.id, createDefaultStatus);
@@ -308,10 +312,10 @@ const KanbanBoard = ({
           </nav>
           <h2 className="kanban-board__title">Tableau</h2>
           <p className="kanban-board__hint">
-            Glissez-déposez les cartes{isAdmin ? ' (réordonnancement complet pour les administrateurs)' : ''}.
+            {isPlanner ? 'Le planificateur peut déplacer les cartes et changer leur état.' : 'Lecture seule. Le planificateur gère les changements d’état.'}
           </p>
         </div>
-        {isAdmin && (
+        {isSuperAdmin && (
           <button
             type="button"
             className="btn btn-primary kanban-board__cta"
@@ -394,15 +398,15 @@ const KanbanBoard = ({
                         task={task}
                         onStatusChange={handleStatusChange}
                         onEdit={
-                          isAdmin
+                          isSuperAdmin
                             ? (t) => {
                                 setEditingTask(t);
                                 setShowTaskModal(true);
                               }
                             : null
                         }
-                        onDelete={isAdmin ? handleDeleteTask : null}
-                        isAdmin={isAdmin}
+                        onDelete={isSuperAdmin ? handleDeleteTask : null}
+                        isAdmin={isSuperAdmin}
                         isDragging={false}
                       />
                     </div>
@@ -410,7 +414,7 @@ const KanbanBoard = ({
                 )}
               </div>
 
-              {isAdmin && col.id !== 'BLOCKED' && (
+              {isSuperAdmin && col.id !== 'BLOCKED' && (
                 <button
                   type="button"
                   className="kanban-column__create"
@@ -431,14 +435,12 @@ const KanbanBoard = ({
       {showTaskModal && (
         <TaskModal
           task={editingTask}
-          users={users}
           onSave={handleSaveTask}
           onClose={() => {
             setShowTaskModal(false);
             setEditingTask(null);
             setCreateDefaultStatus(null);
           }}
-          isAdmin={isAdmin}
         />
       )}
 

@@ -2,6 +2,15 @@ const pool = require('../config/db');
 
 const STATUSES = ['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED'];
 
+const priorityOrderSql = `
+  CASE t.priority
+    WHEN 'URGENT' THEN 1
+    WHEN 'HIGH' THEN 2
+    WHEN 'MEDIUM' THEN 3
+    WHEN 'LOW' THEN 4
+    ELSE 5
+  END`;
+
 const statusOrderSql = `
   CASE t.status
     WHEN 'TODO' THEN 1
@@ -31,6 +40,16 @@ const TaskModel = {
       params.push(filters.assignedTo);
     }
 
+    if (filters.createdBy) {
+      conditions.push(`t.created_by = $${params.length + 1}`);
+      params.push(filters.createdBy);
+    }
+
+    if (filters.workspaceId) {
+      conditions.push(`t.workspace_id = $${params.length + 1}`);
+      params.push(filters.workspaceId);
+    }
+
     if (filters.status) {
       conditions.push(`t.status = $${params.length + 1}`);
       params.push(filters.status);
@@ -45,7 +64,7 @@ const TaskModel = {
       query += ' WHERE ' + conditions.join(' AND ');
     }
 
-    query += ` ORDER BY ${statusOrderSql}, t.board_position ASC, t.id ASC`;
+    query += ` ORDER BY ${statusOrderSql}, ${priorityOrderSql}, t.board_position ASC, t.id ASC`;
 
     const result = await pool.query(query, params);
     return result.rows;
@@ -64,19 +83,25 @@ const TaskModel = {
   },
 
   async create(data) {
-    const { title, description, assignedTo, priority, createdBy } = data;
+    const { title, description, priority, createdBy, workspaceId } = data;
+    if (!workspaceId) {
+      throw new Error('workspaceId is required');
+    }
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       const maxRes = await client.query(
-        `SELECT COALESCE(MAX(board_position), -1) + 1 AS next_pos FROM tasks WHERE status = 'TODO'`
+        `SELECT COALESCE(MAX(board_position), -1) + 1 AS next_pos
+         FROM tasks
+         WHERE status = 'TODO' AND workspace_id = $1`,
+        [workspaceId]
       );
       const nextPos = maxRes.rows[0].next_pos;
       const result = await client.query(
-        `INSERT INTO tasks (title, description, assigned_to, priority, created_by, status, board_position)
+        `INSERT INTO tasks (title, description, workspace_id, priority, created_by, status, board_position)
          VALUES ($1, $2, $3, $4, $5, 'TODO', $6)
          RETURNING *`,
-        [title, description, assignedTo, priority || 'MEDIUM', createdBy, nextPos]
+        [title, description, workspaceId, priority || 'MEDIUM', createdBy, nextPos]
       );
       await client.query('COMMIT');
       return result.rows[0];
@@ -106,7 +131,8 @@ const TaskModel = {
     return result.rows[0];
   },
 
-  async reorderBoard(columnOrders) {
+  async reorderBoard(columnOrders, workspaceId) {
+    if (!workspaceId) throw new Error('workspaceId is required');
     const flat = STATUSES.flatMap((s) => columnOrders[s] || []);
     const seen = new Set();
     for (const raw of flat) {
@@ -118,7 +144,7 @@ const TaskModel = {
       seen.add(id);
     }
 
-    const allTasks = await this.getAll({});
+    const allTasks = await this.getAll({ workspaceId });
     if (flat.length !== allTasks.length || flat.length !== seen.size) {
       throw new Error('Board order must list each task exactly once');
     }
@@ -140,8 +166,8 @@ const TaskModel = {
                board_position = $2,
                blocked_reason = CASE WHEN $1::text = 'BLOCKED' THEN blocked_reason ELSE NULL END,
                updated_at = NOW()
-             WHERE id = $3`,
-            [status, i, taskId]
+             WHERE id = $3 AND workspace_id = $4`,
+            [status, i, taskId, workspaceId]
           );
         }
       }
@@ -175,6 +201,7 @@ const TaskModel = {
 
       const oldStatus = task.status;
       const oldPos = task.board_position ?? 0;
+      const workspaceId = task.workspace_id;
 
       if (oldStatus === status) {
         await client.query('COMMIT');
@@ -183,13 +210,15 @@ const TaskModel = {
 
       await client.query(
         `UPDATE tasks SET board_position = board_position - 1
-         WHERE status = $1 AND board_position > $2`,
-        [oldStatus, oldPos]
+         WHERE status = $1 AND board_position > $2 AND workspace_id = $3`,
+        [oldStatus, oldPos, workspaceId]
       );
 
       const maxRes = await client.query(
-        `SELECT COALESCE(MAX(board_position), -1) + 1 AS next_pos FROM tasks WHERE status = $1`,
-        [status]
+        `SELECT COALESCE(MAX(board_position), -1) + 1 AS next_pos
+         FROM tasks
+         WHERE status = $1 AND workspace_id = $2`,
+        [status, workspaceId]
       );
       const nextPos = maxRes.rows[0].next_pos;
 
@@ -206,8 +235,8 @@ const TaskModel = {
            board_position = $2,
            blocked_reason = $3,
            updated_at = NOW()
-         WHERE id = $4`,
-        [status, nextPos, blocked, id]
+         WHERE id = $4 AND workspace_id = $5`,
+        [status, nextPos, blocked, id, workspaceId]
       );
 
       await client.query('COMMIT');
@@ -225,8 +254,15 @@ const TaskModel = {
     return result.rows[0];
   },
 
-  async getDashboardStats() {
+  async getDashboardStats(workspaceId = null) {
     const today = new Date().toISOString().split('T')[0];
+    const params = [today];
+    let where = '';
+    if (workspaceId) {
+      where = ` WHERE workspace_id = $2`;
+      params.push(workspaceId);
+    }
+
     const result = await pool.query(
       `
       SELECT
@@ -237,8 +273,9 @@ const TaskModel = {
         COUNT(*) FILTER (WHERE status = 'TODO') as total_todo,
         COUNT(*) as grand_total
       FROM tasks
+      ${where}
     `,
-      [today]
+      params
     );
     return result.rows[0];
   }

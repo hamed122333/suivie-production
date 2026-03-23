@@ -39,7 +39,7 @@ export const taskAPI = {
   create: (data) => api.post('/tasks', data),
   update: (id, data) => api.put(`/tasks/${id}`, data),
   updateStatus: (id, status, reasonBlocked) => api.put(`/tasks/${id}/status`, { status, reasonBlocked }),
-  patchBoard: (columnOrders) => api.patch('/tasks/board', { columnOrders }),
+  patchBoard: ({ workspaceId, columnOrders }) => api.patch('/tasks/board', { workspaceId, columnOrders }),
   delete: (id) => api.delete(`/tasks/${id}`),
 };
 
@@ -49,7 +49,12 @@ export const userAPI = {
 };
 
 export const dashboardAPI = {
-  getStats: () => api.get('/dashboard'),
+  getStats: (workspaceId = null) => api.get('/dashboard', { params: workspaceId ? { workspaceId } : {} }),
+};
+
+export const workspaceAPI = {
+  getAll: () => api.get('/workspaces'),
+  create: (data) => api.post('/workspaces', data),
 };
 
 export default api;

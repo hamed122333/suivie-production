@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 
-const TaskModal = ({ task, users, onSave, onClose, isAdmin }) => {
+const TaskModal = ({ task, onSave, onClose }) => {
   const [form, setForm] = useState({
     title: '',
     description: '',
-    assignedTo: '',
     priority: 'MEDIUM',
   });
   const [error, setError] = useState('');
@@ -14,7 +13,6 @@ const TaskModal = ({ task, users, onSave, onClose, isAdmin }) => {
       setForm({
         title: task.title || '',
         description: task.description || '',
-        assignedTo: task.assigned_to || '',
         priority: task.priority || 'MEDIUM',
       });
     }
@@ -30,7 +28,6 @@ const TaskModal = ({ task, users, onSave, onClose, isAdmin }) => {
     await onSave({
       title: form.title.trim(),
       description: form.description.trim(),
-      assignedTo: form.assignedTo === '' || form.assignedTo == null ? null : parseInt(form.assignedTo, 10),
       priority: form.priority,
     });
   };
@@ -69,27 +66,15 @@ const TaskModal = ({ task, users, onSave, onClose, isAdmin }) => {
             />
           </div>
           <div className="form-group">
-            <label>Assign to</label>
-            <select
-              value={form.assignedTo}
-              onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}
-            >
-              <option value="">Unassigned</option>
-              {users.map(u => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
             <label>Priority</label>
             <select
               value={form.priority}
               onChange={(e) => setForm({ ...form, priority: e.target.value })}
             >
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
-              <option value="URGENT">Urgent</option>
+              <option value="URGENT">Urgente</option>
+              <option value="HIGH">Haute</option>
+              <option value="MEDIUM">Moyenne</option>
+              <option value="LOW">Basse</option>
             </select>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>

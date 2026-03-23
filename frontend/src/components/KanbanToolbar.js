@@ -14,8 +14,6 @@ const KanbanToolbar = ({
   onSearchChange,
   priority,
   onPriorityChange,
-  filterUser,
-  onFilterUserChange,
   users,
   isAdmin,
   stats,
@@ -74,17 +72,9 @@ const KanbanToolbar = ({
                 </select>
               </label>
               {isAdmin && (
-                <label>
-                  <span>Assigné à</span>
-                  <select value={filterUser} onChange={(e) => onFilterUserChange(e.target.value)}>
-                    <option value="">Tous</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div style={{ fontSize: '0.75rem', color: '#5e6c84', fontWeight: 600 }}>
+                  Seul le planificateur peut déplacer les cartes.
+                </div>
               )}
             </div>
           )}

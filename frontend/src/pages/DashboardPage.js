@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { dashboardAPI, taskAPI } from '../services/api';
+import { useWorkspace } from '../context/WorkspaceContext';
 
 const StatCard = ({ label, value, icon, color, bg }) => (
   <div style={{
@@ -25,13 +26,18 @@ const DashboardPage = () => {
   const [stats, setStats] = useState(null);
   const [recentTasks, setRecentTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { workspaceId, loadingWorkspaces } = useWorkspace();
 
   useEffect(() => {
+    if (loadingWorkspaces) return;
+    if (!workspaceId) return;
+
     const fetchData = async () => {
+      setLoading(true);
       try {
         const [statsRes, tasksRes] = await Promise.all([
-          dashboardAPI.getStats(),
-          taskAPI.getAll(),
+          dashboardAPI.getStats(workspaceId),
+          taskAPI.getAll({ workspaceId }),
         ]);
         setStats(statsRes.data);
         setRecentTasks(tasksRes.data.slice(0, 5));
@@ -41,8 +47,9 @@ const DashboardPage = () => {
         setLoading(false);
       }
     };
+
     fetchData();
-  }, []);
+  }, [workspaceId, loadingWorkspaces]);
 
   if (loading) {
     return (

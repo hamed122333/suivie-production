@@ -1,1 +1,21 @@
 /* App specific styles - using index.css for global styles */
+
+.app-layout {
+  display: flex;
+  align-items: stretch;
+}
+
+.app-main {
+  flex: 1;
+  min-height: calc(100vh - 60px);
+  background: #f4f5f7;
+  padding: 2.5rem 2.5rem 2.5rem 1.75rem;
+  box-sizing: border-box;
+  overflow-x: auto;
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .app-main {
+    padding: 1rem 0.5rem 1rem 0.5rem;
+  }
+}
