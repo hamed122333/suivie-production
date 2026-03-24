@@ -1,42 +1,70 @@
 import React, { useState, useEffect } from 'react';
 
-const TaskModal = ({ task, onSave, onClose }) => {
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    priority: 'MEDIUM',
+const parseCommercialTasks = (input) => {
+  // Split by lines, ignore empty lines
+  const lines = input.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  return lines.map((line, idx) => {
+    // Format: CLIENT : ref1(qte)-ref2(qte)+... | or special cases
+    const [client, rest] = line.split(':').map(s => s.trim());
+    let title = client;
+    let description = rest || '';
+    // Try to extract refs/quantities for description
+    if (rest) {
+      description = rest.replace(/([a-zA-Z0-9]+\([^)]+\))/g, (m) => m + ' ');
+    }
+    // Priority: order of appearance (first = highest)
+    let priority = idx === 0 ? 'URGENT' : idx === 1 ? 'HIGH' : idx === 2 ? 'MEDIUM' : 'LOW';
+    return {
+      title,
+      description,
+      priority,
+    };
   });
+};
+
+const TaskModal = ({ task, onSave, onClose }) => {
+  const [input, setInput] = useState('');
+  const [tasksPreview, setTasksPreview] = useState([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (task) {
-      setForm({
-        title: task.title || '',
-        description: task.description || '',
-        priority: task.priority || 'MEDIUM',
-      });
+      setInput(task.title + (task.description ? (' : ' + task.description) : ''));
+      setTasksPreview([{ title: task.title, description: task.description, priority: task.priority || 'MEDIUM' }]);
     }
   }, [task]);
 
+  useEffect(() => {
+    if (input.trim()) {
+      setTasksPreview(parseCommercialTasks(input));
+    } else {
+      setTasksPreview([]);
+    }
+  }, [input]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.title.trim()) {
-      setError('Title is required');
+    if (!input.trim()) {
+      setError('Saisie requise');
       return;
     }
     setError('');
-    await onSave({
-      title: form.title.trim(),
-      description: form.description.trim(),
-      priority: form.priority,
-    });
+    const tasks = parseCommercialTasks(input);
+    for (const t of tasks) {
+      await onSave({
+        title: t.title,
+        description: t.description,
+        priority: t.priority,
+      });
+    }
+    // Optionally, clear input or close modal
   };
 
   return (
     <div className="modal-overlay">
       <div className="modal-content">
         <div className="modal-header">
-          <h3 className="modal-title">{task ? '✏️ Edit Task' : '➕ New Task'}</h3>
+          <h3 className="modal-title">➕ Saisie rapide des tâches commerciales</h3>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -46,41 +74,34 @@ const TaskModal = ({ task, onSave, onClose }) => {
             </div>
           )}
           <div className="form-group">
-            <label>Title *</label>
-            <input
-              type="text"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="Task title..."
+            <label>Saisie rapide (1 ligne = 1 tâche)</label>
+            <textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder={
+                'Exemple :\nPLASTICUM : ci2682(6p)-dv0275(1p)+plso380580(4p)\nJoubert : ci2505(600) +ci2504(1200)\nBaraka de conditionnement : en stock\n...'
+              }
+              rows={6}
+              style={{ resize: 'vertical' }}
               required
             />
           </div>
-          <div className="form-group">
-            <label>Description</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Task description (optional)..."
-              rows={3}
-              style={{ resize: 'vertical' }}
-            />
-          </div>
-          <div className="form-group">
-            <label>Priority</label>
-            <select
-              value={form.priority}
-              onChange={(e) => setForm({ ...form, priority: e.target.value })}
-            >
-              <option value="URGENT">Urgente</option>
-              <option value="HIGH">Haute</option>
-              <option value="MEDIUM">Moyenne</option>
-              <option value="LOW">Basse</option>
-            </select>
-          </div>
+          {tasksPreview.length > 0 && (
+            <div style={{ margin: '1rem 0', background: '#f1f5f9', borderRadius: '6px', padding: '0.5rem' }}>
+              <b>Aperçu des tâches à créer :</b>
+              <ul style={{ margin: 0, paddingLeft: '1.2em' }}>
+                {tasksPreview.map((t, i) => (
+                  <li key={i}>
+                    <b>{t.title}</b> — <span style={{ color: '#64748b' }}>{t.description}</span> <span style={{ fontSize: '0.85em', color: '#0ea5e9' }}>({t.priority})</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Annuler</button>
             <button type="submit" className="btn btn-primary">
-              {task ? 'Update Task' : 'Create Task'}
+              Créer {tasksPreview.length > 1 ? `${tasksPreview.length} tâches` : 'la tâche'}
             </button>
           </div>
         </form>
