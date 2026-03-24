@@ -44,6 +44,15 @@ export const WorkspaceProvider = ({ children }) => {
     refreshWorkspaces();
   }, [authLoading, user, refreshWorkspaces]);
 
+  // Ajout de la vue globale pour super_admin et planificateur
+  const workspacesWithAll = useMemo(() => {
+    if (!user) return workspaces;
+    if (user.role === 'super_admin' || user.role === 'planner') {
+      return [{ id: 'all', name: 'Tous les espaces' }, ...workspaces];
+    }
+    return workspaces;
+  }, [user, workspaces]);
+
   const selectWorkspace = useCallback((id) => {
     const wid = parseInt(id, 10);
     if (!Number.isInteger(wid)) return;
@@ -63,17 +72,31 @@ export const WorkspaceProvider = ({ children }) => {
 
   const value = useMemo(
     () => ({
-      workspaces,
+      workspaces: workspacesWithAll,
       workspaceId: workspaceId ? parseInt(workspaceId, 10) : null,
       loadingWorkspaces,
       refreshWorkspaces,
       selectWorkspace,
       createWorkspace,
     }),
-    [workspaces, workspaceId, loadingWorkspaces, refreshWorkspaces, selectWorkspace, createWorkspace]
+    [workspacesWithAll, workspaceId, loadingWorkspaces, refreshWorkspaces, selectWorkspace, createWorkspace]
   );
 
-  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+  return (
+    <WorkspaceContext.Provider
+      value={{
+        workspaces: workspacesWithAll,
+        workspaceId,
+        selectWorkspace,
+        createWorkspace,
+        refreshWorkspaces,
+        loadingWorkspaces,
+        setWorkspaceId,
+      }}
+    >
+      {children}
+    </WorkspaceContext.Provider>
+  );
 };
 
 export const useWorkspace = () => {

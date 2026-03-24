@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 
-const parseCommercialTasks = (input) => {
+const parseCommercialTasks = (input, priority) => {
   // Split by lines, ignore empty lines
   const lines = input.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  return lines.map((line, idx) => {
+  return lines.map((line) => {
     // Format: CLIENT : ref1(qte)-ref2(qte)+... | or special cases
     const [client, rest] = line.split(':').map(s => s.trim());
     let title = client;
@@ -13,7 +13,6 @@ const parseCommercialTasks = (input) => {
       description = rest.replace(/([a-zA-Z0-9]+\([^)]+\))/g, (m) => m + ' ');
     }
     // Priority: order of appearance (first = highest)
-    let priority = idx === 0 ? 'URGENT' : idx === 1 ? 'HIGH' : idx === 2 ? 'MEDIUM' : 'LOW';
     return {
       title,
       description,
@@ -24,23 +23,25 @@ const parseCommercialTasks = (input) => {
 
 const TaskModal = ({ task, onSave, onClose }) => {
   const [input, setInput] = useState('');
+  const [priority, setPriority] = useState('MEDIUM');
   const [tasksPreview, setTasksPreview] = useState([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (task) {
       setInput(task.title + (task.description ? (' : ' + task.description) : ''));
+      setPriority(task.priority || 'MEDIUM');
       setTasksPreview([{ title: task.title, description: task.description, priority: task.priority || 'MEDIUM' }]);
     }
   }, [task]);
 
   useEffect(() => {
     if (input.trim()) {
-      setTasksPreview(parseCommercialTasks(input));
+      setTasksPreview(parseCommercialTasks(input, priority));
     } else {
       setTasksPreview([]);
     }
-  }, [input]);
+  }, [input, priority]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -49,7 +50,7 @@ const TaskModal = ({ task, onSave, onClose }) => {
       return;
     }
     setError('');
-    const tasks = parseCommercialTasks(input);
+    const tasks = parseCommercialTasks(input, priority);
     for (const t of tasks) {
       await onSave({
         title: t.title,
@@ -85,6 +86,15 @@ const TaskModal = ({ task, onSave, onClose }) => {
               style={{ resize: 'vertical' }}
               required
             />
+          </div>
+          <div className="form-group">
+            <label>Priorité</label>
+            <select value={priority} onChange={e => setPriority(e.target.value)}>
+              <option value="URGENT">Urgente</option>
+              <option value="HIGH">Haute</option>
+              <option value="MEDIUM">Moyenne</option>
+              <option value="LOW">Basse</option>
+            </select>
           </div>
           {tasksPreview.length > 0 && (
             <div style={{ margin: '1rem 0', background: '#f1f5f9', borderRadius: '6px', padding: '0.5rem' }}>

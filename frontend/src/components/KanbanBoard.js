@@ -96,7 +96,7 @@ const KanbanBoard = ({
   filterPriority = '',
   onStatsRefresh,
 }) => {
-  const { isSuperAdmin, isPlanner } = useAuth();
+  const { isSuperAdmin, isPlanner, user } = useAuth();
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [blockModal, setBlockModal] = useState({
@@ -274,7 +274,7 @@ const KanbanBoard = ({
       if (editingTask) {
         await taskAPI.update(editingTask.id, formData);
       } else {
-        const res = await taskAPI.create({ ...formData, workspaceId });
+        const res = await taskAPI.create({ ...formData, workspaceId, createdBy: user?.id });
         const created = res.data;
         if (createDefaultStatus && createDefaultStatus !== 'TODO') {
           await taskAPI.updateStatus(created.id, createDefaultStatus);

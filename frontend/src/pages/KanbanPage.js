@@ -19,14 +19,14 @@ const KanbanPage = () => {
 
   const fetchTasks = useCallback(
     async (wsId) => {
-    try {
-      const params = {};
-      if (wsId) params.workspaceId = wsId;
-      const res = await taskAPI.getAll(params);
-      setTasks(res.data);
-    } catch (err) {
-      console.error('Failed to fetch tasks', err);
-    }
+      try {
+        const params = {};
+        if (wsId && wsId !== 'all') params.workspaceId = wsId;
+        const res = await taskAPI.getAll(params);
+        setTasks(res.data);
+      } catch (err) {
+        console.error('Failed to fetch tasks', err);
+      }
     },
     [setTasks]
   );
