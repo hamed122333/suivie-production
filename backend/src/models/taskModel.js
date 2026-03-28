@@ -194,7 +194,10 @@ const TaskModel = {
         return null;
       }
 
-      if (userRole !== 'admin' && task.assigned_to !== userId) {
+      // super_admin et planner peuvent changer le statut de n'importe quelle tâche
+      // Les autres utilisateurs ne peuvent changer que les tâches qui leur sont assignées
+      const isPrivileged = userRole === 'super_admin' || userRole === 'planner';
+      if (!isPrivileged && task.assigned_to !== userId) {
         await client.query('ROLLBACK');
         throw new Error('Not authorized to update this task');
       }

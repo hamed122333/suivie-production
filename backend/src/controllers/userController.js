@@ -1,5 +1,7 @@
 const UserModel = require('../models/userModel');
 
+const VALID_ROLES = ['super_admin', 'planner', 'commercial', 'user'];
+
 const userController = {
   async getAll(req, res) {
     try {
@@ -14,14 +16,30 @@ const userController = {
   async create(req, res) {
     try {
       const { name, email, password, role } = req.body;
-      if (!name || !email || !password) {
-        return res.status(400).json({ error: 'Name, email and password required' });
+
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: 'Le nom est obligatoire' });
       }
-      const existing = await UserModel.findByEmail(email);
+      if (!email || !email.trim()) {
+        return res.status(400).json({ error: 'L\'email est obligatoire' });
+      }
+      if (!password || password.length < 6) {
+        return res.status(400).json({ error: 'Le mot de passe doit faire au moins 6 caractères' });
+      }
+
+      const assignedRole = VALID_ROLES.includes(role) ? role : 'user';
+
+      const existing = await UserModel.findByEmail(email.trim().toLowerCase());
       if (existing) {
-        return res.status(409).json({ error: 'Email already in use' });
+        return res.status(409).json({ error: 'Cet email est déjà utilisé' });
       }
-      const user = await UserModel.create(name, email, password, role);
+
+      const user = await UserModel.create(
+        name.trim(),
+        email.trim().toLowerCase(),
+        password,
+        assignedRole
+      );
       res.status(201).json(user);
     } catch (err) {
       console.error(err);

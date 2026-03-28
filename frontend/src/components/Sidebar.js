@@ -3,95 +3,167 @@ import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import './Sidebar.css';
 
+const WORKSPACE_ICONS = ['🔷', '🟦', '🟩', '🟧', '🟪', '🟥', '⬛'];
+
+const getRoleLabel = (role) => {
+  const labels = {
+    super_admin: { label: 'Super Admin', color: '#7c3aed', bg: '#ede9fe' },
+    planner: { label: 'Planificateur', color: '#0052cc', bg: '#deebff' },
+    commercial: { label: 'Commercial', color: '#b45309', bg: '#fef3c7' },
+    user: { label: 'Utilisateur', color: '#374151', bg: '#f3f4f6' },
+  };
+  return labels[role] || labels.user;
+};
+
 const Sidebar = () => {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isCommercial, user } = useAuth();
   const { workspaces, workspaceId, selectWorkspace, createWorkspace, loadingWorkspaces } = useWorkspace();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
-  const activeId = workspaceId ? String(workspaceId) : '';
+  const [creating, setCreating] = useState(false);
 
-  const canCreate = isSuperAdmin;
+  const activeId = workspaceId ? String(workspaceId) : '';
+  const canCreate = isSuperAdmin || isCommercial;
+  const roleInfo = getRoleLabel(user?.role);
 
   const submit = async (e) => {
     e.preventDefault();
     setError('');
+    const trimmed = (name || '').trim();
+    if (trimmed.length < 2) {
+      setError('Nom trop court (min. 2 caractères)');
+      return;
+    }
+    setCreating(true);
     try {
-      const trimmed = (name || '').trim();
-      if (trimmed.length < 2) {
-        setError('Nom de workspace trop court');
-        return;
-      }
       await createWorkspace(trimmed);
       setCreateOpen(false);
       setName('');
     } catch (err) {
-      setError(err?.response?.data?.error || 'Impossible de créer le workspace');
+      setError(err?.response?.data?.error || 'Impossible de créer l\'espace');
+    } finally {
+      setCreating(false);
     }
   };
 
   const options = useMemo(() => workspaces || [], [workspaces]);
 
   return (
-    <aside className="sidebar" aria-label="Workspaces">
+    <aside className="sidebar" aria-label="Espaces de travail">
+      {/* Profil utilisateur */}
+      {user && (
+        <div className="sidebar__profile">
+          <div className="sidebar__profile-avatar">
+            {user.name?.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'}
+          </div>
+          <div className="sidebar__profile-info">
+            <div className="sidebar__profile-name">{user.name}</div>
+            <span className="sidebar__profile-role" style={{ background: roleInfo.bg, color: roleInfo.color }}>
+              {roleInfo.label}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* En-tête Espaces */}
       <div className="sidebar__header">
-        <div className="sidebar__title">Workspaces</div>
+        <div className="sidebar__title">
+          <span className="sidebar__title-icon">🗂</span>
+          Espaces
+        </div>
         {canCreate && (
-          <button type="button" className="sidebar__create-btn" onClick={() => setCreateOpen(true)}>
-            + Créer
+          <button type="button" className="sidebar__create-btn" onClick={() => setCreateOpen(true)} title="Créer un espace">
+            +
           </button>
         )}
       </div>
 
+      {/* Liste des workspaces */}
       <div className="sidebar__list">
         {loadingWorkspaces ? (
-          <div className="sidebar__loading">Chargement…</div>
+          <div className="sidebar__loading">
+            <div className="sidebar__loading-dot" />
+            <div className="sidebar__loading-dot" />
+            <div className="sidebar__loading-dot" />
+          </div>
         ) : options.length === 0 ? (
-          <div className="sidebar__empty">Aucun workspace</div>
+          <div className="sidebar__empty">
+            <span>🗃</span>
+            <p>Aucun espace créé</p>
+          </div>
         ) : (
-          options.map((ws) => {
+          options.map((ws, idx) => {
             const id = String(ws.id);
             const active = id === activeId;
+            const isAll = ws.id === 'all';
+            const icon = isAll ? '🌐' : WORKSPACE_ICONS[(idx - (isAll ? 0 : 1)) % WORKSPACE_ICONS.length];
             return (
               <button
                 type="button"
                 key={ws.id}
-                className={`sidebar__item ${active ? 'sidebar__item--active' : ''}`}
+                className={`sidebar__item ${active ? 'sidebar__item--active' : ''} ${isAll ? 'sidebar__item--all' : ''}`}
                 onClick={() => selectWorkspace(ws.id)}
               >
+                <span className="sidebar__item-icon">{icon}</span>
                 <span className="sidebar__item-name">{ws.name}</span>
+                {active && <span className="sidebar__item-check">✓</span>}
               </button>
             );
           })
         )}
       </div>
 
+      {/* Séparateur */}
+      <div className="sidebar__divider" />
+
+      {/* Navigation */}
+      <nav className="sidebar__nav" aria-label="Navigation">
+        <a href="/kanban" className="sidebar__nav-link">
+          <span>▦</span> Tableau Kanban
+        </a>
+        <a href="/dashboard" className="sidebar__nav-link">
+          <span>📊</span> Tableau de bord
+        </a>
+        {isSuperAdmin && (
+          <a href="/users" className="sidebar__nav-link">
+            <span>👥</span> Utilisateurs
+          </a>
+        )}
+      </nav>
+
+      {/* Modal: Créer un espace */}
       {createOpen && (
-        <div className="modal-overlay" role="dialog" aria-label="Créer un workspace">
+        <div className="modal-overlay" role="dialog" aria-label="Créer un espace de travail">
           <div className="modal-content sidebar-modal">
             <div className="modal-header">
-              <h3 className="modal-title">Créer un workspace</h3>
-              <button type="button" className="modal-close" onClick={() => setCreateOpen(false)}>
+              <h3 className="modal-title">🗂 Nouvel espace</h3>
+              <button type="button" className="modal-close" onClick={() => { setCreateOpen(false); setError(''); setName(''); }}>
                 ✕
               </button>
             </div>
             <form onSubmit={submit}>
               {error && (
-                <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', padding: '0.5rem', marginBottom: '1rem', color: '#dc2626', fontSize: '0.875rem' }}>
-                  {error}
-                </div>
+                <div className="sidebar__modal-error">{error}</div>
               )}
               <div className="form-group">
-                <label>Nom</label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Production" required />
+                <label>Nom de l'espace</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ex: Production Ligne 1"
+                  autoFocus
+                  required
+                />
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>
+              <div className="sidebar__modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => { setCreateOpen(false); setError(''); setName(''); }}>
                   Annuler
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  Créer
+                <button type="submit" className="btn btn-primary" disabled={creating}>
+                  {creating ? 'Création…' : 'Créer l\'espace'}
                 </button>
               </div>
             </form>
@@ -103,4 +175,3 @@ const Sidebar = () => {
 };
 
 export default Sidebar;
-

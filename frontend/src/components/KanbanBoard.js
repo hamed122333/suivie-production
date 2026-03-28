@@ -27,12 +27,7 @@ function sortInColumn(a, b) {
 }
 
 function buildColumnOrders(taskList) {
-  const columnOrders = {
-    TODO: [],
-    IN_PROGRESS: [],
-    DONE: [],
-    BLOCKED: [],
-  };
+  const columnOrders = { TODO: [], IN_PROGRESS: [], DONE: [], BLOCKED: [] };
   COLUMNS.forEach((col) => {
     columnOrders[col.id] = taskList
       .filter((t) => t.status === col.id)
@@ -42,32 +37,21 @@ function buildColumnOrders(taskList) {
   return columnOrders;
 }
 
-/** Returns flat task list with updated status / board_position */
 function applyMove(taskList, draggedId, targetStatus, insertBeforeId) {
   const dragged = taskList.find((t) => t.id === draggedId);
   if (!dragged) return taskList;
-
   const byCol = { TODO: [], IN_PROGRESS: [], DONE: [], BLOCKED: [] };
   for (const t of taskList) {
     if (t.id === draggedId) continue;
     if (byCol[t.status]) byCol[t.status].push(t);
   }
-  Object.keys(byCol).forEach((k) => {
-    byCol[k].sort(sortInColumn);
-  });
-
+  Object.keys(byCol).forEach((k) => { byCol[k].sort(sortInColumn); });
   const col = byCol[targetStatus];
   let insertAt = insertBeforeId == null ? col.length : col.findIndex((t) => t.id === insertBeforeId);
   if (insertAt < 0) insertAt = col.length;
-
   const moved = { ...dragged, status: targetStatus };
   col.splice(insertAt, 0, moved);
-  byCol[targetStatus] = col.map((t, i) => ({
-    ...t,
-    status: targetStatus,
-    board_position: i,
-  }));
-
+  byCol[targetStatus] = col.map((t, i) => ({ ...t, status: targetStatus, board_position: i }));
   return [...byCol.TODO, ...byCol.IN_PROGRESS, ...byCol.BLOCKED, ...byCol.DONE];
 }
 
@@ -75,14 +59,11 @@ function taskMatchesFilters(task, filterQuery, filterPriority) {
   if (filterPriority && task.priority !== filterPriority) return false;
   const q = (filterQuery || '').trim().toLowerCase();
   if (!q) return true;
-  const title = (task.title || '').toLowerCase();
-  const desc = (task.description || '').toLowerCase();
-  const key = `sp-${task.id}`;
   return (
-    title.includes(q) ||
-    desc.includes(q) ||
+    (task.title || '').toLowerCase().includes(q) ||
+    (task.description || '').toLowerCase().includes(q) ||
     String(task.id).includes(q) ||
-    key.includes(q)
+    `sp-${task.id}`.includes(q)
   );
 }
 
@@ -96,18 +77,17 @@ const KanbanBoard = ({
   filterPriority = '',
   onStatsRefresh,
 }) => {
-  const { isSuperAdmin, isPlanner, user } = useAuth();
+  const { isSuperAdmin, isPlanner, isCommercial, canCreateTask, canChangeStatus, user } = useAuth();
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const [blockModal, setBlockModal] = useState({
-    open: false,
-    task: null,
-    targetStatus: null,
-  });
+  const [blockModal, setBlockModal] = useState({ open: false, task: null, targetStatus: null });
   const [dragOverColumn, setDragOverColumn] = useState(null);
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
   const [error, setError] = useState('');
   const [createDefaultStatus, setCreateDefaultStatus] = useState(null);
+
+  // Le mode "tous les espaces" n'autorise pas la création
+  const isAllWorkspaces = workspaceId === 'all';
 
   const visibleTaskIds = useMemo(() => {
     const ids = new Set();
@@ -119,10 +99,7 @@ const KanbanBoard = ({
 
   const getTasksByStatus = useCallback(
     (status) =>
-      tasks
-        .filter((t) => t.status === status)
-        .sort(sortInColumn)
-        .filter((t) => visibleTaskIds.has(t.id)),
+      tasks.filter((t) => t.status === status).sort(sortInColumn).filter((t) => visibleTaskIds.has(t.id)),
     [tasks, visibleTaskIds]
   );
 
@@ -150,7 +127,7 @@ const KanbanBoard = ({
   };
 
   const handleDragStart = (e, task) => {
-    if (!isPlanner) return;
+    if (!canChangeStatus) return;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData(DRAG_MIME, JSON.stringify({ id: task.id, status: task.status }));
     e.dataTransfer.setData('text/plain', JSON.stringify({ id: task.id, status: task.status }));
@@ -186,6 +163,8 @@ const KanbanBoard = ({
   };
 
   const persistBoard = async (nextTasks) => {
+    // En mode "tous les espaces", on ne peut pas réordonner le board
+    if (isAllWorkspaces) return;
     const columnOrders = buildColumnOrders(nextTasks);
     try {
       const res = await taskAPI.patchBoard({ workspaceId, columnOrders });
@@ -199,35 +178,23 @@ const KanbanBoard = ({
 
   const runDrop = async (draggedId, targetStatus, insertBeforeId) => {
     const task = tasks.find((t) => t.id === draggedId);
-    if (!task) {
-      clearDragHighlights();
-      return;
-    }
+    if (!task) { clearDragHighlights(); return; }
 
     if (targetStatus === 'BLOCKED' && task.status !== 'BLOCKED') {
-      setBlockModal({
-        open: true,
-        task,
-        targetStatus,
-      });
+      setBlockModal({ open: true, task, targetStatus });
       clearDragHighlights();
       return;
     }
 
-    if (isPlanner) {
+    if (canChangeStatus) {
       const next = applyMove(tasks, draggedId, targetStatus, insertBeforeId);
       const before = JSON.stringify(buildColumnOrders(tasks));
       const after = JSON.stringify(buildColumnOrders(next));
-      if (before === after) {
-        clearDragHighlights();
-        return;
-      }
+      if (before === after) { clearDragHighlights(); return; }
       setTasks(next);
       await persistBoard(next);
     } else {
-      setErrorShort('Seul le planificateur peut changer le statut.');
-      clearDragHighlights();
-      return;
+      setErrorShort('Seul le planificateur ou l\'administrateur peut changer le statut.');
     }
     clearDragHighlights();
   };
@@ -251,14 +218,16 @@ const KanbanBoard = ({
   };
 
   const handleStatusChange = (task, newStatus) => {
+    if (!canChangeStatus) {
+      setErrorShort('Seul le planificateur ou l\'administrateur peut changer le statut.');
+      return;
+    }
     if (newStatus === 'BLOCKED') {
       setBlockModal({ open: true, task, targetStatus: newStatus });
-    } else if (isPlanner) {
+    } else {
       const next = applyMove(tasks, task.id, newStatus, null);
       setTasks(next);
       persistBoard(next);
-    } else {
-      setErrorShort('Seul le planificateur peut changer le statut.');
     }
   };
 
@@ -301,6 +270,14 @@ const KanbanBoard = ({
     }
   };
 
+  const roleHint = isAllWorkspaces
+    ? '🌐 Vue globale — tous les espaces de travail'
+    : canChangeStatus
+    ? `${isPlanner ? '📋 Planificateur' : '👑 Super Admin'} — glissez les cartes pour changer leur état.`
+    : canCreateTask
+    ? '🧑‍💼 Commercial — vous pouvez créer des tâches.'
+    : '👁 Lecture seule.';
+
   return (
     <div className="kanban-board-wrap">
       <div className="kanban-board__heading">
@@ -310,12 +287,10 @@ const KanbanBoard = ({
             <span aria-hidden>/</span>
             <strong>Tableau Scrum</strong>
           </nav>
-          <h2 className="kanban-board__title">Tableau</h2>
-          <p className="kanban-board__hint">
-            {isPlanner ? 'Le planificateur peut déplacer les cartes et changer leur état.' : 'Lecture seule. Le planificateur gère les changements d’état.'}
-          </p>
+          <h2 className="kanban-board__title">Tableau de bord</h2>
+          <p className="kanban-board__hint">{roleHint}</p>
         </div>
-        {isSuperAdmin && (
+        {canCreateTask && !isAllWorkspaces && (
           <button
             type="button"
             className="btn btn-primary kanban-board__cta"
@@ -337,10 +312,7 @@ const KanbanBoard = ({
           const colTasks = getTasksByStatus(col.id);
           const totalInCol = getColumnCount(col.id);
           const isDragTarget = dragOverColumn === col.id;
-          const filteredEmpty =
-            totalInCol > 0 &&
-            colTasks.length === 0 &&
-            (filterQuery.trim() || filterPriority);
+          const filteredEmpty = totalInCol > 0 && colTasks.length === 0 && (filterQuery.trim() || filterPriority);
           return (
             <div
               key={col.id}
@@ -348,28 +320,18 @@ const KanbanBoard = ({
               onDragOver={(e) => handleDragOver(e, col.id)}
               onDrop={(e) => handleDropOnColumn(e, col.id)}
               onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget)) {
-                  setDragOverColumn(null);
-                }
+                if (!e.currentTarget.contains(e.relatedTarget)) setDragOverColumn(null);
               }}
               style={{
                 background: isDragTarget ? '#e9f2ff' : col.bg,
                 borderColor: isDragTarget ? col.color : '#dfe1e6',
               }}
             >
-              <div
-                className="kanban-column__head"
-                style={{ background: col.headerBg, borderBottomColor: `${col.color}40` }}
-              >
-                <span className="kanban-column__title" style={{ color: col.color }}>
-                  {col.label}
-                </span>
+              <div className="kanban-column__head" style={{ background: col.headerBg, borderBottomColor: `${col.color}40` }}>
+                <span className="kanban-column__title" style={{ color: col.color }}>{col.label}</span>
                 <span className="kanban-column__count" style={{ background: col.color }}>
                   {filterQuery.trim() || filterPriority ? `${colTasks.length}/${totalInCol}` : totalInCol}
                 </span>
-                <button type="button" className="kanban-column__menu" title="Options" aria-label="Options colonne">
-                  ···
-                </button>
               </div>
 
               <div className="kanban-column__body">
@@ -378,31 +340,28 @@ const KanbanBoard = ({
                     Aucune tâche ne correspond aux filtres
                   </div>
                 ) : colTasks.length === 0 ? (
-                  <div className="kanban-column__empty">Déposer des tâches ici</div>
+                  <div className="kanban-column__empty">
+                    {canChangeStatus ? 'Déposez des tâches ici' : 'Aucune tâche'}
+                  </div>
                 ) : (
                   colTasks.map((task) => (
                     <div
                       key={task.id}
                       className="kanban-card-slot"
-                      draggable
+                      draggable={canChangeStatus}
                       onDragStart={(e) => handleDragStart(e, task)}
                       onDragEnd={clearDragHighlights}
                       onDragOver={(e) => handleDragOverTask(e, task.id)}
                       onDrop={(e) => handleDropOnTask(e, task)}
                       data-task-id={task.id}
-                      style={{
-                        outline: dragOverTaskId === task.id ? `2px solid ${col.color}` : 'none',
-                      }}
+                      style={{ outline: dragOverTaskId === task.id ? `2px solid ${col.color}` : 'none' }}
                     >
                       <TaskCard
                         task={task}
-                        onStatusChange={handleStatusChange}
+                        onStatusChange={canChangeStatus ? handleStatusChange : null}
                         onEdit={
                           isSuperAdmin
-                            ? (t) => {
-                                setEditingTask(t);
-                                setShowTaskModal(true);
-                              }
+                            ? (t) => { setEditingTask(t); setShowTaskModal(true); }
                             : null
                         }
                         onDelete={isSuperAdmin ? handleDeleteTask : null}
@@ -414,7 +373,7 @@ const KanbanBoard = ({
                 )}
               </div>
 
-              {isSuperAdmin && col.id !== 'BLOCKED' && (
+              {canCreateTask && !isAllWorkspaces && col.id !== 'BLOCKED' && (
                 <button
                   type="button"
                   className="kanban-column__create"
@@ -448,9 +407,7 @@ const KanbanBoard = ({
         <BlockReasonModal
           task={blockModal.task}
           onConfirm={handleBlockConfirm}
-          onCancel={() => {
-            setBlockModal({ open: false, task: null, targetStatus: null });
-          }}
+          onCancel={() => setBlockModal({ open: false, task: null, targetStatus: null })}
         />
       )}
     </div>

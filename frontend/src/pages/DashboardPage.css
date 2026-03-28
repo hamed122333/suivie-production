@@ -1,0 +1,352 @@
+/* DashboardPage.css */
+
+.dashboard {
+  padding: 1.5rem 2rem;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+/* En-tête */
+.dashboard__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.dashboard__title {
+  font-size: 1.625rem;
+  font-weight: 800;
+  color: #172b4d;
+  margin: 0 0 0.25rem;
+  letter-spacing: -0.02em;
+}
+
+.dashboard__subtitle {
+  font-size: 0.875rem;
+  color: #5e6c84;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dashboard__workspace-badge {
+  background: #e9f2ff;
+  color: #0052cc;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.6rem;
+  border-radius: 99px;
+  border: 1px solid #b3d4ff;
+}
+
+.dashboard__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.dashboard__date {
+  font-size: 0.8rem;
+  color: #5e6c84;
+  text-transform: capitalize;
+}
+
+.dashboard__user {
+  font-size: 0.8rem;
+  color: #0052cc;
+  font-weight: 500;
+}
+
+/* KPIs */
+.dashboard__kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid #e8ecf0;
+  border-left: 4px solid;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 1px 3px rgba(9, 30, 66, 0.06);
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.stat-card:hover {
+  box-shadow: 0 4px 12px rgba(9, 30, 66, 0.12);
+  transform: translateY(-2px);
+}
+
+.stat-card__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-card__body {
+  min-width: 0;
+}
+
+.stat-card__value {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.stat-card__label {
+  font-size: 0.8rem;
+  color: #5e6c84;
+  margin-top: 0.25rem;
+  font-weight: 500;
+}
+
+.stat-card__trend {
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 0.2rem;
+}
+
+.stat-card__trend--up { color: #006644; }
+.stat-card__trend--down { color: #bf2600; }
+
+/* Progress card */
+.dashboard__progress-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid #e8ecf0;
+  box-shadow: 0 1px 3px rgba(9, 30, 66, 0.06);
+  margin-bottom: 1.5rem;
+}
+
+.dashboard__progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  color: #172b4d;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.dashboard__progress-bar {
+  height: 10px;
+  background: #f1f5f9;
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.dashboard__progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0052cc, #36b37e);
+  border-radius: 99px;
+  transition: width 0.6s ease;
+}
+
+.dashboard__progress-legend {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.dashboard__progress-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.dashboard__progress-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Section */
+.dashboard__section {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e8ecf0;
+  box-shadow: 0 1px 3px rgba(9, 30, 66, 0.06);
+  overflow: hidden;
+}
+
+.dashboard__section-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dashboard__section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #172b4d;
+  margin: 0;
+}
+
+.dashboard__section-count {
+  font-size: 0.8rem;
+  color: #5e6c84;
+  background: #f4f5f7;
+  padding: 0.2rem 0.6rem;
+  border-radius: 99px;
+  font-weight: 500;
+}
+
+/* Table */
+.dashboard__table-wrap {
+  overflow-x: auto;
+}
+
+.dashboard__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.dashboard__table thead tr {
+  background: #f9fafb;
+}
+
+.dashboard__table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  color: #5e6c84;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.dashboard__table tbody tr {
+  border-top: 1px solid #f3f4f6;
+  transition: background 0.15s;
+}
+
+.dashboard__table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.dashboard__table td {
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+}
+
+.dashboard__table-ref {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #0052cc;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dashboard__table-title {
+  font-weight: 500;
+  color: #172b4d;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard__table-user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.dashboard__table-when {
+  color: #9ca3af;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.dashboard__avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dashboard__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Empty state */
+.dashboard__empty {
+  padding: 3rem;
+  text-align: center;
+  color: #9ca3af;
+}
+
+.dashboard__empty-icon {
+  font-size: 3rem;
+  margin-bottom: 0.75rem;
+}
+
+.dashboard__empty p {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+/* Loading */
+.dashboard-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  color: #5e6c84;
+  gap: 1rem;
+}
+
+.dashboard-loading__spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e8ecf0;
+  border-top-color: #0052cc;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

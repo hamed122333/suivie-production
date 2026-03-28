@@ -27,5 +27,7 @@ const requireRoles = (roles, errorMessage = 'Access denied') => (req, res, next)
 const requireSuperAdmin = requireRoles(['super_admin'], 'Super admin access required');
 const requirePlanner = requireRoles(['planner'], 'Planner access required');
 const requireSuperAdminOrPlanner = requireRoles(['super_admin', 'planner'], 'Planner or super admin access required');
+const requireCommercial = requireRoles(['commercial', 'super_admin'], 'Commercial access required');
+const requireAnyRole = requireRoles(['super_admin', 'planner', 'commercial', 'user'], 'Authentication required');
 
-module.exports = { authenticate, requireRoles, requireSuperAdmin, requirePlanner, requireSuperAdminOrPlanner };
+module.exports = { authenticate, requireRoles, requireSuperAdmin, requirePlanner, requireSuperAdminOrPlanner, requireCommercial, requireAnyRole };

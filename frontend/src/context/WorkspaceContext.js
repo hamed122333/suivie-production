@@ -18,8 +18,13 @@ export const WorkspaceProvider = ({ children }) => {
       setWorkspaces(list);
 
       const stored = localStorage.getItem('workspaceId');
+      // Gérer la valeur spéciale 'all'
+      if (stored === 'all') {
+        setWorkspaceId('all');
+        return;
+      }
       const storedId = stored ? parseInt(stored, 10) : null;
-      const exists = storedId && list.some((w) => w.id === storedId);
+      const exists = storedId && !isNaN(storedId) && list.some((w) => w.id === storedId);
 
       if (exists) {
         setWorkspaceId(String(storedId));
@@ -48,14 +53,20 @@ export const WorkspaceProvider = ({ children }) => {
   const workspacesWithAll = useMemo(() => {
     if (!user) return workspaces;
     if (user.role === 'super_admin' || user.role === 'planner') {
-      return [{ id: 'all', name: 'Tous les espaces' }, ...workspaces];
+      return [{ id: 'all', name: '🌐 Tous les espaces' }, ...workspaces];
     }
     return workspaces;
   }, [user, workspaces]);
 
   const selectWorkspace = useCallback((id) => {
+    // Gérer l'option spéciale 'all'
+    if (id === 'all' || String(id) === 'all') {
+      setWorkspaceId('all');
+      localStorage.setItem('workspaceId', 'all');
+      return;
+    }
     const wid = parseInt(id, 10);
-    if (!Number.isInteger(wid)) return;
+    if (isNaN(wid) || !Number.isInteger(wid)) return;
     setWorkspaceId(String(wid));
     localStorage.setItem('workspaceId', String(wid));
   }, []);
@@ -70,23 +81,19 @@ export const WorkspaceProvider = ({ children }) => {
     [refreshWorkspaces, selectWorkspace]
   );
 
-  const value = useMemo(
-    () => ({
-      workspaces: workspacesWithAll,
-      workspaceId: workspaceId ? parseInt(workspaceId, 10) : null,
-      loadingWorkspaces,
-      refreshWorkspaces,
-      selectWorkspace,
-      createWorkspace,
-    }),
-    [workspacesWithAll, workspaceId, loadingWorkspaces, refreshWorkspaces, selectWorkspace, createWorkspace]
-  );
+  // workspaceId numérique ou 'all' ou null
+  const resolvedWorkspaceId = useMemo(() => {
+    if (!workspaceId) return null;
+    if (workspaceId === 'all') return 'all';
+    const n = parseInt(workspaceId, 10);
+    return isNaN(n) ? null : n;
+  }, [workspaceId]);
 
   return (
     <WorkspaceContext.Provider
       value={{
         workspaces: workspacesWithAll,
-        workspaceId,
+        workspaceId: resolvedWorkspaceId,
         selectWorkspace,
         createWorkspace,
         refreshWorkspaces,
@@ -106,4 +113,3 @@ export const useWorkspace = () => {
 };
 
 export default WorkspaceContext;
-

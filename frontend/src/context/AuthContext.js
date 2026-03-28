@@ -27,6 +27,7 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('workspaceId');
   };
 
   return (
@@ -39,6 +40,12 @@ export const AuthProvider = ({ children }) => {
         loading,
         isSuperAdmin: user?.role === 'super_admin',
         isPlanner: user?.role === 'planner',
+        isCommercial: user?.role === 'commercial',
+        // Le commercial ET le super_admin peuvent créer des tâches
+        canCreateTask: user?.role === 'commercial' || user?.role === 'super_admin',
+        // Le super_admin ET le planner peuvent voir toutes les tâches et changer les statuts
+        canViewAll: user?.role === 'super_admin' || user?.role === 'planner',
+        canChangeStatus: user?.role === 'super_admin' || user?.role === 'planner',
       }}
     >
       {children}

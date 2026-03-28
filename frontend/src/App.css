@@ -1,21 +1,21 @@
-/* App specific styles - using index.css for global styles */
+/* App.css — layout uniquement, styles globaux dans index.css */
 
 .app-layout {
   display: flex;
   align-items: stretch;
+  min-height: calc(100vh - 92px);
 }
 
 .app-main {
   flex: 1;
-  min-height: calc(100vh - 60px);
-  background: #f4f5f7;
-  padding: 2.5rem 2.5rem 2.5rem 1.75rem;
-  box-sizing: border-box;
+  background: #f0f2f5;
   overflow-x: auto;
   min-width: 0;
+  /* Pas de padding ici — géré dans chaque page */
 }
+
 @media (max-width: 900px) {
-  .app-main {
-    padding: 1rem 0.5rem 1rem 0.5rem;
+  .app-layout {
+    flex-direction: column;
   }
 }

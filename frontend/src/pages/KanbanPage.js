@@ -14,14 +14,17 @@ const KanbanPage = () => {
   const [search, setSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isPlanner } = useAuth();
+  const { canChangeStatus } = useAuth();
   const { workspaceId, loadingWorkspaces } = useWorkspace();
 
   const fetchTasks = useCallback(
     async (wsId) => {
       try {
+        // Ne passer workspaceId que si c'est une valeur numérique valide
         const params = {};
-        if (wsId && wsId !== 'all') params.workspaceId = wsId;
+        if (wsId && wsId !== 'all' && wsId !== null) {
+          params.workspaceId = wsId;
+        }
         const res = await taskAPI.getAll(params);
         setTasks(res.data);
       } catch (err) {
@@ -33,7 +36,9 @@ const KanbanPage = () => {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await dashboardAPI.getStats(workspaceId);
+      // Ne passer workspaceId à l'API que si c'est un ID numérique
+      const statsWorkspaceId = workspaceId && workspaceId !== 'all' ? workspaceId : null;
+      const res = await dashboardAPI.getStats(statsWorkspaceId);
       setStats(res.data);
     } catch (err) {
       console.error('Failed to fetch stats', err);
@@ -61,7 +66,8 @@ const KanbanPage = () => {
 
   useEffect(() => {
     if (loadingWorkspaces) return;
-    if (!workspaceId) return;
+    // Si workspaceId est null (non sélectionné), ne pas charger
+    if (workspaceId === null) return;
     setLoading(true);
     Promise.all([fetchTasks(workspaceId), fetchStats()]).finally(() => setLoading(false));
   }, [workspaceId, loadingWorkspaces, fetchTasks, fetchStats]);
@@ -92,7 +98,7 @@ const KanbanPage = () => {
         priority={priorityFilter}
         onPriorityChange={setPriorityFilter}
         users={users}
-        isAdmin={isPlanner}
+        isAdmin={canChangeStatus}
         stats={stats}
         onRefresh={() => Promise.all([fetchTasks(workspaceId), fetchStats()])}
       />
