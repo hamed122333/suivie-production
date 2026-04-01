@@ -413,7 +413,7 @@ const KanbanBoard = ({
         taskId={selectedTaskId}
         refreshSignal={detailRefreshSignal}
         canManage={canChangeStatus}
-        canEdit={canChangeStatus || canCreateTask}
+        canEdit={canChangeStatus || canCreateTask || isSuperAdmin}
         onClose={() => setSelectedTaskId(null)}
         onEditTask={(task) => {
           setEditingTask(task);

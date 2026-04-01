@@ -22,7 +22,7 @@ router.put('/:id', authenticate, requireRoles(['planner', 'commercial']), taskCo
 // Changer le statut : planificateur uniquement
 router.put('/:id/status', authenticate, requirePlanner, taskController.updateStatus);
 
-// Supprimer : planificateur et commercial
-router.delete('/:id', authenticate, requireRoles(['planner', 'commercial']), taskController.delete);
+// Supprimer : planificateur, commercial et super_admin
+router.delete('/:id', authenticate, requireRoles(['planner', 'commercial', 'super_admin']), taskController.delete);
 
 module.exports = router;
