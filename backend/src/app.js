@@ -11,6 +11,9 @@ const workspaceRoutes = require('./routes/workspaceRoutes');
 
 const app = express();
 
+// Trust proxy for Render deployment so rate limits measure the original IP instead of the reverse proxy IP
+app.set('trust proxy', 1);
+
 app.disable('x-powered-by');
 
 app.use(cors());
