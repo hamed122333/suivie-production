@@ -28,6 +28,14 @@ const UserModel = {
 
   async validatePassword(plainPassword, hashedPassword) {
     return bcrypt.compare(plainPassword, hashedPassword);
+  },
+
+  async delete(id) {
+    const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
+    if (result.rows.length === 0) {
+      throw new Error('Utilisateur introuvable');
+    }
+    return result.rows[0];
   }
 };
 

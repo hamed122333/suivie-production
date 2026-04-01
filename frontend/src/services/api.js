@@ -53,6 +53,7 @@ export const taskAPI = {
 export const userAPI = {
   getAll: () => api.get('/users'),
   create: (data) => api.post('/users', data),
+  delete: (id) => api.delete(`/users/${id}`),
 };
 
 export const dashboardAPI = {

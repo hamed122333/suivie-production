@@ -45,7 +45,19 @@ const userController = {
       console.error(err);
       res.status(500).json({ error: 'Server error' });
     }
-  }
+  },
+
+  async delete(req, res) {
+    try {
+      const u = await UserModel.delete(req.params.id);
+      res.json({ message: 'Compte supprime' });
+    } catch (err) {
+      if (err.message.includes('introuvable')) {
+         return res.status(404).json({ error: err.message });
+      }
+      res.status(500).json({ error: 'Erreur lors de la suppression du compte' });
+    }
+  },
 };
 
 module.exports = userController;

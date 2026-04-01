@@ -103,6 +103,19 @@ const UsersPage = () => {
     }
   };
 
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur "${name}" ? Cette action est irréversible.`)) {
+      return;
+    }
+
+    try {
+      await userAPI.delete(id);
+      fetchUsers();
+    } catch (err) {
+      alert(err?.response?.data?.error || 'Impossible de supprimer cet utilisateur.');
+    }
+  };
+
   const filtered = users.filter(u =>
     !search.trim() ||
     u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -187,6 +200,7 @@ const UsersPage = () => {
                   <th>Email</th>
                   <th>Rôle</th>
                   <th>Créé le</th>
+                  <th style={{ width: '60px', textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -212,6 +226,25 @@ const UsersPage = () => {
                         </span>
                       </td>
                       <td className="users-page__date">{date}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(u.id, u.name)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            padding: '0.25rem 0.5rem',
+                            borderRadius: '4px',
+                          }}
+                          title="Supprimer l'utilisateur"
+                          onMouseOver={(e) => (e.target.style.backgroundColor = '#fef2f2')}
+                          onMouseOut={(e) => (e.target.style.backgroundColor = 'transparent')}
+                        >
+                          🗑️
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
