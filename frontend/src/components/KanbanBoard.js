@@ -49,7 +49,12 @@ function applyMove(taskList, draggedId, targetStatus, insertBeforeId) {
   const col = byCol[targetStatus];
   let insertAt = insertBeforeId == null ? col.length : col.findIndex((t) => t.id === insertBeforeId);
   if (insertAt < 0) insertAt = col.length;
-  const moved = { ...dragged, status: targetStatus };
+  const moved = {
+    ...dragged,
+    status: targetStatus,
+    // Clear blocked_reason when moving away from BLOCKED status
+    blocked_reason: targetStatus === 'BLOCKED' ? dragged.blocked_reason : null
+  };
   col.splice(insertAt, 0, moved);
   byCol[targetStatus] = col.map((t, i) => ({ ...t, status: targetStatus, board_position: i }));
   return [...byCol.TODO, ...byCol.IN_PROGRESS, ...byCol.BLOCKED, ...byCol.DONE];
