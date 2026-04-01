@@ -10,7 +10,18 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
+
+const adminEmail = process.env.BOOTSTRAP_ADMIN_EMAIL || '';
+const adminPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD || '';
+const adminName = process.env.BOOTSTRAP_ADMIN_NAME || '';
+const adminRole = process.env.BOOTSTRAP_ADMIN_ROLE || '';
+
+// Force TLS for schema setup if in production
+if (process.env.NODE_ENV === 'production') {
+  process.env.PGSSLMODE = 'require';
+}
 
 async function setup() {
   try {
@@ -35,18 +46,13 @@ async function setup() {
     }
 
     // Optional bootstrap admin (only if env vars are set)
-    const bootstrapEmail = process.env.BOOTSTRAP_ADMIN_EMAIL;
-    const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
-    if (bootstrapEmail && bootstrapPassword) {
-      const bootstrapName = process.env.BOOTSTRAP_ADMIN_NAME || 'Admin';
-      const bootstrapRole = process.env.BOOTSTRAP_ADMIN_ROLE || 'super_admin';
-
-      const existing = await pool.query('SELECT id FROM users WHERE email = $1', [bootstrapEmail]);
+    if (adminEmail && adminPassword) {
+      const existing = await pool.query('SELECT id FROM users WHERE email = $1', [adminEmail]);
       if (existing.rows.length === 0) {
-        const hashedPassword = await bcrypt.hash(bootstrapPassword, 10);
+        const hashedPassword = await bcrypt.hash(adminPassword, 10);
         await pool.query(
           'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4)',
-          [bootstrapName, bootstrapEmail, hashedPassword, bootstrapRole]
+          [adminName, adminEmail, hashedPassword, adminRole]
         );
         console.log('Bootstrap admin created.');
       } else {
@@ -64,4 +70,3 @@ async function setup() {
 }
 
 setup();
-

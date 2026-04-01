@@ -9,6 +9,7 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
 async function runMigration() {
@@ -30,6 +31,12 @@ async function runMigration() {
     console.error('Production workflow migration failed:', error.message);
     process.exit(1);
   }
+}
+
+// Force TLS for schema setup if in production
+if (process.env.NODE_ENV === 'production') {
+  const tls = require('tls');
+  tls.DEFAULT_MIN_VERSION = 'TLSv1.2';
 }
 
 runMigration();
