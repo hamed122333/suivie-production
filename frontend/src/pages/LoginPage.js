@@ -3,12 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
-const DEMO_ACCOUNTS = [
-  { role: 'Super Admin', email: 'admin@example.com', password: 'admin123', icon: '👑', color: '#7c3aed', desc: 'Gestion complète' },
-  { role: 'Planificateur', email: 'planner@example.com', password: 'admin123', icon: '📋', color: '#0052cc', desc: 'Gestion des statuts' },
-  { role: 'Commercial', email: 'commercial@example.com', password: 'admin123', icon: '🧑‍💼', color: '#b45309', desc: 'Création tâches' },
-];
-
 const LoginPage = () => {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
@@ -29,11 +23,6 @@ const LoginPage = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillDemo = (email, password) => {
-    setForm({ email, password });
-    setError('');
   };
 
   return (
@@ -186,46 +175,6 @@ const LoginPage = () => {
               {loading ? '⏳ Connexion…' : '🔐 Se connecter'}
             </button>
           </form>
-
-          {/* Demo accounts */}
-          <div style={{ marginTop: '1.75rem' }}>
-            <p style={{ fontSize: '0.72rem', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: '600', marginBottom: '0.6rem', textAlign: 'center' }}>
-              Comptes de démonstration
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              {DEMO_ACCOUNTS.map(acc => (
-                <button
-                  key={acc.email}
-                  type="button"
-                  onClick={() => fillDemo(acc.email, acc.password)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.65rem 0.875rem',
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.07)',
-                    borderRadius: '10px',
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                    transition: 'background 0.15s, border-color 0.15s',
-                    textAlign: 'left',
-                    width: '100%',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; }}
-                >
-                  <span style={{ width: 32, height: 32, borderRadius: 8, background: `${acc.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
-                    {acc.icon}
-                  </span>
-                  <div>
-                    <div style={{ fontSize: '0.82rem', fontWeight: '600', color: '#e2e8f0' }}>{acc.role}</div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{acc.desc} · {acc.email}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.75rem', color: '#334155' }}>
