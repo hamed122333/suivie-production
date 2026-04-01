@@ -12,6 +12,10 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
+// If Supabase uses IPv6 and IPv4 but host resolves default to IPv6 in some Node versions, force IPv4
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
+
 async function runMigration() {
   try {
     const migrationNames = [

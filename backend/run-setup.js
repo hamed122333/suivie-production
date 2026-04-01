@@ -18,6 +18,10 @@ const adminPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD || '';
 const adminName = process.env.BOOTSTRAP_ADMIN_NAME || '';
 const adminRole = process.env.BOOTSTRAP_ADMIN_ROLE || '';
 
+// If Supabase uses IPv6 and IPv4 but host resolves default to IPv6 in some Node versions, force IPv4
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
+
 // Force TLS for schema setup if in production
 if (process.env.NODE_ENV === 'production') {
   process.env.PGSSLMODE = 'require';

@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const dns = require('dns');
 
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
@@ -8,6 +9,9 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD || 'postgres',
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
+
+// Force IPv4 in production to prevent ENETUNREACH on IPv6 with Supabase
+dns.setDefaultResultOrder('ipv4first');
 
 pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
