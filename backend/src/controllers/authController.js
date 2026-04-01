@@ -19,9 +19,13 @@ const authController = {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
+      if (!process.env.JWT_SECRET) {
+        throw new Error('JWT_SECRET not configured');
+      }
+
       const token = jwt.sign(
         { id: user.id, email: user.email, name: user.name, role: user.role },
-        process.env.JWT_SECRET || 'secret_key',
+        process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
 

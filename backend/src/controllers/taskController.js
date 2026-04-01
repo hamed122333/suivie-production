@@ -51,14 +51,7 @@ const taskController = {
         filters.createdBy = req.user.id;
       }
 
-      // LOG pour debug
-      console.log('[DEBUG /api/tasks]', {
-        user: { id: req.user.id, role: req.user.role },
-        filters,
-      });
-
       const tasks = await TaskModel.getAll(filters);
-      console.log(`[DEBUG /api/tasks] ${tasks.length} tâches retournées`);
       res.json(tasks);
     } catch (err) {
       console.error(err);
