@@ -22,12 +22,4 @@ BEGIN
 END;
 $$;
 
--- Créer un utilisateur commercial de démonstration si aucun n'existe
-INSERT INTO users (name, email, password, role)
-SELECT 'Commercial Demo', 'commercial@example.com',
-  -- password: commercial123 (bcrypt hash généré avec salt 10)
-  '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
-  'commercial'
-WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'commercial@example.com');
-
 COMMIT;

@@ -6,17 +6,17 @@ const authController = {
     try {
       const { email, password } = req.body;
       if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password required' });
+        return res.status(400).json({ error: 'Email et mot de passe obligatoires' });
       }
 
-      const user = await UserModel.findByEmail(email);
+      const user = await UserModel.findByEmail(email.trim().toLowerCase());
       if (!user) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return res.status(401).json({ error: 'Identifiants invalides' });
       }
 
       const validPassword = await UserModel.validatePassword(password, user.password);
       if (!validPassword) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return res.status(401).json({ error: 'Identifiants invalides' });
       }
 
       const token = jwt.sign(
@@ -31,17 +31,17 @@ const authController = {
       });
     } catch (err) {
       console.error(err);
-      res.status(500).json({ error: 'Server error' });
+      res.status(500).json({ error: 'Erreur serveur' });
     }
   },
 
   async me(req, res) {
     try {
       const user = await UserModel.findById(req.user.id);
-      if (!user) return res.status(404).json({ error: 'User not found' });
+      if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
       res.json(user);
     } catch (err) {
-      res.status(500).json({ error: 'Server error' });
+      res.status(500).json({ error: 'Erreur serveur' });
     }
   }
 };

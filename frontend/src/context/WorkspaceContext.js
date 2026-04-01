@@ -45,7 +45,12 @@ export const WorkspaceProvider = ({ children }) => {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) return;
+    if (!user) {
+      setWorkspaces([]);
+      setWorkspaceId('');
+      setLoadingWorkspaces(false);
+      return;
+    }
     refreshWorkspaces();
   }, [authLoading, user, refreshWorkspaces]);
 

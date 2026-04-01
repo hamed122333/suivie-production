@@ -1,0 +1,62 @@
+BEGIN;
+
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_type VARCHAR(50) NOT NULL DEFAULT 'PRODUCTION_ORDER';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS client_name VARCHAR(255);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS order_code VARCHAR(100);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS item_reference VARCHAR(255);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS quantity NUMERIC(12,2);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS quantity_unit VARCHAR(50) DEFAULT 'pcs';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS due_date DATE;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS planned_date DATE;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS production_line VARCHAR(120);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS machine VARCHAR(120);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS workshop VARCHAR(120);
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS expected_action TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS blocked_at TIMESTAMP;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS blocked_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP;
+
+UPDATE tasks
+SET status = CASE status
+  WHEN 'IN_PROGRESS' THEN 'IN_PRODUCTION'
+  ELSE status
+END
+WHERE status IN ('IN_PROGRESS', 'TODO', 'DONE', 'BLOCKED');
+
+UPDATE tasks
+SET completed_at = COALESCE(completed_at, updated_at)
+WHERE status = 'DONE' AND completed_at IS NULL;
+
+UPDATE tasks
+SET blocked_at = COALESCE(blocked_at, updated_at)
+WHERE status = 'BLOCKED' AND blocked_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS task_comments (
+  id SERIAL PRIMARY KEY,
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  body TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS task_history (
+  id SERIAL PRIMARY KEY,
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  action_type VARCHAR(80) NOT NULL,
+  field_name VARCHAR(80),
+  old_value TEXT,
+  new_value TEXT,
+  message TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+CREATE INDEX IF NOT EXISTS idx_tasks_production_line ON tasks(production_line);
+CREATE INDEX IF NOT EXISTS idx_tasks_machine ON tasks(machine);
+CREATE INDEX IF NOT EXISTS idx_task_comments_task_id ON task_comments(task_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_history_task_id ON task_history(task_id, created_at DESC);
+
+COMMIT;

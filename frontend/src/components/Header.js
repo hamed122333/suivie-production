@@ -2,10 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { getInitials } from '../utils/formatters';
 import './Header.css';
 
 const ROLE_CONFIG = {
-  super_admin: { label: 'Super Admin', icon: '👑', color: '#7c3aed' },
+  super_admin: { label: 'Suivi', icon: '👁', color: '#7c3aed' },
   planner: { label: 'Planificateur', icon: '📋', color: '#0052cc' },
   commercial: { label: 'Commercial', icon: '🧑‍💼', color: '#b45309' },
   user: { label: 'Utilisateur', icon: '👤', color: '#374151' },
@@ -33,14 +34,17 @@ const Header = () => {
     return () => document.removeEventListener('click', onDoc);
   }, []);
 
-  const initials =
-    user?.name
-      ?.split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join('')
-      .toUpperCase() || '?';
+  useEffect(() => {
+    if (location.pathname !== '/kanban') {
+      setSearch('');
+      return;
+    }
+
+    const params = new URLSearchParams(location.search);
+    setSearch(params.get('q') || '');
+  }, [location.pathname, location.search]);
+
+  const initials = getInitials(user?.name);
 
   const submitSearch = (e) => {
     e.preventDefault();
@@ -98,7 +102,17 @@ const Header = () => {
             aria-label="Recherche"
           />
           {search && (
-            <button type="button" className="app-header__search-clear" onClick={() => setSearch('')} aria-label="Effacer">
+            <button
+              type="button"
+              className="app-header__search-clear"
+              onClick={() => {
+                setSearch('');
+                if (location.pathname === '/kanban') {
+                  navigate('/kanban');
+                }
+              }}
+              aria-label="Effacer"
+            >
               ✕
             </button>
           )}

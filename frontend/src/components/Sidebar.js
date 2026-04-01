@@ -1,13 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { getInitials } from '../utils/formatters';
 import './Sidebar.css';
 
 const WORKSPACE_ICONS = ['🔷', '🟦', '🟩', '🟧', '🟪', '🟥', '⬛'];
 
 const getRoleLabel = (role) => {
   const labels = {
-    super_admin: { label: 'Super Admin', color: '#7c3aed', bg: '#ede9fe' },
+    super_admin: { label: 'Suivi', color: '#7c3aed', bg: '#ede9fe' },
     planner: { label: 'Planificateur', color: '#0052cc', bg: '#deebff' },
     commercial: { label: 'Commercial', color: '#b45309', bg: '#fef3c7' },
     user: { label: 'Utilisateur', color: '#374151', bg: '#f3f4f6' },
@@ -16,7 +18,7 @@ const getRoleLabel = (role) => {
 };
 
 const Sidebar = () => {
-  const { isSuperAdmin, isCommercial, user } = useAuth();
+  const { isSuperAdmin, canCreateWorkspace, user } = useAuth();
   const { workspaces, workspaceId, selectWorkspace, createWorkspace, loadingWorkspaces } = useWorkspace();
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -25,7 +27,6 @@ const Sidebar = () => {
   const [creating, setCreating] = useState(false);
 
   const activeId = workspaceId ? String(workspaceId) : '';
-  const canCreate = isSuperAdmin || isCommercial;
   const roleInfo = getRoleLabel(user?.role);
 
   const submit = async (e) => {
@@ -48,16 +49,16 @@ const Sidebar = () => {
     }
   };
 
-  const options = useMemo(() => workspaces || [], [workspaces]);
+  const options = workspaces || [];
 
   return (
     <aside className="sidebar" aria-label="Espaces de travail">
       {/* Profil utilisateur */}
       {user && (
         <div className="sidebar__profile">
-          <div className="sidebar__profile-avatar">
-            {user.name?.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'}
-          </div>
+        <div className="sidebar__profile-avatar">
+            {getInitials(user.name)}
+        </div>
           <div className="sidebar__profile-info">
             <div className="sidebar__profile-name">{user.name}</div>
             <span className="sidebar__profile-role" style={{ background: roleInfo.bg, color: roleInfo.color }}>
@@ -73,7 +74,7 @@ const Sidebar = () => {
           <span className="sidebar__title-icon">🗂</span>
           Espaces
         </div>
-        {canCreate && (
+        {canCreateWorkspace && (
           <button type="button" className="sidebar__create-btn" onClick={() => setCreateOpen(true)} title="Créer un espace">
             +
           </button>
@@ -120,21 +121,21 @@ const Sidebar = () => {
 
       {/* Navigation */}
       <nav className="sidebar__nav" aria-label="Navigation">
-        <a href="/kanban" className="sidebar__nav-link">
+        <NavLink to="/kanban" className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
           <span>▦</span> Tableau Kanban
-        </a>
-        <a href="/dashboard" className="sidebar__nav-link">
+        </NavLink>
+        <NavLink to="/dashboard" className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
           <span>📊</span> Tableau de bord
-        </a>
+        </NavLink>
         {isSuperAdmin && (
-          <a href="/users" className="sidebar__nav-link">
+          <NavLink to="/users" className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
             <span>👥</span> Utilisateurs
-          </a>
+          </NavLink>
         )}
       </nav>
 
       {/* Modal: Créer un espace */}
-      {createOpen && (
+      {createOpen && canCreateWorkspace && (
         <div className="modal-overlay" role="dialog" aria-label="Créer un espace de travail">
           <div className="modal-content sidebar-modal">
             <div className="modal-header">

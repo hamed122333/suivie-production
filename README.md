@@ -28,11 +28,44 @@ A Jira-like task tracking system optimized for factory production management.
 
 ### Option 1: Docker Compose (Recommended)
 
+#### Development (hot reload + seed data)
+
 ```bash
-docker-compose up -d
+docker compose -f docker-compose.dev.yml up --build
 ```
 
 Visit http://localhost:3000
+
+#### Production-like (optimized images)
+
+```bash
+docker compose up -d --build
+```
+
+Visit http://localhost:3000
+
+#### Production Compose (recommended for deployment)
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Visit http://localhost
+
+> Tip: copy `.env.example` to `.env` to override database credentials, JWT secret, and the frontend API URL.  
+> The React build reads `REACT_APP_API_URL` at build time, so rebuild after changing it.
+
+#### First Admin (production)
+Set these in `.env` before the first run to create an initial super admin:
+`BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_NAME` (optional), `BOOTSTRAP_ADMIN_ROLE` (optional).
+The user is created only if the email does not already exist.
+
+#### Frontend → Backend (production)
+The production container serves the React app via Nginx and proxies `/api/*` to the backend container.
+That means you can keep `REACT_APP_API_URL=/api` (default in Docker) and avoid CORS issues.
+
+#### Create Users (after first login)
+Log in as a `super_admin`, go to the Users page, and create additional accounts there.
 
 ### Option 2: Manual Setup
 
@@ -63,11 +96,22 @@ Visit http://localhost:3000
 
 ## Demo Credentials
 
+Demo data is loaded when `RUN_SEED=true` (the dev Docker Compose file enables this).
+
 | Role  | Email                   | Password  |
 |-------|-------------------------|-----------|
 | Admin | admin@factory.com       | admin123  |
 | User  | worker1@factory.com     | admin123  |
 | User  | worker2@factory.com     | admin123  |
+
+## Roles & Permissions
+
+| Role | Ce qu'il peut faire |
+|------|----------------------|
+| super_admin | Acces complet, creation des utilisateurs, gestion de toutes les taches |
+| planner | Mise a jour des statuts, modification des fiches, gestion du kanban |
+| commercial | Creation des taches (uniquement dans "A faire") |
+| user | Consultation uniquement |
 
 ## API Endpoints
 
@@ -97,6 +141,7 @@ Suivi-Production/
 │   │   ├── middleware/auth.js    # JWT authentication
 │   │   └── server.js             # Express server
 │   ├── Dockerfile
+│   ├── Dockerfile.dev
 │   ├── package.json
 │   └── .env.example
 ├── frontend/
@@ -107,10 +152,13 @@ Suivi-Production/
 │   │   ├── services/api.js       # API client
 │   │   └── App.js                # Main app
 │   ├── Dockerfile
+│   ├── Dockerfile.dev
 │   ├── package.json
 │   └── .env.example
 ├── database/
-│   └── schema.sql                # Database schema & seed data
+│   └── schema.sql                # Database schema
+├── docker-compose.dev.yml
 ├── docker-compose.yml
 └── README.md
 ```
+> Dev compose uses `AUTO_SEED_IF_EMPTY=true` to load demo users only when the database is empty.

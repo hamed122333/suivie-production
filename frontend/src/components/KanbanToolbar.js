@@ -20,6 +20,7 @@ const KanbanToolbar = ({
   onRefresh,
 }) => {
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const counts = stats?.counts || {};
 
   return (
     <div className="kanban-toolbar">
@@ -86,16 +87,20 @@ const KanbanToolbar = ({
           ↻
         </button>
         <div className="kanban-stat kanban-stat--blue">
-          <strong>{stats?.todayTotal ?? '—'}</strong>
-          <span>Tâches aujourd&apos;hui</span>
+          <strong>{counts.dueToday ?? '—'}</strong>
+          <span>Echéances du jour</span>
         </div>
-        <div className="kanban-stat kanban-stat--green">
-          <strong>{stats?.totalDone ?? '—'}</strong>
-          <span>Terminées</span>
+        <div className="kanban-stat kanban-stat--amber">
+          <strong>{counts.overdue ?? '—'}</strong>
+          <span>En retard</span>
         </div>
         <div className="kanban-stat kanban-stat--red">
-          <strong>{stats?.totalBlocked ?? '—'}</strong>
+          <strong>{counts.totalBlocked ?? '—'}</strong>
           <span>Bloquées</span>
+        </div>
+        <div className="kanban-stat kanban-stat--green">
+          <strong>{counts.completedToday ?? '—'}</strong>
+          <span>Terminees aujourd&apos;hui</span>
         </div>
       </div>
     </div>

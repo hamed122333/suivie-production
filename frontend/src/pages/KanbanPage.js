@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { startTransition, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import KanbanBoard from '../components/KanbanBoard';
 import KanbanToolbar from '../components/KanbanToolbar';
@@ -14,7 +14,7 @@ const KanbanPage = () => {
   const [search, setSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
-  const { canChangeStatus } = useAuth();
+  const { isPlanner } = useAuth();
   const { workspaceId, loadingWorkspaces } = useWorkspace();
 
   const fetchTasks = useCallback(
@@ -73,12 +73,14 @@ const KanbanPage = () => {
   }, [workspaceId, loadingWorkspaces, fetchTasks, fetchStats]);
 
   const handleSearchChange = (value) => {
-    setSearch(value);
-    if (value.trim()) {
-      setSearchParams({ q: value.trim() });
-    } else {
-      setSearchParams({});
-    }
+    startTransition(() => {
+      setSearch(value);
+      if (value.trim()) {
+        setSearchParams({ q: value.trim() });
+      } else {
+        setSearchParams({});
+      }
+    });
   };
 
   if (loading) {
@@ -98,7 +100,7 @@ const KanbanPage = () => {
         priority={priorityFilter}
         onPriorityChange={setPriorityFilter}
         users={users}
-        isAdmin={canChangeStatus}
+        isAdmin={isPlanner}
         stats={stats}
         onRefresh={() => Promise.all([fetchTasks(workspaceId), fetchStats()])}
       />

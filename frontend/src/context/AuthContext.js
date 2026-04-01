@@ -1,33 +1,75 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { authAPI } from '../services/api';
+import { AUTH_CHANGED_EVENT, clearAuthSession, readStoredAuth, saveAuthSession } from '../utils/authStorage';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
+  const storedAuth = readStoredAuth();
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState(storedAuth.token);
+  const [loading, setLoading] = useState(Boolean(storedAuth.token));
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser && token) {
-      setUser(JSON.parse(storedUser));
+    const syncFromStorage = () => {
+      const nextSession = readStoredAuth();
+      setToken(nextSession.token);
+      setUser(nextSession.user);
+    };
+
+    window.addEventListener(AUTH_CHANGED_EVENT, syncFromStorage);
+    return () => {
+      window.removeEventListener(AUTH_CHANGED_EVENT, syncFromStorage);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!token) {
+      setUser(null);
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
     }
-    setLoading(false);
+
+    setLoading(true);
+
+    authAPI.me()
+      .then((response) => {
+        if (cancelled) return;
+        setUser(response.data);
+        saveAuthSession(response.data, token);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        clearAuthSession();
+        setUser(null);
+        setToken(null);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   const login = (userData, authToken) => {
     setUser(userData);
     setToken(authToken);
-    localStorage.setItem('token', authToken);
-    localStorage.setItem('user', JSON.stringify(userData));
+    setLoading(false);
+    saveAuthSession(userData, authToken);
   };
 
   const logout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('workspaceId');
+    clearAuthSession();
   };
 
   return (
@@ -41,11 +83,13 @@ export const AuthProvider = ({ children }) => {
         isSuperAdmin: user?.role === 'super_admin',
         isPlanner: user?.role === 'planner',
         isCommercial: user?.role === 'commercial',
-        // Le commercial ET le super_admin peuvent créer des tâches
-        canCreateTask: user?.role === 'commercial' || user?.role === 'super_admin',
-        // Le super_admin ET le planner peuvent voir toutes les tâches et changer les statuts
+        // Le commercial crée les tâches, uniquement dans TODO.
+        canCreateTask: user?.role === 'commercial',
+        canCreateWorkspace: user?.role === 'commercial',
+        // Le super_admin et le planner ont une vue globale.
         canViewAll: user?.role === 'super_admin' || user?.role === 'planner',
-        canChangeStatus: user?.role === 'super_admin' || user?.role === 'planner',
+        // Le planificateur gère les mouvements et les statuts.
+        canChangeStatus: user?.role === 'planner',
       }}
     >
       {children}

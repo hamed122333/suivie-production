@@ -1,6 +1,9 @@
 import axios from 'axios';
+import { clearAuthSession } from '../utils/authStorage';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL =
+  process.env.REACT_APP_API_URL ||
+  (process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:5000/api');
 
 const api = axios.create({
   baseURL: API_URL,
@@ -20,9 +23,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      clearAuthSession();
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.assign('/login');
+      }
     }
     return Promise.reject(error);
   }
@@ -36,9 +40,12 @@ export const authAPI = {
 export const taskAPI = {
   getAll: (params = {}) => api.get('/tasks', { params }),
   getById: (id) => api.get(`/tasks/${id}`),
+  getDetail: (id) => api.get(`/tasks/${id}/details`),
   create: (data) => api.post('/tasks', data),
+  createBatch: ({ tasks, workspaceId, status = 'TODO' }) => api.post('/tasks/bulk', { tasks, workspaceId, status }),
   update: (id, data) => api.put(`/tasks/${id}`, data),
   updateStatus: (id, status, reasonBlocked) => api.put(`/tasks/${id}/status`, { status, reasonBlocked }),
+  addComment: (id, body) => api.post(`/tasks/${id}/comments`, { body }),
   patchBoard: ({ workspaceId, columnOrders }) => api.patch('/tasks/board', { workspaceId, columnOrders }),
   delete: (id) => api.delete(`/tasks/${id}`),
 };

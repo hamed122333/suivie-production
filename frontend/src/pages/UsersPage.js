@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { userAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { getInitials } from '../utils/formatters';
 import './UsersPage.css';
 
 const ROLE_CONFIG = {
@@ -11,10 +12,48 @@ const ROLE_CONFIG = {
   user: { label: 'Utilisateur', icon: '👤', color: '#374151', bg: '#f3f4f6' },
 };
 
-function initials(name) {
-  if (!name) return '?';
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-}
+const ROLE_PERMISSIONS = [
+  {
+    key: 'super_admin',
+    title: 'Super Admin',
+    summary: 'Acces complet',
+    items: [
+      'Creer des utilisateurs',
+      'Gerer toutes les taches',
+      'Mettre a jour tous les statuts',
+    ],
+  },
+  {
+    key: 'planner',
+    title: 'Planificateur',
+    summary: 'Pilotage du flux',
+    items: [
+      'Mettre a jour les statuts',
+      'Modifier les fiches',
+      'Reordonner le kanban',
+    ],
+  },
+  {
+    key: 'commercial',
+    title: 'Commercial',
+    summary: 'Creation des commandes',
+    items: [
+      'Creer des taches',
+      'Uniquement dans "A faire"',
+      'Pas de modification de statut',
+    ],
+  },
+  {
+    key: 'user',
+    title: 'Utilisateur',
+    summary: 'Consultation',
+    items: [
+      'Voir les tableaux',
+      'Voir les fiches',
+      'Pas de modification',
+    ],
+  },
+];
 
 const UsersPage = () => {
   const { isSuperAdmin } = useAuth();
@@ -82,6 +121,40 @@ const UsersPage = () => {
         </button>
       </div>
 
+      <section className="users-page__roles" aria-label="Roles et permissions">
+        <div className="users-page__roles-head">
+          <div>
+            <h2>Roles et permissions</h2>
+            <p>Chaque role debloque des actions specifiques dans le projet.</p>
+          </div>
+        </div>
+        <div className="users-page__roles-grid">
+          {ROLE_PERMISSIONS.map((role) => {
+            const styleRole = ROLE_CONFIG[role.key] || ROLE_CONFIG.user;
+            return (
+              <div key={role.key} className="users-page__role-card">
+                <div className="users-page__role-title" style={{ color: styleRole.color }}>
+                  <span className="users-page__role-icon" style={{ background: styleRole.bg, color: styleRole.color }}>
+                    {styleRole.icon}
+                  </span>
+                  <div>
+                    <strong>{role.title}</strong>
+                    <span>{role.summary}</span>
+                  </div>
+                </div>
+                <div className="users-page__role-items">
+                  {role.items.map((item) => (
+                    <span key={item} className="users-page__role-item">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
       {/* Barre de recherche */}
       <div className="users-page__search-wrap">
         <input
@@ -127,7 +200,7 @@ const UsersPage = () => {
                       <td>
                         <div className="users-page__user-cell">
                           <div className="users-page__avatar" style={{ background: role.bg, color: role.color }}>
-                            {initials(u.name)}
+                            {getInitials(u.name)}
                           </div>
                           <span className="users-page__name">{u.name}</span>
                         </div>

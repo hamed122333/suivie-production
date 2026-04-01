@@ -197,3 +197,8 @@
   background: #ffebe6;
   color: #bf2600;
 }
+
+.kanban-stat--amber {
+  background: #fff7ed;
+  color: #c2410c;
+}

@@ -1,39 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { dashboardAPI, taskAPI } from '../services/api';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useAuth } from '../context/AuthContext';
+import { STATUS_COUNT_FIELDS, TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, TASK_STATUS_ORDER } from '../constants/task';
+import { formatDate, formatRelativeDate, getInitials } from '../utils/formatters';
 import './DashboardPage.css';
 
-const StatCard = ({ label, value, icon, color, bg, trend }) => (
-  <div className="stat-card" style={{ borderLeftColor: color }}>
-    <div className="stat-card__icon" style={{ background: bg, color }}>
-      {icon}
-    </div>
-    <div className="stat-card__body">
-      <div className="stat-card__value" style={{ color }}>{value}</div>
-      <div className="stat-card__label">{label}</div>
-      {trend !== undefined && (
-        <div className={`stat-card__trend ${trend >= 0 ? 'stat-card__trend--up' : 'stat-card__trend--down'}`}>
-          {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}%
-        </div>
-      )}
-    </div>
+const MetricTile = ({ label, value, tone = 'blue', helper }) => (
+  <div className={`dashboard-tile dashboard-tile--${tone}`}>
+    <strong>{value}</strong>
+    <span>{label}</span>
+    {helper ? <small>{helper}</small> : null}
   </div>
 );
-
-const statusConfig = {
-  TODO: { label: 'À faire', color: '#6b7280', bg: '#f3f4f6', icon: '📌' },
-  IN_PROGRESS: { label: 'En cours', color: '#0052cc', bg: '#deebff', icon: '⚙️' },
-  DONE: { label: 'Terminé', color: '#006644', bg: '#e3fcef', icon: '✅' },
-  BLOCKED: { label: 'Bloqué', color: '#bf2600', bg: '#ffebe6', icon: '🚫' },
-};
-
-const priorityConfig = {
-  URGENT: { label: 'Urgente', color: '#7c3aed', bg: '#ede9fe' },
-  HIGH: { label: 'Haute', color: '#dc2626', bg: '#fee2e2' },
-  MEDIUM: { label: 'Moyenne', color: '#d97706', bg: '#fef3c7' },
-  LOW: { label: 'Basse', color: '#6b7280', bg: '#f3f4f6' },
-};
 
 const DashboardPage = () => {
   const [stats, setStats] = useState(null);
@@ -42,8 +21,8 @@ const DashboardPage = () => {
   const { workspaceId, loadingWorkspaces, workspaces } = useWorkspace();
   const { user } = useAuth();
 
-  const activeWorkspace = workspaces?.find(w => String(w.id) === String(workspaceId));
-  const workspaceName = workspaceId === 'all' ? 'Tous les espaces' : (activeWorkspace?.name || '');
+  const activeWorkspace = workspaces?.find((workspace) => String(workspace.id) === String(workspaceId));
+  const workspaceName = workspaceId === 'all' ? 'Tous les espaces' : activeWorkspace?.name || '';
 
   useEffect(() => {
     if (loadingWorkspaces) return;
@@ -52,16 +31,24 @@ const DashboardPage = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Ne passer workspaceId à l'API que si c'est un nombre valide
         const apiWorkspaceId = workspaceId !== 'all' ? workspaceId : null;
         const taskParams = apiWorkspaceId ? { workspaceId: apiWorkspaceId } : {};
 
-        const [statsRes, tasksRes] = await Promise.all([
+        const [statsResponse, tasksResponse] = await Promise.all([
           dashboardAPI.getStats(apiWorkspaceId),
           taskAPI.getAll(taskParams),
         ]);
-        setStats(statsRes.data);
-        setRecentTasks(tasksRes.data.slice(0, 10));
+
+        setStats(statsResponse.data);
+        setRecentTasks(
+          [...tasksResponse.data]
+            .sort((left, right) => {
+              const leftDate = new Date(left.updated_at || left.created_at).getTime();
+              const rightDate = new Date(right.updated_at || right.created_at).getTime();
+              return rightDate - leftDate;
+            })
+            .slice(0, 8)
+        );
       } catch (err) {
         console.error('Failed to load dashboard data', err);
       } finally {
@@ -76,155 +63,206 @@ const DashboardPage = () => {
     return (
       <div className="dashboard-loading">
         <div className="dashboard-loading__spinner" />
-        <p>Chargement des indicateurs…</p>
+        <p>Chargement des indicateurs de production...</p>
       </div>
     );
   }
 
-  const completionRate = stats?.grandTotal > 0
-    ? Math.round((parseInt(stats.totalDone) / parseInt(stats.grandTotal)) * 100)
-    : 0;
+  const counts = stats?.counts || {};
+  const totalTasks = counts.totalTasks || 0;
+  const completionRate = totalTasks > 0 ? Math.round(((counts.totalDone || 0) / totalTasks) * 100) : 0;
+  const activeLines = stats?.lineLoad?.length || 0;
 
   return (
     <div className="dashboard">
-      {/* En-tête */}
-      <div className="dashboard__header">
+      <header className="dashboard__header">
         <div>
-          <h1 className="dashboard__title">Vue d'ensemble</h1>
+          <div className="dashboard__eyebrow">Pilotage production</div>
+          <h1 className="dashboard__title">Tableau de bord operationnel</h1>
           <p className="dashboard__subtitle">
-            {workspaceName && <span className="dashboard__workspace-badge">{workspaceName}</span>}
-            Indicateurs de production en temps réel
+            {workspaceName ? <span className="dashboard__workspace-badge">{workspaceName}</span> : null}
+            Vue synthese des commandes, du charge-line et des points de blocage.
           </p>
         </div>
         <div className="dashboard__meta">
           <span className="dashboard__date">
             {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </span>
-          {user && <span className="dashboard__user">👤 {user.name}</span>}
+          {user ? <span className="dashboard__user">Responsable: {user.name}</span> : null}
         </div>
-      </div>
+      </header>
 
-      {/* KPIs */}
-      <div className="dashboard__kpis">
-        <StatCard label="Total des tâches" value={stats?.grandTotal || 0} icon="📋" color="#0052cc" bg="#deebff" />
-        <StatCard label="Terminées" value={stats?.totalDone || 0} icon="✅" color="#006644" bg="#e3fcef" />
-        <StatCard label="En cours" value={stats?.totalInProgress || 0} icon="⚙️" color="#d97706" bg="#fef3c7" />
-        <StatCard label="Bloquées" value={stats?.totalBlocked || 0} icon="🚫" color="#bf2600" bg="#ffebe6" />
-        <StatCard label="À faire" value={stats?.totalTodo || 0} icon="📌" color="#6b7280" bg="#f4f5f7" />
-        <StatCard label="Créées aujourd'hui" value={stats?.todayTotal || 0} icon="📅" color="#7c3aed" bg="#ede9fe" />
-      </div>
+      <section className="dashboard__overview">
+        <div className="dashboard__metrics">
+          <MetricTile label="Commandes totales" value={totalTasks} tone="blue" helper="Toutes fiches visibles" />
+          <MetricTile label="Echeances du jour" value={counts.dueToday || 0} tone="sky" helper="A traiter aujourd hui" />
+          <MetricTile label="Retards" value={counts.overdue || 0} tone="amber" helper="Encore non termines" />
+          <MetricTile label="Bloquees" value={counts.totalBlocked || 0} tone="red" helper="Demandes d intervention" />
+          <MetricTile label="Terminees aujourd hui" value={counts.completedToday || 0} tone="green" helper={`${completionRate}% du flux cloture`} />
+          <MetricTile label="Lignes actives" value={activeLines} tone="slate" helper="Charge detectee" />
+        </div>
 
-      {/* Progress bar */}
-      <div className="dashboard__progress-card">
-        <div className="dashboard__progress-header">
-          <span>Taux de complétion global</span>
-          <strong style={{ color: '#006644' }}>{completionRate}%</strong>
-        </div>
-        <div className="dashboard__progress-bar">
-          <div
-            className="dashboard__progress-fill"
-            style={{ width: `${completionRate}%` }}
-          />
-        </div>
-        <div className="dashboard__progress-legend">
-          {Object.entries(statusConfig).map(([key, cfg]) => {
-            const count = key === 'TODO' ? stats?.totalTodo
-              : key === 'IN_PROGRESS' ? stats?.totalInProgress
-              : key === 'DONE' ? stats?.totalDone
-              : stats?.totalBlocked;
-            const pct = stats?.grandTotal > 0 ? Math.round((parseInt(count || 0) / parseInt(stats.grandTotal)) * 100) : 0;
-            return (
-              <div key={key} className="dashboard__progress-item">
-                <span className="dashboard__progress-dot" style={{ background: cfg.color }} />
-                <span style={{ color: cfg.color, fontWeight: 600 }}>{count || 0}</span>
-                <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>{cfg.label} ({pct}%)</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Tâches récentes */}
-      <div className="dashboard__section">
-        <div className="dashboard__section-header">
-          <h2 className="dashboard__section-title">Tâches récentes</h2>
-          <span className="dashboard__section-count">{recentTasks.length} tâches affichées</span>
-        </div>
-        <div className="dashboard__table-wrap">
-          {recentTasks.length === 0 ? (
-            <div className="dashboard__empty">
-              <div className="dashboard__empty-icon">📭</div>
-              <p>Aucune tâche pour le moment</p>
+        <div className="dashboard__workflow">
+          <div className="dashboard__workflow-head">
+            <div>
+              <h2>Flux production</h2>
+              <p>Lecture instantanee du portefeuille dans chaque etape.</p>
             </div>
-          ) : (
-            <table className="dashboard__table">
-              <thead>
-                <tr>
-                  <th>Réf.</th>
-                  <th>Titre</th>
-                  <th>Assigné à</th>
-                  <th>Priorité</th>
-                  <th>Statut</th>
-                  <th>Modifié</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentTasks.map((task) => {
-                  const s = statusConfig[task.status] || statusConfig.TODO;
-                  const p = priorityConfig[task.priority] || priorityConfig.MEDIUM;
-                  const when = formatRelative(task.updated_at || task.created_at);
-                  return (
-                    <tr key={task.id}>
-                      <td className="dashboard__table-ref">SP-{task.id}</td>
-                      <td className="dashboard__table-title">{task.title}</td>
-                      <td className="dashboard__table-user">
-                        {task.assigned_to_name
-                          ? <><span className="dashboard__avatar">{initials(task.assigned_to_name)}</span> {task.assigned_to_name}</>
-                          : <span style={{ color: '#9ca3af' }}>—</span>}
-                      </td>
-                      <td>
-                        <span className="dashboard__badge" style={{ background: p.bg, color: p.color }}>
-                          {p.label}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="dashboard__badge dashboard__badge--status" style={{ background: s.bg, color: s.color }}>
-                          {s.icon} {s.label}
-                        </span>
-                      </td>
-                      <td className="dashboard__table-when">{when}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+            <div className="dashboard__completion">
+              <strong>{completionRate}%</strong>
+              <span>taux de completion</span>
+            </div>
+          </div>
+          <div className="dashboard__workflow-grid">
+            {TASK_STATUS_ORDER.map((status) => {
+              const config = TASK_STATUS_CONFIG[status];
+              const countKey = STATUS_COUNT_FIELDS[status];
+              return (
+                <div key={status} className="dashboard__stage" style={{ background: config.bg }}>
+                  <span className="dashboard__stage-name" style={{ color: config.color }}>
+                    {config.label}
+                  </span>
+                  <strong style={{ color: config.color }}>{counts[countKey] || 0}</strong>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      </section>
+
+      <section className="dashboard__grid">
+        <article className="dashboard-panel">
+          <div className="dashboard-panel__head">
+            <h3>Charge par ligne</h3>
+            <span>{activeLines} lignes</span>
+          </div>
+          <div className="dashboard-load">
+            {stats?.lineLoad?.length ? (
+              stats.lineLoad.map((entry) => {
+                const ratio = totalTasks > 0 ? Math.min(100, Math.round((entry.taskCount / totalTasks) * 100)) : 0;
+                return (
+                  <div key={entry.productionLine} className="dashboard-load__row">
+                    <div className="dashboard-load__label">
+                      <strong>{entry.productionLine}</strong>
+                      <span>{entry.taskCount} fiches</span>
+                    </div>
+                    <div className="dashboard-load__bar">
+                      <div className="dashboard-load__fill" style={{ width: `${Math.max(ratio, 8)}%` }} />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="dashboard__empty">Aucune charge active detectee.</div>
+            )}
+          </div>
+        </article>
+
+        <article className="dashboard-panel">
+          <div className="dashboard-panel__head">
+            <h3>Echeances proches</h3>
+            <span>{stats?.upcomingDue?.length || 0}</span>
+          </div>
+          <div className="dashboard-list">
+            {stats?.upcomingDue?.length ? (
+              stats.upcomingDue.map((task) => (
+                <div key={task.id} className="dashboard-list__item">
+                  <div>
+                    <strong>{task.title}</strong>
+                    <p>{task.client_name || task.order_code || 'Sans detail client'}</p>
+                  </div>
+                  <span>{formatDate(task.due_date, { withYear: true })}</span>
+                </div>
+              ))
+            ) : (
+              <div className="dashboard__empty">Aucune echeance proche.</div>
+            )}
+          </div>
+        </article>
+
+        <article className="dashboard-panel">
+          <div className="dashboard-panel__head">
+            <h3>Blocages actifs</h3>
+            <span>{stats?.blockedTasks?.length || 0}</span>
+          </div>
+          <div className="dashboard-list">
+            {stats?.blockedTasks?.length ? (
+              stats.blockedTasks.map((task) => (
+                <div key={task.id} className="dashboard-list__item dashboard-list__item--danger">
+                  <div>
+                    <strong>{task.title}</strong>
+                    <p>{task.blocked_reason || 'Blocage sans motif'}</p>
+                  </div>
+                  <span>{formatRelativeDate(task.blocked_at || task.updated_at, { compact: true })}</span>
+                </div>
+              ))
+            ) : (
+              <div className="dashboard__empty">Aucun blocage actif.</div>
+            )}
+          </div>
+        </article>
+
+        <article className="dashboard-panel dashboard-panel--wide">
+          <div className="dashboard-panel__head">
+            <h3>Activite recente</h3>
+            <span>{recentTasks.length} fiches</span>
+          </div>
+          <div className="dashboard-table">
+            {recentTasks.length === 0 ? (
+              <div className="dashboard__empty">Aucune fiche recente.</div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fiche</th>
+                    <th>Client / ordre</th>
+                    <th>Priorite</th>
+                    <th>Statut</th>
+                    <th>Responsable</th>
+                    <th>Echeance</th>
+                    <th>Maj</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentTasks.map((task) => {
+                    const priority = TASK_PRIORITY_CONFIG[task.priority] || TASK_PRIORITY_CONFIG.MEDIUM;
+                    const status = TASK_STATUS_CONFIG[task.status] || TASK_STATUS_CONFIG.TODO;
+                    return (
+                      <tr key={task.id}>
+                        <td>
+                          <div className="dashboard-table__main">
+                            <strong>{`SP-${task.id}`}</strong>
+                            <span>{task.title}</span>
+                          </div>
+                        </td>
+                        <td>{task.client_name || task.order_code || '—'}</td>
+                        <td>
+                          <span className="dashboard-table__pill" style={{ background: priority.bg, color: priority.color }}>
+                            {priority.label}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="dashboard-table__pill" style={{ background: status.bg, color: status.color }}>
+                            {status.shortLabel}
+                          </span>
+                        </td>
+                        <td className="dashboard-table__owner">
+                          <span className="dashboard-table__avatar">{getInitials(task.assigned_to_name)}</span>
+                          {task.assigned_to_name || 'Non assigne'}
+                        </td>
+                        <td>{formatDate(task.due_date)}</td>
+                        <td>{formatRelativeDate(task.updated_at || task.created_at, { compact: true })}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </article>
+      </section>
     </div>
   );
 };
-
-function formatRelative(dateStr) {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '—';
-  const now = new Date();
-  const diffMs = now - d;
-  const sec = Math.floor(diffMs / 1000);
-  if (sec < 60) return "À l'instant";
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `Il y a ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `Il y a ${h} h`;
-  const days = Math.floor(h / 24);
-  if (days < 7) return `Il y a ${days}j`;
-  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-}
-
-function initials(name) {
-  if (!name) return '?';
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-}
 
 export default DashboardPage;

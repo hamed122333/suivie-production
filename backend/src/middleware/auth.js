@@ -5,7 +5,7 @@ const hasRole = (userRole, allowed) => allowed.includes(userRole);
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'No token provided' });
+    return res.status(401).json({ error: 'Token manquant' });
   }
   const token = authHeader.split(' ')[1];
   try {
@@ -13,21 +13,21 @@ const authenticate = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (err) {
-    return res.status(401).json({ error: 'Invalid token' });
+    return res.status(401).json({ error: 'Token invalide' });
   }
 };
 
-const requireRoles = (roles, errorMessage = 'Access denied') => (req, res, next) => {
+const requireRoles = (roles, errorMessage = 'Acces refuse') => (req, res, next) => {
   if (!req.user?.role || !hasRole(req.user.role, roles)) {
     return res.status(403).json({ error: errorMessage });
   }
   next();
 };
 
-const requireSuperAdmin = requireRoles(['super_admin'], 'Super admin access required');
-const requirePlanner = requireRoles(['planner'], 'Planner access required');
-const requireSuperAdminOrPlanner = requireRoles(['super_admin', 'planner'], 'Planner or super admin access required');
-const requireCommercial = requireRoles(['commercial', 'super_admin'], 'Commercial access required');
-const requireAnyRole = requireRoles(['super_admin', 'planner', 'commercial', 'user'], 'Authentication required');
+const requireSuperAdmin = requireRoles(['super_admin'], 'Acces super administrateur requis');
+const requirePlanner = requireRoles(['planner'], 'Acces planificateur requis');
+const requireSuperAdminOrPlanner = requireRoles(['super_admin', 'planner'], 'Acces planificateur ou super administrateur requis');
+const requireCommercial = requireRoles(['commercial'], 'Acces commercial requis');
+const requireAnyRole = requireRoles(['super_admin', 'planner', 'commercial', 'user'], 'Authentification requise');
 
 module.exports = { authenticate, requireRoles, requireSuperAdmin, requirePlanner, requireSuperAdminOrPlanner, requireCommercial, requireAnyRole };

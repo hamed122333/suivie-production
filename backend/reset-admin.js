@@ -26,7 +26,7 @@ async function resetAdmin() {
       // Create
       await pool.query(
         'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4)',
-        ['System Admin', 'admin@example.com', hashedPassword, 'admin']
+        ['System Admin', 'admin@example.com', hashedPassword, 'super_admin']
       );
       console.log('Admin user created with password: ' + password);
     }
@@ -40,7 +40,7 @@ async function resetAdmin() {
        await pool.query('UPDATE users SET password = $1 WHERE email = $2', [hashedUserPassword, 'op1@example.com']);
        console.log('Operator One password updated to: ' + userPassword);
     } else {
-       await pool.query(
+      await pool.query(
         'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4)',
         ['Operator One', 'op1@example.com', hashedUserPassword, 'user']
       );

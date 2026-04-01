@@ -1,0 +1,11 @@
+BEGIN;
+
+UPDATE tasks
+SET status = 'IN_PROGRESS'
+WHERE status IN ('TO_PLAN', 'PLANNED', 'IN_PRODUCTION', 'QUALITY_CONTROL', 'PACKAGING');
+
+UPDATE tasks
+SET completed_at = NULL
+WHERE status <> 'DONE';
+
+COMMIT;

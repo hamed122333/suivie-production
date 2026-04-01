@@ -1,4 +1,71 @@
 const TaskModel = require('../models/taskModel');
+const TaskCommentModel = require('../models/taskCommentModel');
+const TaskHistoryModel = require('../models/taskHistoryModel');
+const { TASK_STATUSES, TASK_STATUS_LABELS, TRACKED_TASK_FIELDS } = require('../constants/task');
+const { createHttpError, isHttpError } = require('../utils/httpErrors');
+const { applyTaskVisibility, buildTaskFilters, canAccessTask, parseWorkspaceId } = require('../utils/taskScope');
+const { normalizeCommentBody, normalizeTaskBatch, normalizeTaskDraft, normalizeTaskUpdatePayload } = require('../utils/taskValidation');
+
+const fieldLabels = {
+  title: 'Titre',
+  description: 'Description',
+  priority: 'Priorite',
+  assignedTo: 'Affectation',
+  clientName: 'Client',
+  orderCode: 'Code commande',
+  itemReference: 'Reference article',
+  quantity: 'Quantite',
+  quantityUnit: 'Unite',
+  dueDate: 'Date d echeance',
+  plannedDate: 'Date planifiee',
+  productionLine: 'Ligne de production',
+  machine: 'Machine',
+  workshop: 'Atelier',
+  notes: 'Notes',
+  expectedAction: 'Action attendue',
+};
+
+function toHistoryValue(task, field) {
+  const map = {
+    assignedTo: task.assigned_to,
+    clientName: task.client_name,
+    orderCode: task.order_code,
+    itemReference: task.item_reference,
+    quantity: task.quantity,
+    quantityUnit: task.quantity_unit,
+    dueDate: task.due_date,
+    plannedDate: task.planned_date,
+    productionLine: task.production_line,
+    machine: task.machine,
+    workshop: task.workshop,
+    notes: task.notes,
+    expectedAction: task.expected_action,
+  };
+
+  return Object.prototype.hasOwnProperty.call(map, field) ? map[field] : task[field];
+}
+
+function buildUpdateHistoryEntries(beforeTask, payload, actorId) {
+  return TRACKED_TASK_FIELDS
+    .filter((field) => Object.prototype.hasOwnProperty.call(payload, field))
+    .map((field) => {
+      const oldValue = toHistoryValue(beforeTask, field);
+      const newValue = payload[field];
+      if (`${oldValue ?? ''}` === `${newValue ?? ''}`) {
+        return null;
+      }
+      return {
+        taskId: beforeTask.id,
+        actorId,
+        actionType: 'field_updated',
+        fieldName: field,
+        oldValue,
+        newValue,
+        message: `${fieldLabels[field] || field} modifie`,
+      };
+    })
+    .filter(Boolean);
+}
 
 const taskController = {
   async reorderBoard(req, res) {
@@ -7,16 +74,15 @@ const taskController = {
       if (!columnOrders || typeof columnOrders !== 'object') {
         return res.status(400).json({ error: 'columnOrders object is required' });
       }
-      if (!workspaceId) {
-        return res.status(400).json({ error: 'workspaceId is required' });
-      }
-      const wid = parseInt(workspaceId, 10);
-      if (!Number.isInteger(wid)) return res.status(400).json({ error: 'Invalid workspaceId' });
+      const wid = parseWorkspaceId(workspaceId, { required: true });
 
       await TaskModel.reorderBoard(columnOrders, wid);
       const tasks = await TaskModel.getAll({ workspaceId: wid });
       res.json(tasks);
     } catch (err) {
+      if (isHttpError(err)) {
+        return res.status(err.status).json({ error: err.message });
+      }
       if (
         err.message &&
         (err.message.includes('Board order') ||
@@ -33,34 +99,13 @@ const taskController = {
 
   async getAll(req, res) {
     try {
-      const filters = {};
-      if (req.query.assignedTo) filters.assignedTo = parseInt(req.query.assignedTo);
-      if (req.query.status) filters.status = req.query.status;
-      if (req.query.date) filters.date = req.query.date;
-      if (req.query.workspaceId || req.query.workspace) {
-        const raw = req.query.workspaceId || req.query.workspace;
-        const wid = parseInt(raw, 10);
-        if (!Number.isNaN(wid)) filters.workspaceId = wid;
-      }
-
-      // Visibility rules:
-      // - super_admin: global view (all tasks)
-      // - planner: global view (all tasks)
-      // - others: only tasks they created
-      if (req.user.role !== 'super_admin' && req.user.role !== 'planner') {
-        filters.createdBy = req.user.id;
-      }
-
-      // LOG pour debug
-      console.log('[DEBUG /api/tasks]', {
-        user: { id: req.user.id, role: req.user.role },
-        filters,
-      });
-
+      const filters = applyTaskVisibility(buildTaskFilters(req.query), req.user);
       const tasks = await TaskModel.getAll(filters);
-      console.log(`[DEBUG /api/tasks] ${tasks.length} tâches retournées`);
       res.json(tasks);
     } catch (err) {
+      if (isHttpError(err)) {
+        return res.status(err.status).json({ error: err.message });
+      }
       console.error(err);
       res.status(500).json({ error: 'Server error' });
     }
@@ -70,30 +115,94 @@ const taskController = {
     try {
       const task = await TaskModel.getById(req.params.id);
       if (!task) return res.status(404).json({ error: 'Task not found' });
+      if (!canAccessTask(req.user, task)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
       res.json(task);
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
     }
   },
 
+  async getDetail(req, res) {
+    try {
+      const task = await TaskModel.getById(req.params.id);
+      if (!task) return res.status(404).json({ error: 'Task not found' });
+      if (!canAccessTask(req.user, task)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const [comments, history] = await Promise.all([
+        TaskCommentModel.listByTask(task.id),
+        TaskHistoryModel.listByTask(task.id),
+      ]);
+
+      res.json({ task, comments, history });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  },
+
   async create(req, res) {
     try {
-      const { title, description, priority, workspaceId } = req.body;
-      if (!title) return res.status(400).json({ error: 'Title is required' });
-      if (!workspaceId) return res.status(400).json({ error: 'workspaceId is required' });
-
-      const wid = parseInt(workspaceId, 10);
-      if (!Number.isInteger(wid)) return res.status(400).json({ error: 'Invalid workspaceId' });
+      const taskInput = normalizeTaskDraft(req.body);
+      const workspaceId = parseWorkspaceId(req.body.workspaceId, { required: true });
+      if (req.body.status && req.body.status !== 'TODO') {
+        throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
+      }
 
       const task = await TaskModel.create({
-        title,
-        description,
-        priority,
+        ...taskInput,
         createdBy: req.user.id,
-        workspaceId: wid,
+        workspaceId,
+        status: 'TODO',
+      });
+      await TaskHistoryModel.log({
+        taskId: task.id,
+        actorId: req.user.id,
+        actionType: 'created',
+        message: 'Tache creee par le commercial',
       });
       res.status(201).json(task);
     } catch (err) {
+      if (isHttpError(err)) {
+        return res.status(err.status).json({ error: err.message });
+      }
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  },
+
+  async createBulk(req, res) {
+    try {
+      const tasks = normalizeTaskBatch(req.body.tasks);
+      const workspaceId = parseWorkspaceId(req.body.workspaceId, { required: true });
+      if (req.body.status && req.body.status !== 'TODO') {
+        throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
+      }
+
+      const createdTasks = await TaskModel.createMany({
+        tasks,
+        createdBy: req.user.id,
+        workspaceId,
+        status: 'TODO',
+      });
+
+      await TaskHistoryModel.logMany(
+        createdTasks.map((task) => ({
+          taskId: task.id,
+          actorId: req.user.id,
+          actionType: 'created',
+          message: 'Tache creee par le commercial',
+        }))
+      );
+
+      res.status(201).json(createdTasks);
+    } catch (err) {
+      if (isHttpError(err)) {
+        return res.status(err.status).json({ error: err.message });
+      }
       console.error(err);
       res.status(500).json({ error: 'Server error' });
     }
@@ -101,10 +210,23 @@ const taskController = {
 
   async update(req, res) {
     try {
-      const task = await TaskModel.update(req.params.id, req.body);
+      const previousTask = await TaskModel.getById(req.params.id);
+      if (!previousTask) return res.status(404).json({ error: 'Task not found' });
+
+      const payload = normalizeTaskUpdatePayload(req.body);
+      const task = await TaskModel.update(req.params.id, payload);
       if (!task) return res.status(404).json({ error: 'Task not found' });
+
+      const historyEntries = buildUpdateHistoryEntries(previousTask, payload, req.user.id);
+      if (historyEntries.length > 0) {
+        await TaskHistoryModel.logMany(historyEntries);
+      }
+
       res.json(task);
     } catch (err) {
+      if (isHttpError(err)) {
+        return res.status(err.status).json({ error: err.message });
+      }
       console.error(err);
       res.status(500).json({ error: 'Server error' });
     }
@@ -113,13 +235,15 @@ const taskController = {
   async updateStatus(req, res) {
     try {
       const { status, reasonBlocked } = req.body;
-      const validStatuses = ['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED'];
-      if (!validStatuses.includes(status)) {
+      if (!TASK_STATUSES.includes(status)) {
         return res.status(400).json({ error: 'Invalid status' });
       }
       if (status === 'BLOCKED' && !reasonBlocked) {
         return res.status(400).json({ error: 'Reason required when blocking a task' });
       }
+
+      const previousTask = await TaskModel.getById(req.params.id);
+      if (!previousTask) return res.status(404).json({ error: 'Task not found' });
 
       const task = await TaskModel.updateStatus(
         req.params.id,
@@ -129,6 +253,26 @@ const taskController = {
         req.user.role
       );
       if (!task) return res.status(404).json({ error: 'Task not found' });
+
+      await TaskHistoryModel.log({
+        taskId: task.id,
+        actorId: req.user.id,
+        actionType: 'status_updated',
+        fieldName: 'status',
+        oldValue: previousTask.status,
+        newValue: task.status,
+        message: `Statut change de ${TASK_STATUS_LABELS[previousTask.status] || previousTask.status} vers ${TASK_STATUS_LABELS[task.status] || task.status}`,
+      });
+
+      if (status === 'BLOCKED' && reasonBlocked) {
+        await TaskHistoryModel.log({
+          taskId: task.id,
+          actorId: req.user.id,
+          actionType: 'blocked',
+          message: `Blocage declare: ${reasonBlocked}`,
+        });
+      }
+
       res.json(task);
     } catch (err) {
       if (err.message === 'Not authorized to update this task') {
@@ -145,6 +289,38 @@ const taskController = {
       if (!task) return res.status(404).json({ error: 'Task not found' });
       res.json({ message: 'Task deleted' });
     } catch (err) {
+      res.status(500).json({ error: 'Server error' });
+    }
+  },
+
+  async addComment(req, res) {
+    try {
+      const task = await TaskModel.getById(req.params.id);
+      if (!task) return res.status(404).json({ error: 'Task not found' });
+      if (!canAccessTask(req.user, task)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const comment = await TaskCommentModel.create({
+        taskId: task.id,
+        authorId: req.user.id,
+        body: normalizeCommentBody(req.body.body),
+      });
+
+      await TaskHistoryModel.log({
+        taskId: task.id,
+        actorId: req.user.id,
+        actionType: 'comment_added',
+        message: 'Commentaire ajoute',
+      });
+
+      const enrichedComments = await TaskCommentModel.listByTask(task.id);
+      res.status(201).json(enrichedComments.find((entry) => entry.id === comment.id) || comment);
+    } catch (err) {
+      if (isHttpError(err)) {
+        return res.status(err.status).json({ error: err.message });
+      }
+      console.error(err);
       res.status(500).json({ error: 'Server error' });
     }
   }
