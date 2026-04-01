@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { TASK_PRIORITY_OPTIONS, TASK_STATUS_CONFIG } from '../constants/task';
+import { TASK_PRIORITY_OPTIONS } from '../constants/task';
 import './TaskModal.css';
 
 const EMPTY_FORM = {
