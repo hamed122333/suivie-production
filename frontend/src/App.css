@@ -14,8 +14,40 @@
   /* Pas de padding ici — géré dans chaque page */
 }
 
+/* Sidebar Off-canvas states */
+.sidebar-container {
+  display: flex;
+  flex-direction: column;
+  z-index: 95;
+  transition: transform 0.3s ease;
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .app-layout {
     flex-direction: column;
+  }
+
+  .sidebar-container {
+    position: fixed;
+    top: 56px; /* Align just under header if possible, or 0 if overlapping */
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    height: calc(100vh - 56px);
+    transform: translateX(-100%);
+    background: #0a1929;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.4);
+  }
+
+  .sidebar-container.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    display: block; /* Shown only via inline logic if needed, but safe here */
   }
 }

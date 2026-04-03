@@ -12,7 +12,7 @@ const ROLE_CONFIG = {
   user: { label: 'Utilisateur', icon: '👤', color: '#374151' },
 };
 
-const Header = () => {
+const Header = ({ toggleSidebar, isSidebarOpen }) => {
   const { user, logout, isSuperAdmin, isPlanner } = useAuth();
   const { workspaceId, workspaces } = useWorkspace();
   const location = useLocation();
@@ -67,6 +67,30 @@ const Header = () => {
   return (
     <header className="app-header">
       <div className="app-header__top">
+
+        {/* Toggle Sidebar Button (Mobile Only) */}
+        <button
+          className="app-header__hamburger"
+          onClick={toggleSidebar}
+          aria-label="Menu"
+          aria-expanded={isSidebarOpen}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {isSidebarOpen ? (
+              <>
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </>
+            ) : (
+              <>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </>
+            )}
+          </svg>
+        </button>
+
         {/* Brand */}
         <div className="app-header__brand">
           <Link to="/kanban" className="app-header__logo" title="Suivi Production">

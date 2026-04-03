@@ -36,6 +36,20 @@ const LoginPage = () => {
       fontFamily: "'Inter', sans-serif",
       padding: '1rem',
     }}>
+      <style>{`
+        .login-card-container {
+          padding: 2.5rem;
+        }
+        @media (max-width: 480px) {
+          .login-card-container {
+            padding: 1.5rem !important;
+          }
+          .login-title {
+            font-size: 1.25rem !important;
+          }
+        }
+      `}</style>
+
       {/* Decorative background blobs */}
       <div style={{
         position: 'fixed', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0
@@ -46,12 +60,11 @@ const LoginPage = () => {
 
       <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '420px' }}>
         {/* Card */}
-        <div style={{
+        <div className="login-card-container" style={{
           background: 'rgba(255,255,255,0.03)',
           border: '1px solid rgba(255,255,255,0.08)',
           backdropFilter: 'blur(20px)',
           borderRadius: '20px',
-          padding: '2.5rem',
           boxShadow: '0 32px 80px rgba(0,0,0,0.5)',
         }}>
           {/* Logo & Title */}
@@ -74,7 +87,7 @@ const LoginPage = () => {
                 <rect x="13" y="13" width="8" height="8" rx="2" fill="white" fillOpacity="0.3" />
               </svg>
             </div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#f1f5f9', margin: '0 0 0.3rem', letterSpacing: '-0.02em' }}>
+            <h1 className="login-title" style={{ fontSize: '1.5rem', fontWeight: '800', color: '#f1f5f9', margin: '0 0 0.3rem', letterSpacing: '-0.02em' }}>
               Suivi Production
             </h1>
             <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>

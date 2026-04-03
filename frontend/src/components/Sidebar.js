@@ -17,7 +17,7 @@ const getRoleLabel = (role) => {
   return labels[role] || labels.user;
 };
 
-const Sidebar = () => {
+const Sidebar = ({ closeSidebar }) => {
   const { isSuperAdmin, canCreateWorkspace, user } = useAuth();
   const { workspaces, workspaceId, selectWorkspace, createWorkspace, loadingWorkspaces } = useWorkspace();
 
@@ -105,7 +105,10 @@ const Sidebar = () => {
                 type="button"
                 key={ws.id}
                 className={`sidebar__item ${active ? 'sidebar__item--active' : ''} ${isAll ? 'sidebar__item--all' : ''}`}
-                onClick={() => selectWorkspace(ws.id)}
+                onClick={() => {
+                  selectWorkspace(ws.id);
+                  if (closeSidebar) closeSidebar();
+                }}
               >
                 <span className="sidebar__item-icon">{icon}</span>
                 <span className="sidebar__item-name">{ws.name}</span>
@@ -121,14 +124,14 @@ const Sidebar = () => {
 
       {/* Navigation */}
       <nav className="sidebar__nav" aria-label="Navigation">
-        <NavLink to="/kanban" className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
+        <NavLink to="/kanban" onClick={closeSidebar} className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
           <span>▦</span> Tableau Kanban
         </NavLink>
-        <NavLink to="/dashboard" className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
+        <NavLink to="/dashboard" onClick={closeSidebar} className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
           <span>📊</span> Tableau de bord
         </NavLink>
         {isSuperAdmin && (
-          <NavLink to="/users" className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
+          <NavLink to="/users" onClick={closeSidebar} className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
             <span>👥</span> Utilisateurs
           </NavLink>
         )}
