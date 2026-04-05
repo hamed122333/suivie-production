@@ -58,8 +58,8 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
             </span>
           )}
         </div>
-        <span className="task-card__avatar" title={task.assigned_to_name || 'Non assigne'}>
-          {getInitials(task.assigned_to_name)}
+        <span className="task-card__avatar" title={task.created_by_name || 'Non assigné'}>
+          {getInitials(task.created_by_name)}
         </span>
       </div>
     </article>
