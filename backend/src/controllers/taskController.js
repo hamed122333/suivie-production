@@ -76,9 +76,38 @@ const taskController = {
       }
       const wid = parseWorkspaceId(workspaceId, { required: true });
 
-      await TaskModel.reorderBoard(columnOrders, wid);
-      const tasks = await TaskModel.getAll({ workspaceId: wid });
-      res.json(tasks);
+      const currentTasks = await TaskModel.getAll({ workspaceId: wid });
+      const nextTasks = await TaskModel.reorderBoard(columnOrders, wid);
+
+      const statusChanges = [];
+      const nextTasksMap = new Map(nextTasks.map((t) => [t.id, t.status]));
+
+      for (const beforeTask of currentTasks) {
+        const afterStatus = nextTasksMap.get(beforeTask.id);
+        if (afterStatus && beforeTask.status !== afterStatus) {
+            statusChanges.push({
+                taskId: beforeTask.id,
+                actorId: req.user.id,
+                actionType: 'status_updated',
+                fieldName: 'status',
+                oldValue: beforeTask.status,
+                newValue: afterStatus,
+                message: `Statut changé de ${TASK_STATUS_LABELS[beforeTask.status] || beforeTask.status} vers ${TASK_STATUS_LABELS[afterStatus] || afterStatus}`,
+            });
+        }
+      }
+
+      if (statusChanges.length > 0) {
+        if (TaskHistoryModel.logMany) {
+            await TaskHistoryModel.logMany(statusChanges);
+        } else {
+            for (const change of statusChanges) {
+                await TaskHistoryModel.log(change);
+            }
+        }
+      }
+
+      res.json(nextTasks);
     } catch (err) {
       if (isHttpError(err)) {
         return res.status(err.status).json({ error: err.message });
@@ -221,6 +250,7 @@ const taskController = {
       if (historyEntries.length > 0) {
         await TaskHistoryModel.logMany(historyEntries);
       }
+
 
       res.json(task);
     } catch (err) {
