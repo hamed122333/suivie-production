@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TASK_PRIORITY_OPTIONS } from '../constants/task';
+import { stockImportAPI } from '../services/api';
 import './TaskModal.css';
 
 const EMPTY_FORM = {
@@ -61,11 +62,17 @@ const TaskModal = ({
   onClose,
   users = [],
   canAssign = false,
+  isCommercial = false,
 }) => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [lines, setLines] = useState([EMPTY_LINE]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Stock import state (commercial create mode)
+  const [stockArticles, setStockArticles] = useState([]);
+  const [stockLoading, setStockLoading] = useState(false);
+  const [selectedArticleIds, setSelectedArticleIds] = useState(new Set());
 
   const isEditing = Boolean(task);
 
@@ -98,6 +105,17 @@ const TaskModal = ({
     setLines([EMPTY_LINE]);
     setError('');
   }, [task]);
+
+  // Load stock import articles when commercial opens the create modal
+  useEffect(() => {
+    if (!isCommercial || isEditing) return;
+    setStockLoading(true);
+    stockImportAPI
+      .getAll()
+      .then((res) => setStockArticles(res.data || []))
+      .catch(() => setStockArticles([]))
+      .finally(() => setStockLoading(false));
+  }, [isCommercial, isEditing]);
 
   const assignableUsers = useMemo(
     () =>
@@ -132,6 +150,24 @@ const TaskModal = ({
     setLines((current) => current.filter((_, currentIndex) => currentIndex !== index));
   };
 
+  const toggleArticle = (articleId) => {
+    setSelectedArticleIds((current) => {
+      const next = new Set(current);
+      if (next.has(articleId)) {
+        next.delete(articleId);
+      } else {
+        next.add(articleId);
+      }
+      return next;
+    });
+  };
+
+  // Number of ready articles that are available but unused
+  const availableReadyCount = useMemo(
+    () => stockArticles.filter((a) => a.is_ready && !a.is_used).length,
+    [stockArticles]
+  );
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError('');
@@ -160,6 +196,33 @@ const TaskModal = ({
           notes: normalizeOptionalString(form.notes),
           expectedAction: normalizeOptionalString(form.expectedAction),
           ...(canAssign ? { assignedTo: form.assignedTo || null } : {}),
+        });
+      } else if (isCommercial) {
+        // Commercial create mode: tasks from selected stock import articles
+        const clientName = `${form.clientName || ''}`.trim();
+        if (!clientName) {
+          throw new Error('Le nom du client est obligatoire.');
+        }
+
+        if (selectedArticleIds.size === 0) {
+          throw new Error('Sélectionnez au moins un article disponible.');
+        }
+
+        const selectedArticles = stockArticles.filter((a) => selectedArticleIds.has(a.id));
+        const preparedTasks = selectedArticles.map((article) => ({
+          title: `${article.article} — ${clientName}`,
+          description: `${article.article} - ${article.quantity} pcs`,
+          priority: form.priority,
+          clientName,
+          itemReference: article.article,
+          quantity: parseFloat(article.quantity),
+          quantityUnit: 'pcs',
+          stockImportId: article.id,
+        }));
+
+        await onSave({
+          status: defaultStatus,
+          tasks: preparedTasks,
         });
       } else {
         const clientName = `${form.clientName || ''}`.trim();
@@ -192,6 +255,158 @@ const TaskModal = ({
       setSaving(false);
     }
   };
+
+  if (!isEditing && isCommercial) {
+    // Commercial create mode: show imported articles list
+    return (
+      <div className="modal-overlay task-modal-classic-overlay" onClick={onClose}>
+        <div
+          className="modal-content task-modal-classic task-modal-classic--wide"
+          onClick={(event) => event.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Saisir une commande client"
+        >
+          <div className="modal-header task-modal-classic__header">
+            <div className="task-modal-classic__title-wrap">
+              <span className="task-modal-classic__title-mark" aria-hidden>+</span>
+              <h3 className="modal-title task-modal-classic__title">Nouvelle commande client</h3>
+            </div>
+            <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
+              ✕
+            </button>
+          </div>
+
+          <form className="task-modal-classic__form" onSubmit={handleSubmit}>
+            {error && <div className="task-modal__error">{error}</div>}
+
+            <div className="form-group task-modal-classic__group">
+              <label>Nom du client</label>
+              <input
+                type="text"
+                value={form.clientName}
+                onChange={updateForm('clientName')}
+                placeholder="Ex: PLASTICUM, EJM, Gargouri…"
+                required
+              />
+            </div>
+
+            <div className="form-group task-modal-classic__group">
+              <label>Niveau de priorité</label>
+              <select value={form.priority} onChange={updateForm('priority')}>
+                {CREATE_PRIORITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group task-modal-classic__group">
+              <label>
+                Articles disponibles
+                {availableReadyCount > 0 && (
+                  <span className="stock-article-ready-badge">{availableReadyCount} prêt(s)</span>
+                )}
+              </label>
+
+              {stockLoading ? (
+                <div className="stock-article-loading">Chargement des articles…</div>
+              ) : stockArticles.length === 0 ? (
+                <div className="stock-article-empty">
+                  Aucun article importé. Demandez à votre planificateur d'importer le stock Excel.
+                </div>
+              ) : (
+                <div className="stock-article-list">
+                  {stockArticles.map((article) => {
+                    const readyDate = new Date(article.ready_date);
+                    const isReady = article.is_ready;
+                    const isUsed = article.is_used;
+                    const isDisabled = !isReady || isUsed;
+                    const isSelected = selectedArticleIds.has(article.id);
+
+                    return (
+                      <div
+                        key={article.id}
+                        className={[
+                          'stock-article-item',
+                          isDisabled ? 'stock-article-item--disabled' : 'stock-article-item--ready',
+                          isSelected ? 'stock-article-item--selected' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                        onClick={() => !isDisabled && toggleArticle(article.id)}
+                        role="checkbox"
+                        aria-checked={isSelected}
+                        aria-disabled={isDisabled}
+                        tabIndex={isDisabled ? -1 : 0}
+                        onKeyDown={(e) => {
+                          if (!isDisabled && (e.key === ' ' || e.key === 'Enter')) {
+                            e.preventDefault();
+                            toggleArticle(article.id);
+                          }
+                        }}
+                      >
+                        <div className="stock-article-item__check">
+                          {isUsed ? (
+                            <span className="stock-article-item__used-mark" title="Déjà utilisé">✓</span>
+                          ) : (
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={isDisabled}
+                              onChange={() => toggleArticle(article.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              tabIndex={-1}
+                              aria-hidden
+                            />
+                          )}
+                        </div>
+                        <div className="stock-article-item__info">
+                          <span className="stock-article-item__name">{article.article}</span>
+                          <span className="stock-article-item__qty">{Number(article.quantity)} pcs</span>
+                        </div>
+                        <div className="stock-article-item__status">
+                          {isUsed ? (
+                            <span className="stock-article-item__tag stock-article-item__tag--used">
+                              Déjà utilisé
+                            </span>
+                          ) : isReady ? (
+                            <span className="stock-article-item__tag stock-article-item__tag--ready">
+                              Disponible
+                            </span>
+                          ) : (
+                            <span className="stock-article-item__tag stock-article-item__tag--pending">
+                              Prêt le {readyDate.toLocaleDateString('fr-FR')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="task-modal-classic__footer">
+              <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={saving || selectedArticleIds.size === 0}
+              >
+                {saving
+                  ? 'Création…'
+                  : `Créer ${selectedArticleIds.size > 0 ? `${selectedArticleIds.size} commande(s)` : 'la commande'}`}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   if (!isEditing) {
     return (

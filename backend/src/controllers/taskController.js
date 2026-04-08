@@ -1,6 +1,7 @@
 const TaskModel = require('../models/taskModel');
 const TaskCommentModel = require('../models/taskCommentModel');
 const TaskHistoryModel = require('../models/taskHistoryModel');
+const StockImportModel = require('../models/stockImportModel');
 const { TASK_STATUSES, TASK_STATUS_LABELS, TRACKED_TASK_FIELDS } = require('../constants/task');
 const { createHttpError, isHttpError } = require('../utils/httpErrors');
 const { applyTaskVisibility, buildTaskFilters, canAccessTask, parseWorkspaceId } = require('../utils/taskScope');
@@ -226,6 +227,14 @@ const taskController = {
           message: 'Tache creee par le commercial',
         }))
       );
+
+      // Mark linked stock import entries as used
+      const stockImportIds = createdTasks
+        .map((task) => task.stock_import_id)
+        .filter(Boolean);
+      if (stockImportIds.length > 0) {
+        await StockImportModel.markManyAsUsed(stockImportIds);
+      }
 
       res.status(201).json(createdTasks);
     } catch (err) {

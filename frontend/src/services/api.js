@@ -65,4 +65,12 @@ export const workspaceAPI = {
   create: (data) => api.post('/workspaces', data),
 };
 
+export const stockImportAPI = {
+  getAll: () => api.get('/stock-import'),
+  upload: (formData) =>
+    api.post('/stock-import/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+};
+
 export default api;

@@ -1,5 +1,6 @@
 import React, { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
 import BlockReasonModal from './BlockReasonModal';
+import StockImportModal from './StockImportModal';
 import TaskCard from './TaskCard';
 import TaskDetailsPanel from './TaskDetailsPanel';
 import TaskModal from './TaskModal';
@@ -94,10 +95,11 @@ const KanbanBoard = ({
   filterPriority = '',
   onStatsRefresh,
 }) => {
-  const { canChangeStatus, canCreateTask, isCommercial, isSuperAdmin } = useAuth();
+  const { canChangeStatus, canCreateTask, isCommercial, isSuperAdmin, isPlanner } = useAuth();
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [blockModal, setBlockModal] = useState({ open: false, task: null });
+  const [showImportModal, setShowImportModal] = useState(false);
   const [dragOverColumn, setDragOverColumn] = useState(null);
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -301,6 +303,15 @@ const KanbanBoard = ({
             {isCommercial ? '+ Nouvelle commande client' : '+ Nouvelle fiche'}
           </button>
         )}
+        {isPlanner && !isAllWorkspaces && (
+          <button
+            type="button"
+            className="btn btn-secondary kanban-board__cta"
+            onClick={() => setShowImportModal(true)}
+          >
+            ↑ Importer Excel
+          </button>
+        )}
       </div>
 
       {error && <div className="kanban-board__error">{error}</div>}
@@ -392,11 +403,19 @@ const KanbanBoard = ({
           defaultStatus="TODO"
           users={users}
           canAssign={canChangeStatus}
+          isCommercial={isCommercial}
           onSave={handleSaveTask}
           onClose={() => {
             setShowTaskModal(false);
             setEditingTask(null);
           }}
+        />
+      )}
+
+      {showImportModal && (
+        <StockImportModal
+          onClose={() => setShowImportModal(false)}
+          onImported={() => setShowImportModal(false)}
         />
       )}
 

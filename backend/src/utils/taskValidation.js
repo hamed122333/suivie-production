@@ -105,7 +105,16 @@ function normalizeTaskBatch(tasks) {
     throw createHttpError(400, 'La liste des taches est obligatoire');
   }
 
-  return tasks.map((task) => normalizeTaskDraft(task));
+  return tasks.map((task) => {
+    const normalized = normalizeTaskDraft(task);
+    if (task.stockImportId != null) {
+      const id = Number.parseInt(task.stockImportId, 10);
+      if (Number.isInteger(id) && id > 0) {
+        normalized.stockImportId = id;
+      }
+    }
+    return normalized;
+  });
 }
 
 function normalizeTaskUpdatePayload(data = {}) {

@@ -414,3 +414,137 @@
     text-align: left;
   }
 }
+
+/* ── Stock import article list (commercial create mode) ── */
+
+.task-modal-classic--wide {
+  max-width: 720px;
+}
+
+.stock-article-ready-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: #bbf7d0;
+  color: #15803d;
+  font-size: 0.73rem;
+  font-weight: 700;
+  margin-left: 0.5rem;
+}
+
+.stock-article-loading,
+.stock-article-empty {
+  padding: 1.1rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  color: #64748b;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.stock-article-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 0.55rem;
+}
+
+.stock-article-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s;
+  cursor: default;
+}
+
+.stock-article-item--ready {
+  cursor: pointer;
+  background: #f8fafc;
+}
+
+.stock-article-item--ready:hover {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+}
+
+.stock-article-item--selected {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.stock-article-item--disabled {
+  opacity: 0.65;
+  background: #f8fafc;
+}
+
+.stock-article-item__check {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+}
+
+.stock-article-item__used-mark {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.stock-article-item__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.stock-article-item__name {
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stock-article-item__qty {
+  color: #64748b;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.stock-article-item__status {
+  flex-shrink: 0;
+}
+
+.stock-article-item__tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.stock-article-item__tag--ready {
+  background: #bbf7d0;
+  color: #15803d;
+}
+
+.stock-article-item__tag--pending {
+  background: #fed7aa;
+  color: #c2410c;
+}
+
+.stock-article-item__tag--used {
+  background: #e2e8f0;
+  color: #94a3b8;
+}

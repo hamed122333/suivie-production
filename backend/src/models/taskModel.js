@@ -50,6 +50,7 @@ const createFieldMap = {
   workshop: 'workshop',
   notes: 'notes',
   expectedAction: 'expected_action',
+  stockImportId: 'stock_import_id',
 };
 
 const updateFieldMap = {
