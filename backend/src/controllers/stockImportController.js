@@ -26,20 +26,16 @@ function calculateReadyDate(articleName) {
 }
 
 /**
- * Find a column key in a row object, searching case-insensitively by candidate names.
+ * Extract a numeric value from an ExcelJS cell that may contain a raw
+ * number or a formula-result object (e.g. `{ formula: '=A1', result: 10 }`).
  */
-function findColumnKey(row, candidates) {
-  const keys = Object.keys(row);
-  for (const candidate of candidates) {
-    const found = keys.find((k) => k.trim().toLowerCase() === candidate.toLowerCase());
-    if (found !== undefined) return found;
+function extractCellNumber(cell) {
+  const raw = cell.value;
+  if (raw === null || raw === undefined) return NaN;
+  if (typeof raw === 'object' && raw !== null) {
+    return parseFloat(raw.result ?? raw);
   }
-  // Fallback: partial match
-  for (const candidate of candidates) {
-    const found = keys.find((k) => k.trim().toLowerCase().includes(candidate.toLowerCase()));
-    if (found !== undefined) return found;
-  }
-  return null;
+  return parseFloat(raw);
 }
 
 const stockImportController = {
@@ -101,8 +97,7 @@ const stockImportController = {
         const quantityCell = row.getCell(quantityColIdx);
 
         const article = `${articleCell.value ?? ''}`.trim();
-        const rawQty = quantityCell.value;
-        const quantity = typeof rawQty === 'object' && rawQty !== null ? parseFloat(rawQty.result ?? rawQty) : parseFloat(rawQty);
+        const quantity = extractCellNumber(quantityCell);
 
         if (!article || !Number.isFinite(quantity) || quantity <= 0) return;
 
@@ -141,4 +136,3 @@ const stockImportController = {
 
 module.exports = stockImportController;
 module.exports.calculateReadyDate = calculateReadyDate;
-module.exports.findColumnKey = findColumnKey;

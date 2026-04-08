@@ -211,7 +211,7 @@ const TaskModal = ({
         const selectedArticles = stockArticles.filter((a) => selectedArticleIds.has(a.id));
         const preparedTasks = selectedArticles.map((article) => ({
           title: `${article.article} — ${clientName}`,
-          description: `${article.article} - ${article.quantity} pcs`,
+          description: `Réf. ${article.article} · ${Number(article.quantity)} pcs (importé le ${new Date(article.imported_at).toLocaleDateString('fr-FR')})`,
           priority: form.priority,
           clientName,
           itemReference: article.article,
