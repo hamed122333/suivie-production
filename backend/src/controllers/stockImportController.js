@@ -46,7 +46,19 @@ const stockImportController = {
       }
 
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(req.file.buffer);
+      try {
+        await workbook.xlsx.load(req.file.buffer);
+      } catch (xlsxErr) {
+        // Try CSV if XLSX fails
+        try {
+          const stream = require('stream');
+          const bufferStream = new stream.PassThrough();
+          bufferStream.end(req.file.buffer);
+          await workbook.csv.read(bufferStream);
+        } catch (csvErr) {
+          throw new Error('Le fichier doit être au format Excel (.xlsx) ou CSV valide');
+        }
+      }
 
       const worksheet = workbook.worksheets[0];
       if (!worksheet) {
@@ -119,7 +131,7 @@ const stockImportController = {
       res.status(201).json({ imported: created.length, records: created });
     } catch (err) {
       console.error('Excel import error:', err);
-      res.status(500).json({ error: "Erreur lors de l'importation du fichier" });
+      res.status(500).json({ error: "Erreur lors de l'importation du fichier: " + err.message });
     }
   },
 

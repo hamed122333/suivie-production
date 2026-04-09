@@ -11,11 +11,12 @@ const upload = multer({
     const allowed = [
       'application/vnd.ms-excel',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/csv'
     ];
-    if (allowed.includes(file.mimetype) || /\.(xls|xlsx)$/i.test(file.originalname)) {
+    if (allowed.includes(file.mimetype) || /\.(xls|xlsx|csv)$/i.test(file.originalname)) {
       cb(null, true);
     } else {
-      cb(new Error('Seuls les fichiers Excel (.xls, .xlsx) sont acceptés'));
+      cb(new Error('Seuls les fichiers Excel ou CSV sont acceptés'));
     }
   },
 });
