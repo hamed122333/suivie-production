@@ -73,6 +73,8 @@ const TaskModal = ({
   const [stockArticles, setStockArticles] = useState([]);
   const [stockLoading, setStockLoading] = useState(false);
   const [selectedArticleIds, setSelectedArticleIds] = useState(new Set());
+  const [requestedQuantities, setRequestedQuantities] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isEditing = Boolean(task);
 
@@ -150,16 +152,29 @@ const TaskModal = ({
     setLines((current) => current.filter((_, currentIndex) => currentIndex !== index));
   };
 
-  const toggleArticle = (articleId) => {
+  const toggleArticle = (article) => {
     setSelectedArticleIds((current) => {
       const next = new Set(current);
-      if (next.has(articleId)) {
-        next.delete(articleId);
+      if (next.has(article.id)) {
+        next.delete(article.id);
+        setRequestedQuantities((q) => {
+          const newQ = { ...q };
+          delete newQ[article.id];
+          return newQ;
+        });
       } else {
-        next.add(articleId);
+        next.add(article.id);
+        setRequestedQuantities((q) => ({
+          ...q,
+          [article.id]: Number(article.quantity)
+        }));
       }
       return next;
     });
+  };
+
+  const updateArticleQuantity = (articleId, value) => {
+    setRequestedQuantities((q) => ({ ...q, [articleId]: value }));
   };
 
   // Number of ready articles that are available but unused
@@ -167,6 +182,14 @@ const TaskModal = ({
     () => stockArticles.filter((a) => a.is_ready && !a.is_used).length,
     [stockArticles]
   );
+
+  const filteredArticles = useMemo(() => {
+    if (!searchQuery.trim()) return stockArticles;
+    const q = searchQuery.toLowerCase().trim();
+    return stockArticles.filter((article) =>
+      article.article?.toLowerCase().includes(q)
+    );
+  }, [stockArticles, searchQuery]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -209,16 +232,19 @@ const TaskModal = ({
         }
 
         const selectedArticles = stockArticles.filter((a) => selectedArticleIds.has(a.id));
-        const preparedTasks = selectedArticles.map((article) => ({
-          title: `${article.article} — ${clientName}`,
-          description: `Réf. ${article.article} · ${Number(article.quantity)} pcs (importé le ${new Date(article.imported_at).toLocaleDateString('fr-FR')})`,
-          priority: form.priority,
-          clientName,
-          itemReference: article.article,
-          quantity: parseFloat(article.quantity),
-          quantityUnit: 'pcs',
-          stockImportId: article.id,
-        }));
+        const preparedTasks = selectedArticles.map((article) => {
+          const reqQty = Number(requestedQuantities[article.id] || article.quantity);
+          return {
+            title: `${article.article} — ${clientName}`,
+            description: `Réf. ${article.article} · ${reqQty} pcs commandés (Stock initial: ${Number(article.quantity)} pcs importées le ${new Date(article.imported_at).toLocaleDateString('fr-FR')})`,
+            priority: form.priority,
+            clientName,
+            itemReference: article.article,
+            quantity: reqQty,
+            quantityUnit: 'pcs',
+            stockImportId: article.id,
+          };
+        });
 
         await onSave({
           status: defaultStatus,
@@ -310,20 +336,37 @@ const TaskModal = ({
                 )}
               </label>
 
+              {!stockLoading && stockArticles.length > 0 && (
+                <div className="task-modal-classic__search">
+                  <input
+                    type="text"
+                    placeholder="Rechercher un article..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="stock-article-search-input"
+                  />
+                </div>
+              )}
+
               {stockLoading ? (
                 <div className="stock-article-loading">Chargement des articles…</div>
               ) : stockArticles.length === 0 ? (
                 <div className="stock-article-empty">
                   Aucun article importé. Demandez à votre planificateur d'importer le stock Excel.
                 </div>
+              ) : filteredArticles.length === 0 ? (
+                <div className="stock-article-empty">
+                  Aucun article trouvé pour "{searchQuery}".
+                </div>
               ) : (
                 <div className="stock-article-list">
-                  {stockArticles.map((article) => {
+                  {filteredArticles.map((article) => {
                     const readyDate = new Date(article.ready_date);
                     const isReady = article.is_ready;
                     const isUsed = article.is_used;
                     const isDisabled = !isReady || isUsed;
                     const isSelected = selectedArticleIds.has(article.id);
+                    const reqQty = requestedQuantities[article.id] ?? Number(article.quantity);
 
                     return (
                       <div
@@ -335,7 +378,7 @@ const TaskModal = ({
                         ]
                           .filter(Boolean)
                           .join(' ')}
-                        onClick={() => !isDisabled && toggleArticle(article.id)}
+                        onClick={() => !isDisabled && toggleArticle(article)}
                         role="checkbox"
                         aria-checked={isSelected}
                         aria-disabled={isDisabled}
@@ -343,7 +386,7 @@ const TaskModal = ({
                         onKeyDown={(e) => {
                           if (!isDisabled && (e.key === ' ' || e.key === 'Enter')) {
                             e.preventDefault();
-                            toggleArticle(article.id);
+                            toggleArticle(article);
                           }
                         }}
                       >
@@ -355,7 +398,7 @@ const TaskModal = ({
                               type="checkbox"
                               checked={isSelected}
                               disabled={isDisabled}
-                              onChange={() => toggleArticle(article.id)}
+                              onChange={() => toggleArticle(article)}
                               onClick={(e) => e.stopPropagation()}
                               tabIndex={-1}
                               aria-hidden
@@ -364,7 +407,18 @@ const TaskModal = ({
                         </div>
                         <div className="stock-article-item__info">
                           <span className="stock-article-item__name">{article.article}</span>
-                          <span className="stock-article-item__qty">{Number(article.quantity)} pcs</span>
+                          <span className="stock-article-item__qty">Stock: {Number(article.quantity)} pcs</span>
+                          {isSelected && (
+                            <input
+                              type="number"
+                              className="stock-article-item__input-qty"
+                              value={reqQty}
+                              min="1"
+                              max={Number(article.quantity)}
+                              onChange={(e) => updateArticleQuantity(article.id, e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          )}
                         </div>
                         <div className="stock-article-item__status">
                           {isUsed ? (

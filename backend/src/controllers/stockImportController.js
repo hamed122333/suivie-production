@@ -2,30 +2,6 @@ const ExcelJS = require('exceljs');
 const StockImportModel = require('../models/stockImportModel');
 
 /**
- * Calculate the ready date based on article type rules:
- *   ci / cvc  → +7 days
- *   di        → +10 days
- *   pl        → +5 days
- *   other     → same day (0 days)
- */
-function calculateReadyDate(articleName) {
-  const name = `${articleName || ''}`.trim().toLowerCase();
-  let daysToAdd = 0;
-
-  if (name.startsWith('cvc') || name.startsWith('ci')) {
-    daysToAdd = 7;
-  } else if (name.startsWith('di')) {
-    daysToAdd = 10;
-  } else if (name.startsWith('pl')) {
-    daysToAdd = 5;
-  }
-
-  const date = new Date();
-  date.setDate(date.getDate() + daysToAdd);
-  return date.toISOString().slice(0, 10);
-}
-
-/**
  * Extract a numeric value from an ExcelJS cell that may contain a raw
  * number or a formula-result object (e.g. `{ formula: '=A1', result: 10 }`).
  */
@@ -36,6 +12,60 @@ function extractCellNumber(cell) {
     return parseFloat(raw.result ?? raw);
   }
   return parseFloat(raw);
+}
+
+/**
+ * Calculate the ready date based on article type rules:
+ *   ci / cv   → +6 days
+ *   di / dv   → +9 days
+ *   pl        → +4 days
+ *   other     → same day (0 days)
+ *   Base date is taken from the file if provided, otherwise today.
+ */
+function calculateReadyDate(articleName, baseDateInput) {
+  const name = `${articleName || ''}`.trim().toLowerCase();
+  let daysToAdd = 0;
+
+  if (name.startsWith('cv') || name.startsWith('ci')) {
+    daysToAdd = 6;
+  } else if (name.startsWith('di') || name.startsWith('dv')) {
+    daysToAdd = 9;
+  } else if (name.startsWith('pl')) {
+    daysToAdd = 4;
+  }
+
+  let date = new Date();
+  
+  if (baseDateInput) {
+    if (baseDateInput instanceof Date) {
+      // ExcelJS parsed it as a JS Date
+      date = new Date(baseDateInput);
+    } else if (typeof baseDateInput === 'string') {
+      // Attempt to parse 'dd/mm/yyyy' or 'dd/mm/yy'
+      const parts = baseDateInput.split(/[-\/]/);
+      if (parts.length >= 3) {
+        let day = parseInt(parts[0], 10);
+        let month = parseInt(parts[1], 10);
+        let year = parseInt(parts[2], 10);
+        // Handle 2-digit years
+        if (year < 100) year += 2000;
+        date = new Date(year, month - 1, day);
+      } else {
+        const fallback = new Date(baseDateInput);
+        if (!isNaN(fallback.getTime())) date = fallback;
+      }
+    }
+  }
+
+  // Ensure invalid dates revert to today
+  if (isNaN(date.getTime())) {
+     date = new Date();
+  }
+
+  // Add the delayed days
+  date.setDate(date.getDate() + daysToAdd);
+  
+  return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
 }
 
 const stockImportController = {
@@ -76,9 +106,11 @@ const stockImportController = {
       // Resolve article and quantity column indices
       const articleCandidates = ['article', 'articles', 'ref', 'reference', 'désignation', 'designation'];
       const quantityCandidates = ['quantité', 'quantite', 'qté', 'qte', 'qty', 'quantity', 'quantités', 'quantites'];
+      const dateCandidates = ['date', 'dates', 'date_import', 'jour'];
 
       let articleColIdx = null;
       let quantityColIdx = null;
+      let dateColIdx = null;
 
       for (const candidate of articleCandidates) {
         if (headers[candidate] !== undefined) {
@@ -92,11 +124,17 @@ const stockImportController = {
           break;
         }
       }
+      for (const candidate of dateCandidates) {
+        if (headers[candidate] !== undefined) {
+          dateColIdx = headers[candidate];
+          break;
+        }
+      }
 
       if (articleColIdx === null || quantityColIdx === null) {
         return res.status(400).json({
           error:
-            'Colonnes introuvables. Le fichier doit contenir les colonnes "article" et "quantité".',
+            'Colonnes introuvables. Le fichier doit contenir au moins les colonnes "article" et "quantité". (La colonne "date" est optionnelle)',
         });
       }
 
@@ -107,6 +145,13 @@ const stockImportController = {
 
         const articleCell = row.getCell(articleColIdx);
         const quantityCell = row.getCell(quantityColIdx);
+        
+        // Date might not be present
+        let rawDate = null;
+        if (dateColIdx !== null) {
+           const dateCell = row.getCell(dateColIdx);
+           rawDate = dateCell.value;
+        }
 
         const article = `${articleCell.value ?? ''}`.trim();
         const quantity = extractCellNumber(quantityCell);
@@ -116,7 +161,7 @@ const stockImportController = {
         records.push({
           article,
           quantity: Number(quantity.toFixed(2)),
-          readyDate: calculateReadyDate(article),
+          readyDate: calculateReadyDate(article, rawDate),
         });
       });
 

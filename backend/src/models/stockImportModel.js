@@ -32,12 +32,24 @@ const StockImportModel = {
   async getAll() {
     const result = await pool.query(
       `SELECT
-         *,
-         (ready_date <= CURRENT_DATE) AS is_ready
+         *
        FROM stock_import
        ORDER BY ready_date ASC, id ASC`
     );
-    return result.rows;
+    
+    // Evaluate is_ready in JS to avoid DB timezone issues
+    const now = new Date();
+    const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    return result.rows.map(row => {
+      // row.ready_date might be a Date object or string
+      const rDate = row.ready_date instanceof Date 
+        ? row.ready_date.getFullYear() + '-' + String(row.ready_date.getMonth() + 1).padStart(2, '0') + '-' + String(row.ready_date.getDate()).padStart(2, '0')
+        : String(row.ready_date).slice(0, 10);
+      return {
+        ...row,
+        is_ready: rDate <= today
+      };
+    });
   },
 
   async markAsUsed(id) {
@@ -55,6 +67,30 @@ const StockImportModel = {
       `UPDATE stock_import SET is_used = TRUE WHERE id IN (${placeholders})`,
       ids
     );
+  },
+
+  async deductQuantity(id, quantityToDeduct) {
+    const result = await pool.query(
+      `UPDATE stock_import
+       SET quantity = GREATEST(quantity - $2, 0),
+           is_used = CASE WHEN quantity - $2 <= 0 THEN TRUE ELSE is_used END
+       WHERE id = $1
+       RETURNING *`,
+      [id, quantityToDeduct]
+    );
+    return result.rows[0] || null;
+  },
+
+  async addQuantity(id, quantityToAdd) {
+    const result = await pool.query(
+      `UPDATE stock_import
+       SET quantity = quantity + $2,
+           is_used = FALSE
+       WHERE id = $1
+       RETURNING *`,
+      [id, quantityToAdd]
+    );
+    return result.rows[0] || null;
   },
 };
 

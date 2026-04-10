@@ -368,6 +368,24 @@
   gap: 0.65rem;
 }
 
+.task-modal-classic__search {
+  margin-bottom: 0.75rem;
+}
+
+.stock-article-search-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.stock-article-search-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
+}
+
 @media (max-width: 900px) {
   .task-modal-sheet {
     width: 100%;
@@ -519,6 +537,15 @@
   color: #64748b;
   font-size: 0.82rem;
   white-space: nowrap;
+}
+
+.stock-article-item__input-qty {
+  width: 60px;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  margin-left: auto;
 }
 
 .stock-article-item__status {

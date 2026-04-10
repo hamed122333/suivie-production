@@ -53,8 +53,11 @@ const StockImportModal = ({ onClose, onImported }) => {
         aria-label="Importer des articles depuis Excel"
       >
         <div className="modal-header stock-import-modal__header">
-          <h3 className="modal-title">Importer des articles (Excel)</h3>
-          <button type="button" className="modal-close" onClick={onClose} disabled={uploading}>
+          <h3 className="modal-title">
+            <span role="img" aria-label="package" style={{ marginRight: '8px' }}>📦</span>
+            Importer des articles (Excel)
+          </h3>
+          <button type="button" className="modal-close" onClick={onClose} disabled={uploading} title="Fermer">
             ✕
           </button>
         </div>
@@ -62,15 +65,15 @@ const StockImportModal = ({ onClose, onImported }) => {
         <div className="stock-import-modal__body">
           <p className="stock-import-modal__hint">
             Le fichier Excel doit contenir au minimum deux colonnes&nbsp;:
-            <strong> article</strong> et <strong>quantité</strong>.
+            <strong> article</strong> et <strong>quantité</strong>. Une colonne <strong>date</strong> optionnelle (format jj/mm/aaaa) peut être ajoutée.
           </p>
 
           <div className="stock-import-modal__rules">
             <p className="stock-import-modal__rules-title">Règles de délai appliquées automatiquement&nbsp;:</p>
             <ul>
-              <li><span className="badge badge--blue">ci / cvc</span> +7 jours</li>
-              <li><span className="badge badge--orange">di</span> +10 jours</li>
-              <li><span className="badge badge--green">pl</span> +5 jours</li>
+              <li><span className="badge badge--blue">ci / cv</span> +6 jours</li>
+              <li><span className="badge badge--orange">di / dv</span> +9 jours</li>
+              <li><span className="badge badge--green">pl</span> +4 jours</li>
               <li><span className="badge badge--gray">autres</span> disponible immédiatement</li>
             </ul>
           </div>
@@ -110,7 +113,12 @@ const StockImportModal = ({ onClose, onImported }) => {
                 id="stock-import-file"
               />
               <label htmlFor="stock-import-file" className="stock-import-modal__file-label">
-                {selectedFile ? selectedFile.name : 'Choisir un fichier .xls ou .xlsx'}
+                <span style={{ fontSize: '1.2rem', marginBottom: '4px', display: 'block' }}>📁</span>
+                {selectedFile ? (
+                  <strong style={{ color: '#7c3aed' }}>{selectedFile.name}</strong>
+                ) : (
+                  <span>Cliquez ici pour choisir un fichier <strong>.xls</strong> ou <strong>.xlsx</strong></span>
+                )}
               </label>
 
               <div className="stock-import-modal__actions">

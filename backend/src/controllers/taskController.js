@@ -95,6 +95,16 @@ const taskController = {
                 newValue: afterStatus,
                 message: `Statut changé de ${TASK_STATUS_LABELS[beforeTask.status] || beforeTask.status} vers ${TASK_STATUS_LABELS[afterStatus] || afterStatus}`,
             });
+
+            // Handle stock quantities based on status changes
+            if (beforeTask.stock_import_id) {
+              const qty = beforeTask.quantity || 1;
+              if (afterStatus === 'DONE' && beforeTask.status !== 'DONE') {
+                await StockImportModel.deductQuantity(beforeTask.stock_import_id, qty);
+              } else if (beforeTask.status === 'DONE' && afterStatus !== 'DONE') {
+                await StockImportModel.addQuantity(beforeTask.stock_import_id, qty);
+              }
+            }
         }
       }
 
@@ -228,13 +238,13 @@ const taskController = {
         }))
       );
 
-      // Mark linked stock import entries as used
-      const stockImportIds = createdTasks
-        .map((task) => task.stock_import_id)
-        .filter(Boolean);
-      if (stockImportIds.length > 0) {
-        await StockImportModel.markManyAsUsed(stockImportIds);
-      }
+      // Do not mark as used immediately, let the deduction handle it when DONE
+      // const stockImportIds = createdTasks
+      //   .map((task) => task.stock_import_id)
+      //   .filter(Boolean);
+      // if (stockImportIds.length > 0) {
+      //   await StockImportModel.markManyAsUsed(stockImportIds);
+      // }
 
       res.status(201).json(createdTasks);
     } catch (err) {
@@ -254,6 +264,31 @@ const taskController = {
       const payload = normalizeTaskUpdatePayload(req.body);
       const task = await TaskModel.update(req.params.id, payload);
       if (!task) return res.status(404).json({ error: 'Task not found' });
+
+      // Handle stock quantities if the task is already DONE and quantity changed
+      if (previousTask.status === 'DONE' && task.status === 'DONE' && task.stock_import_id) {
+        const oldQty = previousTask.quantity || 1;
+        const newQty = task.quantity || 1;
+        
+        if (newQty !== oldQty) {
+          const diff = newQty - oldQty;
+          if (diff > 0) {
+            await StockImportModel.deductQuantity(task.stock_import_id, diff);
+          } else if (diff < 0) {
+            await StockImportModel.addQuantity(task.stock_import_id, Math.abs(diff));
+          }
+        }
+      }
+
+      // Handle stock quantities if the API payload also somehow changed the status
+      if (task.stock_import_id && payload.status && previousTask.status !== payload.status) {
+        const qty = task.quantity || 1;
+        if (previousTask.status !== 'DONE' && task.status === 'DONE') {
+          await StockImportModel.deductQuantity(task.stock_import_id, qty);
+        } else if (previousTask.status === 'DONE' && task.status !== 'DONE') {
+          await StockImportModel.addQuantity(task.stock_import_id, qty);
+        }
+      }
 
       const historyEntries = buildUpdateHistoryEntries(previousTask, payload, req.user.id);
       if (historyEntries.length > 0) {
@@ -293,6 +328,16 @@ const taskController = {
       );
       if (!task) return res.status(404).json({ error: 'Task not found' });
 
+      // Handle stock quantities based on status changes
+      if (task.stock_import_id) {
+        const qty = task.quantity || 1;
+        if (previousTask.status !== 'DONE' && task.status === 'DONE') {
+          await StockImportModel.deductQuantity(task.stock_import_id, qty);
+        } else if (previousTask.status === 'DONE' && task.status !== 'DONE') {
+          await StockImportModel.addQuantity(task.stock_import_id, qty);
+        }
+      }
+
       await TaskHistoryModel.log({
         taskId: task.id,
         actorId: req.user.id,
@@ -324,8 +369,16 @@ const taskController = {
 
   async delete(req, res) {
     try {
+      const taskToDelete = await TaskModel.getById(req.params.id);
+      
       const task = await TaskModel.delete(req.params.id);
       if (!task) return res.status(404).json({ error: 'Task not found' });
+
+      // If we delete a task that was DONE, restore the stock
+      if (taskToDelete && taskToDelete.status === 'DONE' && taskToDelete.stock_import_id) {
+        await StockImportModel.addQuantity(taskToDelete.stock_import_id, taskToDelete.quantity || 1);
+      }
+
       res.json({ message: 'Task deleted' });
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
