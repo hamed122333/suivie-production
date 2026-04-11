@@ -35,9 +35,9 @@ const StockPage = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(15);
 
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+  const itemsPerPage = 15;
 
   const fetchStock = async () => {
     try {
@@ -68,7 +68,10 @@ const StockPage = () => {
   const isPlanner = user?.role === 'planner' || user?.role === 'super_admin';
 
   // --- Processing Data (Filter -> Sort -> Paginate) ---
-  const safeArray = Array.isArray(stockItems) ? stockItems : [];
+  const safeArray = useMemo(() =>
+    Array.isArray(stockItems) ? stockItems : [],
+    [stockItems]
+  );
 
   const uniqueArticles = useMemo(() => {
     const articles = safeArray.map(item => item.article).filter(Boolean);

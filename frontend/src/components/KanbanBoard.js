@@ -94,7 +94,7 @@ const KanbanBoard = ({
   filterPriority = '',
   onStatsRefresh,
 }) => {
-  const { canChangeStatus, canCreateTask, isCommercial, isSuperAdmin, isPlanner } = useAuth();
+  const { canChangeStatus, canCreateTask, isCommercial, isSuperAdmin } = useAuth();
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [blockModal, setBlockModal] = useState({ open: false, task: null });
