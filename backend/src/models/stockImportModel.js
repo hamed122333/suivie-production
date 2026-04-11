@@ -10,13 +10,32 @@ const StockImportModel = {
       const created = [];
 
       for (const record of records) {
-        const result = await client.query(
-          `INSERT INTO stock_import (article, quantity, ready_date)
-           VALUES ($1, $2, $3)
-           RETURNING *`,
-          [record.article, record.quantity, record.readyDate]
+        // Look up if article exists to avoid duplicate entries. We use UPPER() for case insensitivity.
+        const check = await client.query(
+          `SELECT id, quantity FROM stock_import WHERE UPPER(article) = UPPER($1) LIMIT 1`,
+          [record.article]
         );
-        created.push(result.rows[0]);
+
+        if (check.rows.length > 0) {
+          const existingId = check.rows[0].id;
+          const result = await client.query(
+            `UPDATE stock_import 
+             SET quantity = quantity + $2, 
+                 ready_date = GREATEST(ready_date, $3::DATE),
+                 is_used = FALSE
+             WHERE id = $1 RETURNING *`,
+            [existingId, record.quantity, record.readyDate]
+          );
+          created.push(result.rows[0]);
+        } else {
+          const result = await client.query(
+            `INSERT INTO stock_import (article, quantity, ready_date)
+             VALUES ($1, $2, $3)
+             RETURNING *`,
+            [record.article, record.quantity, record.readyDate]
+          );
+          created.push(result.rows[0]);
+        }
       }
 
       await client.query('COMMIT');

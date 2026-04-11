@@ -30,6 +30,14 @@ router.post(
   stockImportController.upload
 );
 
+// Manually add stock — planner and super_admin only
+router.post(
+  '/manual',
+  authenticate,
+  requireRoles(['planner', 'super_admin']),
+  stockImportController.createManual
+);
+
 // Get all imported articles — all authenticated users
 router.get('/', authenticate, stockImportController.getAll);
 

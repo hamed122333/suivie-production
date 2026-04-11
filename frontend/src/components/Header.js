@@ -6,10 +6,10 @@ import { getInitials } from '../utils/formatters';
 import './Header.css';
 
 const ROLE_CONFIG = {
-  super_admin: { label: 'Suivi', icon: '👁', color: '#7c3aed' },
-  planner: { label: 'Planificateur', icon: '📋', color: '#0052cc' },
-  commercial: { label: 'Commercial', icon: '🧑‍💼', color: '#b45309' },
-  user: { label: 'Utilisateur', icon: '👤', color: '#374151' },
+  super_admin: { label: 'Suivi', icon: '✦', color: '#7c3aed' },
+  planner: { label: 'Planificateur', icon: '⚙', color: '#0052cc' },
+  commercial: { label: 'Commercial', icon: '✉', color: '#b45309' },
+  user: { label: 'Utilisateur', icon: '○', color: '#374151' },
 };
 
 const Header = ({ toggleSidebar, isSidebarOpen }) => {
@@ -182,7 +182,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
                 <div className="app-header__dropdown-divider" />
                 {isSuperAdmin && (
                   <Link to="/users" className="app-header__dropdown-item" onClick={() => setMenuOpen(false)}>
-                    👥 Gestion des utilisateurs
+                    👤 Gestion des utilisateurs
                   </Link>
                 )}
                 <button
@@ -190,7 +190,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
                   className="app-header__dropdown-item app-header__dropdown-item--danger"
                   onClick={() => { logout(); setMenuOpen(false); }}
                 >
-                  🚪 Déconnexion
+                  ⎋ Déconnexion
                 </button>
               </div>
             )}
@@ -200,10 +200,10 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
 
       {/* Navigation */}
       <nav className="header-nav" aria-label="Navigation principale">
-        {navItem('/kanban', 'Tableau', '▦')}
-        {navItem('/dashboard', 'Tableau de bord', '📊')}
-        {(isSuperAdmin || isPlanner) && navItem('/reports', 'Rapports', '📑')}
-        {isSuperAdmin && navItem('/users', 'Utilisateurs', '👥')}
+        {navItem('/kanban', 'Tableau', '▤')}
+        {navItem('/dashboard', 'Tableau de bord', '◱')}
+        {(isSuperAdmin || isPlanner) && navItem('/reports', 'Rapports', '▤')}
+        {isSuperAdmin && navItem('/users', 'Utilisateurs', '👤')}
       </nav>
     </header>
   );

@@ -5,7 +5,7 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import { getInitials } from '../utils/formatters';
 import './Sidebar.css';
 
-const WORKSPACE_ICONS = ['🔷', '🟦', '🟩', '🟧', '🟪', '🟥', '⬛'];
+const WORKSPACE_ICONS = ['●', '○', '◎', '◉', '◌', '◍', '⚙'];
 
 const getRoleLabel = (role) => {
   const labels = {
@@ -71,7 +71,7 @@ const Sidebar = ({ closeSidebar }) => {
       {/* En-tête Espaces */}
       <div className="sidebar__header">
         <div className="sidebar__title">
-          <span className="sidebar__title-icon">🗂</span>
+          <span className="sidebar__title-icon">⊞</span>
           Espaces
         </div>
         {canCreateWorkspace && (
@@ -91,7 +91,7 @@ const Sidebar = ({ closeSidebar }) => {
           </div>
         ) : options.length === 0 ? (
           <div className="sidebar__empty">
-            <span>🗃</span>
+            <span>⚲</span>
             <p>Aucun espace créé</p>
           </div>
         ) : (
@@ -99,7 +99,7 @@ const Sidebar = ({ closeSidebar }) => {
             const id = String(ws.id);
             const active = id === activeId;
             const isAll = ws.id === 'all';
-            const icon = isAll ? '🌐' : WORKSPACE_ICONS[(idx - (isAll ? 0 : 1)) % WORKSPACE_ICONS.length];
+            const icon = isAll ? '⌂' : WORKSPACE_ICONS[(idx - (isAll ? 0 : 1)) % WORKSPACE_ICONS.length];
             return (
               <button
                 type="button"
@@ -125,14 +125,17 @@ const Sidebar = ({ closeSidebar }) => {
       {/* Navigation */}
       <nav className="sidebar__nav" aria-label="Navigation">
         <NavLink to="/kanban" onClick={closeSidebar} className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
-          <span>▦</span> Tableau Kanban
+          <span>▤</span> Tableau Kanban
         </NavLink>
         <NavLink to="/dashboard" onClick={closeSidebar} className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
-          <span>📊</span> Tableau de bord
+          <span>◱</span> Tableau de bord
+        </NavLink>
+        <NavLink to="/stock" onClick={closeSidebar} className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
+          <span>▦</span> Stock & Produits Finis
         </NavLink>
         {isSuperAdmin && (
           <NavLink to="/users" onClick={closeSidebar} className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
-            <span>👥</span> Utilisateurs
+            <span>👤</span> Utilisateurs
           </NavLink>
         )}
       </nav>
@@ -142,7 +145,7 @@ const Sidebar = ({ closeSidebar }) => {
         <div className="modal-overlay" role="dialog" aria-label="Créer un espace de travail">
           <div className="modal-content sidebar-modal">
             <div className="modal-header">
-              <h3 className="modal-title">🗂 Nouvel espace</h3>
+              <h3 className="modal-title">⊞ Nouvel espace</h3>
               <button type="button" className="modal-close" onClick={() => { setCreateOpen(false); setError(''); setName(''); }}>
                 ✕
               </button>

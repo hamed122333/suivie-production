@@ -87,12 +87,13 @@ body {
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1rem;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem;
   border-radius: var(--radius-md);
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   font-weight: 600;
   font-family: inherit;
   transition: all var(--transition);
@@ -106,33 +107,47 @@ body {
 }
 
 .btn:disabled {
-  opacity: 0.55;
+  opacity: 0.6;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
 .btn-primary {
   background: var(--color-primary);
   color: white;
-  box-shadow: 0 1px 3px rgba(0,82,204,0.35);
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 4px rgba(0,82,204,0.2);
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--color-primary-dark);
-  box-shadow: 0 3px 8px rgba(0,82,204,0.4);
+  border-color: var(--color-primary-dark);
+  box-shadow: 0 4px 6px rgba(0,82,204,0.25);
   transform: translateY(-1px);
 }
 
 .btn-secondary {
-  background: #f1f5f9;
-  color: #374151;
-  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
 }
 .btn-secondary:hover:not(:disabled) {
   background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.btn-outline:hover:not(:disabled) {
+  background: #eff6ff;
 }
 
 .btn-danger {
   background: var(--color-danger);
   color: white;
+  border-color: var(--color-danger);
 }
 .btn-danger:hover:not(:disabled) {
   background: #991b00;
@@ -142,25 +157,50 @@ body {
 .btn-success {
   background: var(--color-success);
   color: white;
+  border-color: var(--color-success);
+}
+.btn-success:hover:not(:disabled) {
+  background: #004d33;
+  transform: translateY(-1px);
+}
+
+.btn-page {
+  padding: 0.4rem 1rem;
+  background: white;
+  color: #4a5568;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+.btn-page:hover:not(:disabled) {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #94a3b8;
 }
 
 /* ---- Form elements ---- */
-input, select, textarea {
+.form-input, .search-input, input, select, textarea {
   width: 100%;
-  padding: 0.55rem 0.75rem;
+  padding: 0.6rem 1rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   font-family: inherit;
   color: var(--color-text);
   background: white;
   outline: none;
-  transition: border-color var(--transition), box-shadow var(--transition);
+  transition: all var(--transition);
 }
 
-input:focus, select:focus, textarea:focus {
+.form-input:focus, .search-input:focus, input:focus, select:focus, textarea:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(0,82,204,0.12);
+}
+
+.search-input {
+  width: 260px;
+  max-width: 100%;
 }
 
 label {
@@ -271,6 +311,67 @@ label {
 
 .sidebar-modal {
   max-width: 380px;
+}
+
+/* ---- Data Tables & Lists ---- */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-table th {
+  background-color: var(--color-surface);
+  color: var(--color-text-muted);
+  font-weight: 700;
+  padding: 1rem 1.25rem;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.data-table td {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+  color: var(--color-text);
+  transition: background-color var(--transition);
+}
+
+.data-table tr:hover td {
+  background-color: #f8fafc;
+}
+
+/* ---- Generic States ---- */
+.loading-state, .empty-state {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 1rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  background: white;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--color-border);
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: app-spin 0.8s linear infinite;
+  margin-bottom: 1rem;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.7;
 }
 
 /* ---- Scrollbar global ---- */

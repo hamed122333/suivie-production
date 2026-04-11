@@ -6,10 +6,10 @@ import { getInitials } from '../utils/formatters';
 import './UsersPage.css';
 
 const ROLE_CONFIG = {
-  super_admin: { label: 'Super Admin', icon: '👑', color: '#7c3aed', bg: '#ede9fe' },
-  planner: { label: 'Planificateur', icon: '📋', color: '#0052cc', bg: '#deebff' },
-  commercial: { label: 'Commercial', icon: '🧑‍💼', color: '#b45309', bg: '#fef3c7' },
-  user: { label: 'Utilisateur', icon: '👤', color: '#374151', bg: '#f3f4f6' },
+  super_admin: { label: 'Super Admin', icon: '✦', color: '#7c3aed', bg: '#ede9fe' },
+  planner: { label: 'Planificateur', icon: '⚙', color: '#0052cc', bg: '#deebff' },
+  commercial: { label: 'Commercial', icon: '✉', color: '#b45309', bg: '#fef3c7' },
+  user: { label: 'Utilisateur', icon: '○', color: '#374151', bg: '#f3f4f6' },
 };
 
 const ROLE_PERMISSIONS = [
@@ -171,86 +171,85 @@ const UsersPage = () => {
       {/* Barre de recherche */}
       <div className="users-page__search-wrap">
         <input
-          type="search"
-          className="users-page__search"
-          placeholder="Rechercher par nom ou email…"
+          type="text"
+          className="search-input"
+          placeholder="Rechercher par nom, email..."
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
-      {/* Tableau */}
       {loading ? (
-        <div className="users-page__loading">
-          <div className="users-page__spinner" />
-          <p>Chargement des utilisateurs…</p>
+        <div className="loading-state">
+          <div className="spinner"></div>
+          <p>Chargement des utilisateurs...</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="empty-state">
+          <span className="empty-icon">⚲</span>
+          <p>Aucun utilisateur trouvé.</p>
         </div>
       ) : (
         <div className="users-page__table-wrap">
-          {filtered.length === 0 ? (
-            <div className="users-page__empty">
-              <div className="users-page__empty-icon">🔍</div>
-              <p>Aucun utilisateur trouvé</p>
-            </div>
-          ) : (
-            <table className="users-page__table">
-              <thead>
-                <tr>
-                  <th>Utilisateur</th>
-                  <th>Email</th>
-                  <th>Rôle</th>
-                  <th>Créé le</th>
-                  <th style={{ width: '60px', textAlign: 'center' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(u => {
-                  const role = ROLE_CONFIG[u.role] || ROLE_CONFIG.user;
-                  const date = u.created_at
-                    ? new Date(u.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
-                    : '—';
-                  return (
-                    <tr key={u.id}>
-                      <td>
-                        <div className="users-page__user-cell">
-                          <div className="users-page__avatar" style={{ background: role.bg, color: role.color }}>
-                            {getInitials(u.name)}
-                          </div>
-                          <span className="users-page__name">{u.name}</span>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Utilisateur</th>
+                <th>Email</th>
+                <th>Rôle</th>
+                <th>Créé le</th>
+                <th style={{ width: '60px', textAlign: 'center' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(u => {
+                const role = ROLE_CONFIG[u.role] || ROLE_CONFIG.user;
+                const date = u.created_at
+                  ? new Date(u.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+                  : '—';
+                return (
+                  <tr key={u.id}>
+                    <td>
+                      <div className="users-page__user-cell">
+                        <div className="users-page__avatar" style={{ background: role.bg, color: role.color }}>
+                          {getInitials(u.name)}
                         </div>
-                      </td>
-                      <td className="users-page__email">{u.email}</td>
-                      <td>
-                        <span className="users-page__role-badge" style={{ background: role.bg, color: role.color }}>
-                          {role.icon} {role.label}
-                        </span>
-                      </td>
-                      <td className="users-page__date">{date}</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(u.id, u.name)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#ef4444',
-                            cursor: 'pointer',
-                            padding: '0.25rem 0.5rem',
-                            borderRadius: '4px',
-                          }}
-                          title="Supprimer l'utilisateur"
-                          onMouseOver={(e) => (e.target.style.backgroundColor = '#fef2f2')}
-                          onMouseOut={(e) => (e.target.style.backgroundColor = 'transparent')}
-                        >
-                          🗑️
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+                        <span className="users-page__name">{u.name}</span>
+                      </div>
+                    </td>
+                    <td className="users-page__email">{u.email}</td>
+                    <td>
+                      <span className="users-page__role-badge" style={{ background: role.bg, color: role.color }}>
+                        {role.icon} {role.label}
+                      </span>
+                    </td>
+                    <td className="users-page__date">{date}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(u.id, u.name)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          padding: '0.25rem 0.5rem',
+                          borderRadius: '4px',
+                          fontSize: '1.2rem',
+                          lineHeight: 1
+                        }}
+                        title="Supprimer l'utilisateur"
+                        onMouseOver={(e) => (e.target.style.backgroundColor = '#fef2f2')}
+                        onMouseOut={(e) => (e.target.style.backgroundColor = 'transparent')}
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -284,10 +283,10 @@ const UsersPage = () => {
               <div className="form-group">
                 <label>Rôle</label>
                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
-                  <option value="commercial">🧑‍💼 Commercial (crée les tâches)</option>
-                  <option value="planner">📋 Planificateur (gère les statuts)</option>
-                  <option value="super_admin">👑 Super Admin (accès complet)</option>
-                  <option value="user">👤 Utilisateur</option>
+                  <option value="commercial">✉ Commercial (crée les tâches)</option>
+                  <option value="planner">⚙ Planificateur (gère les statuts)</option>
+                  <option value="super_admin">✦ Super Admin (accès complet)</option>
+                  <option value="user">○ Utilisateur</option>
                 </select>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>

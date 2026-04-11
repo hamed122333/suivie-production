@@ -71,6 +71,7 @@ export const stockImportAPI = {
     api.post('/stock-import/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  createManual: (data) => api.post('/stock-import/manual', data),
 };
 
 export default api;

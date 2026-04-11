@@ -35,7 +35,7 @@ function calculateReadyDate(articleName, baseDateInput) {
   }
 
   let date = new Date();
-  
+
   if (baseDateInput) {
     if (baseDateInput instanceof Date) {
       // ExcelJS parsed it as a JS Date
@@ -64,7 +64,7 @@ function calculateReadyDate(articleName, baseDateInput) {
 
   // Add the delayed days
   date.setDate(date.getDate() + daysToAdd);
-  
+
   return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
 }
 
@@ -134,18 +134,18 @@ const stockImportController = {
       if (articleColIdx === null || quantityColIdx === null) {
         return res.status(400).json({
           error:
-            'Colonnes introuvables. Le fichier doit contenir au moins les colonnes "article" et "quantité". (La colonne "date" est optionnelle)',
+            'Colonnes introuvables. Le fichier doit contenir au moins les colonnes "article" et "quantit". (La colonne "date" est optionnelle)',
         });
       }
 
-      const records = [];
+      const recordsMap = new Map();
 
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return; // skip header
 
         const articleCell = row.getCell(articleColIdx);
         const quantityCell = row.getCell(quantityColIdx);
-        
+
         // Date might not be present
         let rawDate = null;
         if (dateColIdx !== null) {
@@ -158,12 +158,26 @@ const stockImportController = {
 
         if (!article || !Number.isFinite(quantity) || quantity <= 0) return;
 
-        records.push({
-          article,
-          quantity: Number(quantity.toFixed(2)),
-          readyDate: calculateReadyDate(article, rawDate),
-        });
+        const readyDate = calculateReadyDate(article, rawDate);
+        const normalizedArticle = article.toUpperCase();
+
+        if (recordsMap.has(normalizedArticle)) {
+            // Merge duplicate articles
+            const existing = recordsMap.get(normalizedArticle);
+            existing.quantity += Number(quantity.toFixed(2));
+            if (new Date(readyDate) > new Date(existing.readyDate)) {
+               existing.readyDate = readyDate;
+            }
+        } else {
+            recordsMap.set(normalizedArticle, {
+                article,
+                quantity: Number(quantity.toFixed(2)),
+                readyDate
+            });
+        }
       });
+
+      const records = Array.from(recordsMap.values());
 
       if (records.length === 0) {
         return res.status(400).json({
@@ -189,6 +203,31 @@ const stockImportController = {
       res.status(500).json({ error: 'Server error' });
     }
   },
+
+  async createManual(req, res) {
+    try {
+      const { article, quantity, baseDate } = req.body;
+
+      if (!article || !Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
+        return res.status(400).json({ error: 'Article et quantité valides requis.' });
+      }
+
+      const readyDate = calculateReadyDate(article, baseDate);
+      const normalizedArticle = article.trim().toUpperCase();
+
+      const records = [{
+        article: normalizedArticle,
+        quantity: Number(Number(quantity).toFixed(2)),
+        readyDate
+      }];
+
+      const created = await StockImportModel.createMany(records);
+      res.status(201).json({ imported: created.length, records: created });
+    } catch (err) {
+      console.error('Manual import error:', err);
+      res.status(500).json({ error: "Erreur lors de l'ajout manuel: " + err.message });
+    }
+  }
 };
 
 module.exports = stockImportController;

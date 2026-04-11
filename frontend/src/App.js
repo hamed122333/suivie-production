@@ -7,6 +7,7 @@ import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import KanbanPage from "./pages/KanbanPage";
 import UsersPage from "./pages/UsersPage";
+import StockPage from "./pages/StockPage";
 import "./App.css";
 import { WorkspaceProvider } from "./context/WorkspaceContext";
 
@@ -123,6 +124,16 @@ const AppRoutes = () => {
           <ProtectedRoute>
             <Layout>
               <UsersPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/stock"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <StockPage />
             </Layout>
           </ProtectedRoute>
         }

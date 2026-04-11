@@ -186,7 +186,7 @@ const TaskModal = ({
   const filteredArticles = useMemo(() => {
     if (!searchQuery.trim()) return stockArticles;
     const q = searchQuery.toLowerCase().trim();
-    return stockArticles.filter((article) =>
+    return stockArticles.filter((article) => 
       article.article?.toLowerCase().includes(q)
     );
   }, [stockArticles, searchQuery]);
