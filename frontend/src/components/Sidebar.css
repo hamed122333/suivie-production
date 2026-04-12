@@ -118,15 +118,17 @@
   gap: 0.2rem;
 }
 
+/* Workspace item */
 .sidebar__item {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.6rem var(--sidebar-item-x);
+  gap: 0.55rem;
+  padding: 0.5rem var(--sidebar-item-x);
   border-radius: 8px;
   background: transparent;
   border: none;
+  border-left: 2.5px solid transparent;
   cursor: pointer;
   color: #94a3b8;
   font-size: 0.825rem;
@@ -141,13 +143,14 @@
 }
 
 .sidebar__item--active {
-  background: rgba(37,99,235,0.25) !important;
-  color: #60a5fa !important;
+  background: rgba(37,99,235,0.2) !important;
+  color: #e2e8f0 !important;
   font-weight: 600;
 }
 
 .sidebar__item--all {
   border-bottom: 1px solid rgba(255,255,255,0.07);
+  border-left: none;
   margin-bottom: 0.35rem;
   padding-bottom: 0.75rem;
   color: #7dd3fc;
@@ -157,22 +160,72 @@
   background: rgba(56,189,248,0.15) !important;
 }
 
-.sidebar__item-icon {
-  font-size: 0.9rem;
+/* Workspace avatar (initials) */
+.sidebar__ws-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: rgba(255,255,255,0.9);
   flex-shrink: 0;
+  letter-spacing: 0.04em;
+}
+
+/* Item body (name + creator) */
+.sidebar__item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
 }
 
 .sidebar__item-name {
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.sidebar__item-creator {
+  font-size: 0.65rem;
+  color: #475569;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__item:hover .sidebar__item-name { color: #f1f5f9; }
+.sidebar__item--active .sidebar__item-name { color: #f1f5f9 !important; }
+
+/* Type badge (emoji icon) */
+.sidebar__item-type-badge {
+  font-size: 0.78rem;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebar__item-icon {
+  font-size: 0.9rem;
+  flex-shrink: 0;
 }
 
 .sidebar__item-check {
   font-size: 0.7rem;
   color: #34d399;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 /* Loading dots */
@@ -252,7 +305,7 @@
   color: #93c5fd;
 }
 
-/* Modal error */
+/* ── Modal: error & actions ── */
 .sidebar__modal-error {
   background: #fef2f2;
   border: 1px solid #fca5a5;
@@ -267,7 +320,114 @@
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
-  margin-top: 1rem;
+  margin-top: 1.25rem;
+}
+
+.sidebar__required {
+  color: #dc2626;
+  margin-left: 0.15rem;
+}
+
+/* ── Type selector grid (3 cards in a row) ── */
+.ws-type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.ws-type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.65rem 0.4rem;
+  border-radius: 10px;
+  border: 1.5px solid #e5e7eb;
+  background: #f9fafb;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.ws-type-card:hover {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
+
+.ws-type-card--selected {
+  box-shadow: 0 0 0 2px currentColor;
+}
+
+.ws-type-card input[type="radio"] {
+  display: none;
+}
+
+.ws-type-card__icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.ws-type-card__label {
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: #374151;
+  letter-spacing: 0.01em;
+}
+
+/* ── Contextual hint ── */
+.ws-type-hint {
+  margin-top: 0.6rem;
+  font-size: 0.8rem;
+  color: #4b5563;
+  background: #f8fafc;
+  border-left: 3px solid #cbd5e1;
+  border-radius: 0 6px 6px 0;
+  padding: 0.45rem 0.7rem;
+  line-height: 1.5;
+}
+
+/* ── Name preview ── */
+.ws-name-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.ws-name-preview__avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: rgba(255,255,255,0.9);
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+}
+
+.ws-name-preview__text {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1e293b;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-name-preview__by {
+  font-size: 0.72rem;
+  color: #64748b;
+  flex-shrink: 0;
 }
 
 /* Scrollbar */

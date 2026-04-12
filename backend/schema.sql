@@ -9,9 +9,15 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Workspaces Table (Jira-like projects)
+-- workspace_type: STOCK       (linked to available finished products in xlsx stock),
+--                 PREPARATION (products being prepared, from xlsx but not yet ready),
+--                 RUPTURE     (products not in stock / out of stock / shortage)
 CREATE TABLE IF NOT EXISTS workspaces (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) UNIQUE NOT NULL,
+    workspace_type VARCHAR(20) NOT NULL DEFAULT 'STOCK',
+    planned_date DATE,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
