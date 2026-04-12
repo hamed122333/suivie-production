@@ -9,9 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Workspaces Table (Jira-like projects)
--- workspace_type: STOCK       (linked to available finished products in xlsx stock),
---                 PREPARATION (products being prepared, from xlsx but not yet ready),
---                 RUPTURE     (products not in stock / out of stock / shortage)
+-- workspace_type: STOCK       (linked to available finished products in xlsx stock — limited to stock data),
+--                 PREPARATION (planned for a later date, free-form orders not linked to stock import data),
+--                 RUPTURE     (very urgent orders requiring immediate tracking — free-form, urgent by default)
 CREATE TABLE IF NOT EXISTS workspaces (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) UNIQUE NOT NULL,

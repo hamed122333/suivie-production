@@ -26,11 +26,11 @@ const workspaceController = {
 
       if (type === 'PREPARATION') {
         if (!planned_date) {
-          return res.status(400).json({ error: 'La date de préparation est requise pour un espace En Préparation' });
+          return res.status(400).json({ error: 'La date de livraison prévue est requise pour un espace Planifié' });
         }
         const d = new Date(planned_date);
         if (isNaN(d.getTime())) {
-          return res.status(400).json({ error: 'La date de préparation est invalide' });
+          return res.status(400).json({ error: 'La date de livraison prévue est invalide' });
         }
       }
 

@@ -19,10 +19,10 @@ const WORKSPACE_TYPES = {
     avatarBg: '#065f46',
   },
   PREPARATION: {
-    icon: '🔄',
-    label: 'Préparation',
-    title: 'En Préparation',
-    description: 'Produits importés du fichier xlsx en cours de préparation (date de disponibilité à venir).',
+    icon: '📅',
+    label: 'Planifié',
+    title: 'Planifié',
+    description: 'Commandes planifiées pour une date ultérieure. Saisie libre, sans contrainte sur les données d\'import stock.',
     color: '#2563eb',
     bg: 'rgba(37,99,235,0.15)',
     badgeBg: 'rgba(37,99,235,0.2)',
@@ -31,9 +31,9 @@ const WORKSPACE_TYPES = {
   },
   RUPTURE: {
     icon: '🚨',
-    label: 'Rupture',
-    title: 'Rupture de Stock',
-    description: 'Produits absents du stock ou en rupture — commandes nécessitant une production urgente.',
+    label: 'Urgent',
+    title: 'Commandes Urgentes',
+    description: 'Commandes très urgentes nécessitant un suivi prioritaire immédiat. Saisie libre, priorité urgente par défaut.',
     color: '#dc2626',
     bg: 'rgba(220,38,38,0.15)',
     badgeBg: 'rgba(220,38,38,0.2)',
@@ -97,7 +97,7 @@ const Sidebar = ({ closeSidebar }) => {
       return;
     }
     if (form.type === 'PREPARATION' && !form.plannedDate) {
-      setError('La date de préparation est requise pour ce type d\'espace');
+      setError('La date de livraison prévue est requise pour ce type d\'espace');
       return;
     }
     setCreating(true);
@@ -287,8 +287,8 @@ const Sidebar = ({ closeSidebar }) => {
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   placeholder={
-                    form.type === 'RUPTURE' ? 'Ex: Rupture Semaine 42' :
-                    form.type === 'PREPARATION' ? 'Ex: Prépa Mai 2025' :
+                    form.type === 'RUPTURE' ? 'Ex: Urgences Semaine 42' :
+                    form.type === 'PREPARATION' ? 'Ex: Planifié Mai 2025' :
                     'Ex: Stock Ligne 1'
                   }
                   autoFocus
@@ -308,11 +308,11 @@ const Sidebar = ({ closeSidebar }) => {
                 )}
               </div>
 
-              {/* ── Date de préparation (PREPARATION uniquement) ── */}
+              {/* ── Date de planification (PREPARATION uniquement) ── */}
               {form.type === 'PREPARATION' && (
                 <div className="form-group">
                   <label>
-                    Date de disponibilité prévue <span className="sidebar__required">*</span>
+                    Date de livraison prévue <span className="sidebar__required">*</span>
                   </label>
                   <input
                     type="date"

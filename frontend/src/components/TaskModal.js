@@ -63,13 +63,17 @@ const TaskModal = ({
   users = [],
   canAssign = false,
   isCommercial = false,
+  workspaceType = 'STOCK',
 }) => {
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(() => ({
+    ...EMPTY_FORM,
+    priority: workspaceType === 'RUPTURE' ? 'URGENT' : 'MEDIUM',
+  }));
   const [lines, setLines] = useState([EMPTY_LINE]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Stock import state (commercial create mode)
+  // Stock import state (commercial + STOCK workspace create mode)
   const [stockArticles, setStockArticles] = useState([]);
   const [stockLoading, setStockLoading] = useState(false);
   const [selectedArticleIds, setSelectedArticleIds] = useState(new Set());
@@ -103,21 +107,21 @@ const TaskModal = ({
       return;
     }
 
-    setForm(EMPTY_FORM);
+    setForm((f) => ({ ...EMPTY_FORM, priority: workspaceType === 'RUPTURE' ? 'URGENT' : f.priority }));
     setLines([EMPTY_LINE]);
     setError('');
-  }, [task]);
+  }, [task, workspaceType]);
 
-  // Load stock import articles when commercial opens the create modal
+  // Load stock import articles only for STOCK workspace (commercial create mode)
   useEffect(() => {
-    if (!isCommercial || isEditing) return;
+    if (!isCommercial || isEditing || workspaceType !== 'STOCK') return;
     setStockLoading(true);
     stockImportAPI
       .getAll()
       .then((res) => setStockArticles(res.data || []))
       .catch(() => setStockArticles([]))
       .finally(() => setStockLoading(false));
-  }, [isCommercial, isEditing]);
+  }, [isCommercial, isEditing, workspaceType]);
 
   const assignableUsers = useMemo(
     () =>
@@ -282,7 +286,7 @@ const TaskModal = ({
     }
   };
 
-  if (!isEditing && isCommercial) {
+  if (!isEditing && isCommercial && workspaceType === 'STOCK') {
     // Commercial create mode: show imported articles list
     return (
       <div className="modal-overlay task-modal-classic-overlay" onClick={onClose}>
@@ -463,21 +467,45 @@ const TaskModal = ({
   }
 
   if (!isEditing) {
+    const isUrgentMode = isCommercial && workspaceType === 'RUPTURE';
+    const isPlanningMode = isCommercial && workspaceType === 'PREPARATION';
+
+    const modalTitle = isUrgentMode
+      ? '🚨 Commande urgente'
+      : isPlanningMode
+      ? '📅 Commande planifiée'
+      : 'Saisir une commande client';
+
+    const submitLabel = saving
+      ? 'Création…'
+      : isUrgentMode
+      ? '🚨 Créer commande urgente'
+      : isPlanningMode
+      ? '📅 Créer commande planifiée'
+      : 'Créer la commande';
+
     return (
       <div className="modal-overlay task-modal-classic-overlay" onClick={onClose}>
         <div
-          className="modal-content task-modal-classic"
+          className={`modal-content task-modal-classic${isUrgentMode ? ' task-modal-classic--urgent' : ''}`}
           onClick={(event) => event.stopPropagation()}
           role="dialog"
           aria-modal="true"
-          aria-label="Saisir une commande client"
+          aria-label={modalTitle}
         >
-          <div className="modal-header task-modal-classic__header">
+          <div
+            className="modal-header task-modal-classic__header"
+            style={isUrgentMode ? { borderBottom: '2px solid rgba(220,38,38,0.3)' } : undefined}
+          >
             <div className="task-modal-classic__title-wrap">
-              <span className="task-modal-classic__title-mark" aria-hidden>
-                +
+              <span
+                className="task-modal-classic__title-mark"
+                aria-hidden
+                style={isUrgentMode ? { background: 'rgba(220,38,38,0.12)', color: '#dc2626' } : isPlanningMode ? { background: 'rgba(37,99,235,0.12)', color: '#2563eb' } : undefined}
+              >
+                {isUrgentMode ? '🚨' : isPlanningMode ? '📅' : '+'}
               </span>
-              <h3 className="modal-title task-modal-classic__title">Saisir une commande client</h3>
+              <h3 className="modal-title task-modal-classic__title">{modalTitle}</h3>
             </div>
             <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
               ✕
@@ -486,6 +514,20 @@ const TaskModal = ({
 
           <form className="task-modal-classic__form" onSubmit={handleSubmit}>
             {error && <div className="task-modal__error">{error}</div>}
+
+            {/* Workspace type banner */}
+            {isUrgentMode && (
+              <div className="task-modal-ws-banner task-modal-ws-banner--urgent">
+                <span className="task-modal-ws-banner__icon">⚠️</span>
+                <span>Espace <strong>Commandes Urgentes</strong> — Priorité urgente appliquée par défaut. Ces commandes nécessitent un traitement immédiat.</span>
+              </div>
+            )}
+            {isPlanningMode && (
+              <div className="task-modal-ws-banner task-modal-ws-banner--planning">
+                <span className="task-modal-ws-banner__icon">📅</span>
+                <span>Espace <strong>Planifié</strong> — Commandes libres pour livraisons futures, sans contrainte sur les données d'import stock.</span>
+              </div>
+            )}
 
             <div className="form-group task-modal-classic__group">
               <label>Nom du client</label>
@@ -508,7 +550,7 @@ const TaskModal = ({
                     <textarea
                       value={line}
                       onChange={(event) => updateLine(index, event.target.value)}
-                      placeholder="Ex: ci2682(6p) - dv0275(1p) + plso380580(4p) OU ci0157 le 25-03-26"
+                      placeholder={isUrgentMode ? 'Ex: Livraison urgente - réf. ci2682 pour client X' : isPlanningMode ? 'Ex: Commande planifiée - réf. ci2682 pour livraison Mai 2025' : 'Ex: ci2682(6p) - dv0275(1p) + plso380580(4p) OU ci0157 le 25-03-26'}
                       rows={2}
                     />
                     {lines.length > 1 && (
@@ -535,7 +577,7 @@ const TaskModal = ({
             </div>
 
             <div className="form-group task-modal-classic__group">
-              <label>Niveau de priorite</label>
+              <label>Niveau de priorité</label>
               <select value={form.priority} onChange={updateForm('priority')}>
                 {CREATE_PRIORITY_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -549,8 +591,13 @@ const TaskModal = ({
               <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
                 Annuler
               </button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>
-                {saving ? 'Creation...' : 'Creer la commande'}
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={isUrgentMode ? { background: '#dc2626', borderColor: '#dc2626' } : isPlanningMode ? { background: '#2563eb', borderColor: '#2563eb' } : undefined}
+                disabled={saving}
+              >
+                {submitLabel}
               </button>
             </div>
           </form>

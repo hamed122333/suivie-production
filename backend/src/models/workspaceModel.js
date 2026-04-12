@@ -1,8 +1,8 @@
 const pool = require('../config/db');
 
 // STOCK       : linked to available finished products (xlsx import, ready)
-// PREPARATION : products being prepared (xlsx import, not yet ready) — requires planned_date
-// RUPTURE     : products not in stock / out of stock / shortage
+// PREPARATION : planned for a later date — free-form orders, not linked to stock import data (requires planned_date)
+// RUPTURE     : very urgent orders that need immediate tracking — free-form, priority URGENT by default
 const VALID_TYPES = ['STOCK', 'PREPARATION', 'RUPTURE'];
 
 const WorkspaceModel = {
