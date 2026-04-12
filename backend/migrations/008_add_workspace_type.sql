@@ -1,7 +1,6 @@
--- Add workspace type and planned date to support 3 types of workspaces:
--- STANDARD : limited and linked to the finished products list
--- PLANNED  : planned for a future date, not limited/linked to stock data
--- URGENT   : for very urgent orders, dedicated space
+-- Add workspace type and planned date.
+-- Note: types STANDARD/PLANNED/URGENT were later renamed to STOCK/PREPARATION/RUPTURE
+-- by migration 009_workspace_creator_and_types.sql.
 
 BEGIN;
 

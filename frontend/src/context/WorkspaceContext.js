@@ -78,8 +78,8 @@ export const WorkspaceProvider = ({ children }) => {
 
   const createWorkspace = useCallback(
     async ({ name, type, plannedDate }) => {
-      const payload = { name, workspace_type: type || 'STANDARD' };
-      if (type === 'PLANNED' && plannedDate) payload.planned_date = plannedDate;
+      const payload = { name, workspace_type: type || 'STOCK' };
+      if (type === 'PREPARATION' && plannedDate) payload.planned_date = plannedDate;
       const res = await workspaceAPI.create(payload);
       await refreshWorkspaces();
       selectWorkspace(res.data.id);
