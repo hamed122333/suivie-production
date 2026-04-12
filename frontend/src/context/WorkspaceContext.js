@@ -77,8 +77,8 @@ export const WorkspaceProvider = ({ children }) => {
   }, []);
 
   const createWorkspace = useCallback(
-    async (name) => {
-      const res = await workspaceAPI.create({ name });
+    async ({ name, type }) => {
+      const res = await workspaceAPI.create({ name, type });
       await refreshWorkspaces();
       selectWorkspace(res.data.id);
       return res.data;
@@ -94,11 +94,17 @@ export const WorkspaceProvider = ({ children }) => {
     return isNaN(n) ? null : n;
   }, [workspaceId]);
 
+  const activeWorkspace = useMemo(() => {
+    if (!resolvedWorkspaceId || resolvedWorkspaceId === 'all') return null;
+    return workspaces.find((ws) => ws.id === resolvedWorkspaceId) || null;
+  }, [resolvedWorkspaceId, workspaces]);
+
   return (
     <WorkspaceContext.Provider
       value={{
         workspaces: workspacesWithAll,
         workspaceId: resolvedWorkspaceId,
+        activeWorkspace,
         selectWorkspace,
         createWorkspace,
         refreshWorkspaces,

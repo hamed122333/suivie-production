@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { getInitials } from '../utils/formatters';
+import { WORKSPACE_TYPE_CONFIG, WORKSPACE_TYPE_OPTIONS, WORKSPACE_TYPES } from '../constants/workspace';
 import './Sidebar.css';
 
 const WORKSPACE_ICONS = ['●', '○', '◎', '◉', '◌', '◍', '⚙'];
@@ -25,6 +26,7 @@ const Sidebar = ({ closeSidebar }) => {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
+  const [type, setType] = useState(WORKSPACE_TYPES.STOCK);
 
   const activeId = workspaceId ? String(workspaceId) : '';
   const roleInfo = getRoleLabel(user?.role);
@@ -39,9 +41,10 @@ const Sidebar = ({ closeSidebar }) => {
     }
     setCreating(true);
     try {
-      await createWorkspace(trimmed);
+      await createWorkspace({ name: trimmed, type });
       setCreateOpen(false);
       setName('');
+      setType(WORKSPACE_TYPES.STOCK);
     } catch (err) {
       setError(err?.response?.data?.error || 'Impossible de créer l\'espace');
     } finally {
@@ -100,6 +103,7 @@ const Sidebar = ({ closeSidebar }) => {
             const active = id === activeId;
             const isAll = ws.id === 'all';
             const icon = isAll ? '⌂' : WORKSPACE_ICONS[(idx - (isAll ? 0 : 1)) % WORKSPACE_ICONS.length];
+            const typeInfo = WORKSPACE_TYPE_CONFIG[ws.type];
             return (
               <button
                 type="button"
@@ -112,6 +116,7 @@ const Sidebar = ({ closeSidebar }) => {
               >
                 <span className="sidebar__item-icon">{icon}</span>
                 <span className="sidebar__item-name">{ws.name}</span>
+                {typeInfo && <span className="sidebar__item-badge" style={{ background: typeInfo.bg, color: typeInfo.color }}>{typeInfo.badge}</span>}
                 {active && <span className="sidebar__item-check">✓</span>}
               </button>
             );
@@ -146,7 +151,7 @@ const Sidebar = ({ closeSidebar }) => {
           <div className="modal-content sidebar-modal">
             <div className="modal-header">
               <h3 className="modal-title">⊞ Nouvel espace</h3>
-              <button type="button" className="modal-close" onClick={() => { setCreateOpen(false); setError(''); setName(''); }}>
+              <button type="button" className="modal-close" onClick={() => { setCreateOpen(false); setError(''); setName(''); setType(WORKSPACE_TYPES.STOCK); }}>
                 ✕
               </button>
             </div>
@@ -165,8 +170,32 @@ const Sidebar = ({ closeSidebar }) => {
                   required
                 />
               </div>
+              <div className="form-group">
+                <label>Type d'espace</label>
+                <div className="sidebar__type-list">
+                  {WORKSPACE_TYPE_OPTIONS.map((option) => {
+                    const info = WORKSPACE_TYPE_CONFIG[option.value];
+                    const isSelected = type === option.value;
+                    return (
+                      <label key={option.value} className={`sidebar__type-option ${isSelected ? 'sidebar__type-option--active' : ''}`}>
+                        <input
+                          type="radio"
+                          name="workspace-type"
+                          value={option.value}
+                          checked={isSelected}
+                          onChange={(e) => setType(e.target.value)}
+                        />
+                        <div>
+                          <div className="sidebar__type-option-title">{option.label}</div>
+                          <div className="sidebar__type-option-desc">{info.description}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
               <div className="sidebar__modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => { setCreateOpen(false); setError(''); setName(''); }}>
+                <button type="button" className="btn btn-secondary" onClick={() => { setCreateOpen(false); setError(''); setName(''); setType(WORKSPACE_TYPES.STOCK); }}>
                   Annuler
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={creating}>

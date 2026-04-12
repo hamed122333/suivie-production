@@ -15,7 +15,7 @@ const KanbanPage = () => {
   const [priorityFilter, setPriorityFilter] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
   const { isPlanner } = useAuth();
-  const { workspaceId, loadingWorkspaces } = useWorkspace();
+  const { workspaceId, loadingWorkspaces, activeWorkspace } = useWorkspace();
 
   const fetchTasks = useCallback(
     async (wsId) => {
@@ -109,6 +109,7 @@ const KanbanPage = () => {
         setTasks={setTasks}
         users={users}
         workspaceId={workspaceId}
+        workspace={activeWorkspace}
         filterQuery={search}
         filterPriority={priorityFilter}
         onTasksChange={() => fetchTasks(workspaceId)}

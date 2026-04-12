@@ -1,0 +1,19 @@
+const WORKSPACE_TYPES = {
+  STOCK: 'STOCK',
+  PREPARATION: 'PREPARATION',
+  RUPTURE: 'RUPTURE',
+};
+
+const WORKSPACE_TYPE_LIST = Object.values(WORKSPACE_TYPES);
+
+const WORKSPACE_TYPE_LABELS = {
+  [WORKSPACE_TYPES.STOCK]: 'Stock produits finis',
+  [WORKSPACE_TYPES.PREPARATION]: 'Preparation planifiee',
+  [WORKSPACE_TYPES.RUPTURE]: 'Rupture / Urgence',
+};
+
+module.exports = {
+  WORKSPACE_TYPES,
+  WORKSPACE_TYPE_LIST,
+  WORKSPACE_TYPE_LABELS,
+};

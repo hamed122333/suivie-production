@@ -2,7 +2,9 @@ const TaskModel = require('../models/taskModel');
 const TaskCommentModel = require('../models/taskCommentModel');
 const TaskHistoryModel = require('../models/taskHistoryModel');
 const StockImportModel = require('../models/stockImportModel');
+const WorkspaceModel = require('../models/workspaceModel');
 const { TASK_STATUSES, TASK_STATUS_LABELS, TRACKED_TASK_FIELDS } = require('../constants/task');
+const { WORKSPACE_TYPES } = require('../constants/workspace');
 const { createHttpError, isHttpError } = require('../utils/httpErrors');
 const { applyTaskVisibility, buildTaskFilters, canAccessTask, parseWorkspaceId } = require('../utils/taskScope');
 const { normalizeCommentBody, normalizeTaskBatch, normalizeTaskDraft, normalizeTaskUpdatePayload } = require('../utils/taskValidation');
@@ -66,6 +68,40 @@ function buildUpdateHistoryEntries(beforeTask, payload, actorId) {
       };
     })
     .filter(Boolean);
+}
+
+async function loadWorkspaceOrFail(workspaceId) {
+  const workspace = await WorkspaceModel.findById(workspaceId);
+  if (!workspace) {
+    throw createHttpError(404, 'Espace introuvable');
+  }
+  return workspace;
+}
+
+function applyWorkspaceTypeRules(tasks, workspace) {
+  return tasks.map((task) => {
+    const normalized = { ...task, taskType: workspace.type };
+
+    if (workspace.type === WORKSPACE_TYPES.STOCK) {
+      if (task.stockImportId == null) {
+        throw createHttpError(400, 'Cet espace est limite aux produits finis importes.');
+      }
+    } else {
+      normalized.stockImportId = null;
+    }
+
+    if (workspace.type === WORKSPACE_TYPES.PREPARATION) {
+      if (!task.plannedDate) {
+        throw createHttpError(400, 'La date planifiee est obligatoire pour cet espace.');
+      }
+    }
+
+    if (workspace.type === WORKSPACE_TYPES.RUPTURE) {
+      normalized.priority = 'URGENT';
+    }
+
+    return normalized;
+  });
 }
 
 const taskController = {
@@ -192,8 +228,11 @@ const taskController = {
         throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
       }
 
+      const workspace = await loadWorkspaceOrFail(workspaceId);
+      const [preparedTask] = applyWorkspaceTypeRules([taskInput], workspace);
+
       const task = await TaskModel.create({
-        ...taskInput,
+        ...preparedTask,
         createdBy: req.user.id,
         workspaceId,
         status: 'TODO',
@@ -222,8 +261,11 @@ const taskController = {
         throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
       }
 
+      const workspace = await loadWorkspaceOrFail(workspaceId);
+      const preparedTasks = applyWorkspaceTypeRules(tasks, workspace);
+
       const createdTasks = await TaskModel.createMany({
-        tasks,
+        tasks: preparedTasks,
         createdBy: req.user.id,
         workspaceId,
         status: 'TODO',

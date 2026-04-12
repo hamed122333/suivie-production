@@ -175,6 +175,15 @@
   font-weight: 700;
 }
 
+.sidebar__item-badge {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* Loading dots */
 .sidebar__loading {
   display: flex;
@@ -250,6 +259,45 @@
 .sidebar__nav-link--active {
   background: rgba(37,99,235,0.18);
   color: #93c5fd;
+}
+
+.sidebar__type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sidebar__type-option {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.sidebar__type-option input {
+  margin-top: 0.35rem;
+}
+
+.sidebar__type-option-title {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
+.sidebar__type-option-desc {
+  color: #475569;
+  font-size: 0.8rem;
+  margin-top: 0.15rem;
+}
+
+.sidebar__type-option--active {
+  border-color: #2563eb;
+  box-shadow: 0 4px 12px rgba(37,99,235,0.12);
+  background: #eef2ff;
 }
 
 /* Modal error */

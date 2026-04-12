@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TASK_PRIORITY_OPTIONS } from '../constants/task';
+import { WORKSPACE_TYPES } from '../constants/workspace';
 import { stockImportAPI } from '../services/api';
 import './TaskModal.css';
 
@@ -63,11 +64,18 @@ const TaskModal = ({
   users = [],
   canAssign = false,
   isCommercial = false,
+  workspaceType = WORKSPACE_TYPES.STOCK,
 }) => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [lines, setLines] = useState([EMPTY_LINE]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const currentWorkspaceType = workspaceType || task?.workspace_type || WORKSPACE_TYPES.STOCK;
+  const isStockWorkspace = currentWorkspaceType === WORKSPACE_TYPES.STOCK;
+  const isPreparationWorkspace = currentWorkspaceType === WORKSPACE_TYPES.PREPARATION;
+  const isRuptureWorkspace = currentWorkspaceType === WORKSPACE_TYPES.RUPTURE;
+  const creationPriorityOptions = isRuptureWorkspace ? [{ value: 'URGENT', label: 'Urgente' }] : CREATE_PRIORITY_OPTIONS;
 
   // Stock import state (commercial create mode)
   const [stockArticles, setStockArticles] = useState([]);
@@ -83,7 +91,7 @@ const TaskModal = ({
       setForm({
         title: task.title || '',
         description: task.description || '',
-        priority: task.priority || 'MEDIUM',
+        priority: isRuptureWorkspace ? 'URGENT' : task.priority || 'MEDIUM',
         clientName: task.client_name || '',
         orderCode: task.order_code || '',
         itemReference: task.item_reference || '',
@@ -103,21 +111,27 @@ const TaskModal = ({
       return;
     }
 
-    setForm(EMPTY_FORM);
+    setForm({
+      ...EMPTY_FORM,
+      priority: isRuptureWorkspace ? 'URGENT' : 'MEDIUM',
+      plannedDate: isPreparationWorkspace ? '' : '',
+    });
     setLines([EMPTY_LINE]);
     setError('');
-  }, [task]);
+    setSelectedArticleIds(new Set());
+    setRequestedQuantities({});
+  }, [task, isRuptureWorkspace, isPreparationWorkspace]);
 
   // Load stock import articles when commercial opens the create modal
   useEffect(() => {
-    if (!isCommercial || isEditing) return;
+    if (!isCommercial || isEditing || !isStockWorkspace) return;
     setStockLoading(true);
     stockImportAPI
       .getAll()
       .then((res) => setStockArticles(res.data || []))
       .catch(() => setStockArticles([]))
       .finally(() => setStockLoading(false));
-  }, [isCommercial, isEditing]);
+  }, [isCommercial, isEditing, isStockWorkspace]);
 
   const assignableUsers = useMemo(
     () =>
@@ -126,6 +140,14 @@ const TaskModal = ({
         .sort((left, right) => left.name.localeCompare(right.name, 'fr')),
     [users]
   );
+
+  useEffect(() => {
+    if (!isStockWorkspace) {
+      setStockArticles([]);
+      setSelectedArticleIds(new Set());
+      setRequestedQuantities({});
+    }
+  }, [isStockWorkspace]);
 
   const validLineCount = useMemo(
     () =>
@@ -197,7 +219,14 @@ const TaskModal = ({
     setSaving(true);
 
     try {
+      const effectivePriority = isRuptureWorkspace ? 'URGENT' : form.priority;
+      const plannedDateValue = isPreparationWorkspace ? form.plannedDate : form.plannedDate || '';
+
       if (isEditing) {
+        if (isPreparationWorkspace && !plannedDateValue) {
+          throw new Error('La date planifiee est obligatoire pour cet espace.');
+        }
+
         if (!form.title.trim()) {
           throw new Error('Le titre de la fiche est obligatoire.');
         }
@@ -205,14 +234,14 @@ const TaskModal = ({
         await onSave({
           title: form.title.trim(),
           description: normalizeOptionalString(form.description),
-          priority: form.priority,
+          priority: effectivePriority,
           clientName: normalizeOptionalString(form.clientName),
           orderCode: normalizeOptionalString(form.orderCode),
           itemReference: normalizeOptionalString(form.itemReference),
           quantity: normalizeOptionalNumber(form.quantity),
           quantityUnit: normalizeOptionalString(form.quantityUnit) || 'pcs',
           dueDate: form.dueDate || null,
-          plannedDate: form.plannedDate || null,
+          plannedDate: plannedDateValue || null,
           productionLine: normalizeOptionalString(form.productionLine),
           machine: normalizeOptionalString(form.machine),
           workshop: normalizeOptionalString(form.workshop),
@@ -220,7 +249,7 @@ const TaskModal = ({
           expectedAction: normalizeOptionalString(form.expectedAction),
           ...(canAssign ? { assignedTo: form.assignedTo || null } : {}),
         });
-      } else if (isCommercial) {
+      } else if (isCommercial && isStockWorkspace) {
         // Commercial create mode: tasks from selected stock import articles
         const clientName = `${form.clientName || ''}`.trim();
         if (!clientName) {
@@ -237,7 +266,7 @@ const TaskModal = ({
           return {
             title: `${article.article} — ${clientName}`,
             description: `Réf. ${article.article} · ${reqQty} pcs commandés (Stock initial: ${Number(article.quantity)} pcs importées le ${new Date(article.imported_at).toLocaleDateString('fr-FR')})`,
-            priority: form.priority,
+            priority: effectivePriority,
             clientName,
             itemReference: article.article,
             quantity: reqQty,
@@ -266,13 +295,21 @@ const TaskModal = ({
           throw new Error('Le nom du client est obligatoire.');
         }
 
+        if (isPreparationWorkspace && !plannedDateValue) {
+          throw new Error('Ajoute une date planifiee pour cet espace.');
+        }
+
         if (preparedTasks.length === 0) {
           throw new Error('Ajoute au moins une ligne d article.');
         }
 
         await onSave({
           status: defaultStatus,
-          tasks: preparedTasks,
+          tasks: preparedTasks.map((task) => ({
+            ...task,
+            priority: effectivePriority,
+            ...(isPreparationWorkspace ? { plannedDate: plannedDateValue || null } : {}),
+          })),
         });
       }
     } catch (err) {
@@ -306,6 +343,17 @@ const TaskModal = ({
           <form className="task-modal-classic__form" onSubmit={handleSubmit}>
             {error && <div className="task-modal__error">{error}</div>}
 
+            {isRuptureWorkspace && (
+              <div className="task-modal__alert task-modal__alert--danger">
+                Commandes tres urgentes : la priorite est forcee a Urgente.
+              </div>
+            )}
+            {isPreparationWorkspace && (
+              <div className="task-modal__alert task-modal__alert--warning">
+                Espace de preparation : ajoute une date planifiee pour chaque demande.
+              </div>
+            )}
+
             <div className="form-group task-modal-classic__group">
               <label>Nom du client</label>
               <input
@@ -319,8 +367,8 @@ const TaskModal = ({
 
             <div className="form-group task-modal-classic__group">
               <label>Niveau de priorité</label>
-              <select value={form.priority} onChange={updateForm('priority')}>
-                {CREATE_PRIORITY_OPTIONS.map((option) => (
+              <select value={form.priority} onChange={updateForm('priority')} disabled={isRuptureWorkspace}>
+                {creationPriorityOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -498,6 +546,19 @@ const TaskModal = ({
               />
             </div>
 
+            {isPreparationWorkspace && (
+              <div className="form-group task-modal-classic__group">
+                <label>Date planifiee</label>
+                <input
+                  type="date"
+                  value={form.plannedDate}
+                  onChange={updateForm('plannedDate')}
+                  required
+                />
+                <p className="task-modal-classic__hint">Obligatoire pour les espaces de preparation.</p>
+              </div>
+            )}
+
             <div className="form-group task-modal-classic__group">
               <label>
                 Lignes d articles / consignes <span className="task-modal-classic__label-hint">(1 ligne = 1 carte kanban)</span>
@@ -536,8 +597,8 @@ const TaskModal = ({
 
             <div className="form-group task-modal-classic__group">
               <label>Niveau de priorite</label>
-              <select value={form.priority} onChange={updateForm('priority')}>
-                {CREATE_PRIORITY_OPTIONS.map((option) => (
+              <select value={form.priority} onChange={updateForm('priority')} disabled={isRuptureWorkspace}>
+                {creationPriorityOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -590,8 +651,13 @@ const TaskModal = ({
           </div>
 
           <div className="form-group task-modal-classic__group">
+            <label>Date planifiee</label>
+            <input type="date" value={form.plannedDate} onChange={updateForm('plannedDate')} required={isPreparationWorkspace} />
+          </div>
+
+          <div className="form-group task-modal-classic__group">
             <label>Niveau de priorite</label>
-            <select value={form.priority} onChange={updateForm('priority')}>
+            <select value={form.priority} onChange={updateForm('priority')} disabled={isRuptureWorkspace}>
               {TASK_PRIORITY_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}

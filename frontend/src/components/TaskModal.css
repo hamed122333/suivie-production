@@ -65,6 +65,12 @@
   text-transform: none;
 }
 
+.task-modal-classic__hint {
+  margin-top: 0.25rem;
+  color: #6b7280;
+  font-size: 0.82rem;
+}
+
 .task-modal-classic__lines {
   display: flex;
   flex-direction: column;
@@ -241,6 +247,27 @@
   padding: 0.8rem 0.95rem;
   border-radius: 14px;
   margin-bottom: 1rem;
+}
+
+.task-modal__alert {
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  margin-bottom: 0.85rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.task-modal__alert--warning {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #9a3412;
+}
+
+.task-modal__alert--danger {
+  background: #fef2f2;
+  border-color: #fecdd3;
+  color: #b91c1c;
 }
 
 .task-modal__section {

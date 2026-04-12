@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, TASK_STATUS_OPTIONS } from '../constants/task';
+import { WORKSPACE_TYPE_CONFIG } from '../constants/workspace';
 import { taskAPI } from '../services/api';
 import { formatDate, formatDateTime, formatNumber, formatRelativeDate, getInitials } from '../utils/formatters';
 import './TaskDetailsPanel.css';
@@ -20,6 +21,7 @@ const DETAIL_FIELDS = [
   { key: 'workshop', label: 'Atelier' },
   { key: 'assigned_to_name', label: 'Responsable' },
   { key: 'workspace_name', label: 'Espace' },
+  { key: 'workspace_type', label: 'Type espace', render: (task) => WORKSPACE_TYPE_CONFIG[task.workspace_type]?.label },
 ];
 
 const TaskDetailsPanel = ({

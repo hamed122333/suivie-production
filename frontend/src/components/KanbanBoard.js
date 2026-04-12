@@ -4,6 +4,7 @@ import TaskCard from './TaskCard';
 import TaskDetailsPanel from './TaskDetailsPanel';
 import TaskModal from './TaskModal';
 import { TASK_STATUS_CONFIG, TASK_STATUS_ORDER } from '../constants/task';
+import { resolveWorkspaceType, WORKSPACE_TYPES, WORKSPACE_TYPE_CONFIG } from '../constants/workspace';
 import { useAuth } from '../context/AuthContext';
 import { taskAPI } from '../services/api';
 import './KanbanBoard.css';
@@ -90,6 +91,7 @@ const KanbanBoard = ({
   users = [],
   onTasksChange,
   workspaceId,
+  workspace,
   filterQuery = '',
   filterPriority = '',
   onStatsRefresh,
@@ -106,6 +108,9 @@ const KanbanBoard = ({
   const errorTimeoutRef = useRef(null);
 
   const isAllWorkspaces = workspaceId === 'all';
+  const workspaceType = workspace ? resolveWorkspaceType(workspace) : WORKSPACE_TYPES.STOCK;
+  const workspaceTypeInfo = workspace ? WORKSPACE_TYPE_CONFIG[workspaceType] : null;
+  const canCreateInWorkspace = canCreateTask && !isAllWorkspaces && Boolean(workspaceId);
   const deferredQuery = useDeferredValue(filterQuery);
 
   const visibleTaskIds = useMemo(() => {
@@ -288,8 +293,13 @@ const KanbanBoard = ({
           </nav>
           <h2 className="kanban-board__title">Tableau de suivi</h2>
           <p className="kanban-board__hint">{roleHint}</p>
+          {!isAllWorkspaces && workspaceTypeInfo && (
+            <div className="kanban-board__workspace-tag" style={{ background: workspaceTypeInfo.bg, color: workspaceTypeInfo.color }}>
+              {workspaceTypeInfo.label}
+            </div>
+          )}
         </div>
-        {canCreateTask && !isAllWorkspaces && (
+        {canCreateInWorkspace && (
           <button
             type="button"
             className="btn btn-primary kanban-board__cta"
@@ -370,7 +380,7 @@ const KanbanBoard = ({
                 )}
               </div>
 
-              {canCreateTask && !isAllWorkspaces && column.id === 'TODO' && (
+              {canCreateInWorkspace && column.id === 'TODO' && (
                 <button
                   type="button"
                   className="kanban-column__create"
@@ -394,6 +404,7 @@ const KanbanBoard = ({
           users={users}
           canAssign={canChangeStatus}
           isCommercial={isCommercial}
+          workspaceType={workspaceType}
           onSave={handleSaveTask}
           onClose={() => {
             setShowTaskModal(false);

@@ -47,6 +47,16 @@
   max-width: 42rem;
 }
 
+.kanban-board__workspace-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.4rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.78rem;
+}
+
 .kanban-board__cta {
   white-space: nowrap;
 }

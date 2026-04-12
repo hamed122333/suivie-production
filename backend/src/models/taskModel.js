@@ -23,6 +23,7 @@ const taskBaseSelect = `
   SELECT
     t.*,
     w.name AS workspace_name,
+    w.type AS workspace_type,
     assigned.name AS assigned_to_name,
     created.name AS created_by_name,
     blocked.name AS blocked_by_name
