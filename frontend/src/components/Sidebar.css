@@ -270,6 +270,119 @@
   margin-top: 1rem;
 }
 
+/* Type selector */
+.sidebar__type-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.sidebar__type-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1.5px solid #e5e7eb;
+  background: #f9fafb;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: #374151;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.sidebar__type-option input[type="radio"] {
+  accent-color: #2563eb;
+  flex-shrink: 0;
+}
+
+.sidebar__type-option--selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.sidebar__type-option--urgent.sidebar__type-option--selected {
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.sidebar__type-option--planned.sidebar__type-option--selected {
+  border-color: #0052cc;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+/* Type hint */
+.sidebar__type-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+  color: #4b5563;
+  background: #f3f4f6;
+  border-radius: 6px;
+  padding: 0.4rem 0.65rem;
+  line-height: 1.45;
+}
+
+.sidebar__type-hint--urgent {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* Required asterisk */
+.sidebar__required {
+  color: #dc2626;
+  margin-left: 0.15rem;
+}
+
+/* Urgent button style */
+.btn-urgent {
+  background: #dc2626 !important;
+  border-color: #dc2626 !important;
+}
+.btn-urgent:hover {
+  background: #b91c1c !important;
+  border-color: #b91c1c !important;
+}
+
+/* Workspace type badges in list */
+.sidebar__item-type-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.1rem 0.38rem;
+  border-radius: 99px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.sidebar__item-type-badge--urgent {
+  background: rgba(220, 38, 38, 0.2);
+  color: #fca5a5;
+}
+
+.sidebar__item-type-badge--planned {
+  background: rgba(37, 99, 235, 0.2);
+  color: #93c5fd;
+}
+
+/* Urgent workspace item styling */
+.sidebar__item--urgent {
+  border-left: 2px solid rgba(220, 38, 38, 0.6);
+}
+
+.sidebar__item--urgent.sidebar__item--active {
+  background: rgba(220, 38, 38, 0.18) !important;
+  color: #fca5a5 !important;
+}
+
+.sidebar__item--planned {
+  border-left: 2px solid rgba(37, 99, 235, 0.4);
+}
+
 /* Scrollbar */
 .sidebar::-webkit-scrollbar { width: 4px; }
 .sidebar::-webkit-scrollbar-track { background: transparent; }

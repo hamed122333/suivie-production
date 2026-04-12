@@ -9,9 +9,14 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Workspaces Table (Jira-like projects)
+-- workspace_type: STANDARD (limited, linked to finished products),
+--                 PLANNED  (planned for a future date, not limited),
+--                 URGENT   (dedicated space for very urgent orders)
 CREATE TABLE IF NOT EXISTS workspaces (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) UNIQUE NOT NULL,
+    workspace_type VARCHAR(20) NOT NULL DEFAULT 'STANDARD',
+    planned_date DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
