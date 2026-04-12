@@ -1,4 +1,4 @@
-import React, { startTransition, useCallback, useEffect, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import KanbanBoard from '../components/KanbanBoard';
 import KanbanToolbar from '../components/KanbanToolbar';
@@ -15,7 +15,13 @@ const KanbanPage = () => {
   const [priorityFilter, setPriorityFilter] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
   const { isPlanner } = useAuth();
-  const { workspaceId, loadingWorkspaces } = useWorkspace();
+  const { workspaceId, loadingWorkspaces, workspaces } = useWorkspace();
+
+  const currentWorkspace = useMemo(
+    () => workspaces.find((w) => w.id === workspaceId) || null,
+    [workspaces, workspaceId]
+  );
+  const workspaceType = currentWorkspace?.workspace_type || 'STOCK';
 
   const fetchTasks = useCallback(
     async (wsId) => {
@@ -109,6 +115,7 @@ const KanbanPage = () => {
         setTasks={setTasks}
         users={users}
         workspaceId={workspaceId}
+        workspaceType={workspaceType}
         filterQuery={search}
         filterPriority={priorityFilter}
         onTasksChange={() => fetchTasks(workspaceId)}

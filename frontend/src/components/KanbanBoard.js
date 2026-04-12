@@ -84,12 +84,19 @@ function taskMatchesFilters(task, filterQuery, filterPriority) {
     .some((value) => String(value).toLowerCase().includes(query));
 }
 
+const WORKSPACE_TYPE_CONFIG = {
+  STOCK:       { icon: '📦', label: 'En Stock',           color: '#059669' },
+  PREPARATION: { icon: '📅', label: 'Planifié',           color: '#2563eb' },
+  RUPTURE:     { icon: '🚨', label: 'Commandes Urgentes', color: '#dc2626' },
+};
+
 const KanbanBoard = ({
   tasks,
   setTasks,
   users = [],
   onTasksChange,
   workspaceId,
+  workspaceType = 'STOCK',
   filterQuery = '',
   filterPriority = '',
   onStatsRefresh,
@@ -267,6 +274,16 @@ const KanbanBoard = ({
     }
   };
 
+  const wsTypeCfg = WORKSPACE_TYPE_CONFIG[workspaceType] || WORKSPACE_TYPE_CONFIG.STOCK;
+
+  const ctaLabel = isCommercial
+    ? workspaceType === 'RUPTURE'
+      ? '🚨 Nouvelle commande urgente'
+      : workspaceType === 'PREPARATION'
+      ? '📅 Nouvelle commande planifiée'
+      : '+ Nouvelle commande client'
+    : '+ Nouvelle fiche';
+
   const roleHint = isAllWorkspaces
     ? 'Vue transverse sur tous les espaces de production.'
     : canChangeStatus
@@ -286,19 +303,31 @@ const KanbanBoard = ({
             <span aria-hidden>/</span>
             <strong>Suivi de production</strong>
           </nav>
-          <h2 className="kanban-board__title">Tableau de suivi</h2>
+          <h2 className="kanban-board__title">
+            Tableau de suivi
+            {!isAllWorkspaces && (
+              <span
+                className="kanban-board__ws-type-badge"
+                style={{ background: `${wsTypeCfg.color}18`, color: wsTypeCfg.color, borderColor: `${wsTypeCfg.color}40` }}
+                title={wsTypeCfg.label}
+              >
+                {wsTypeCfg.icon} {wsTypeCfg.label}
+              </span>
+            )}
+          </h2>
           <p className="kanban-board__hint">{roleHint}</p>
         </div>
         {canCreateTask && !isAllWorkspaces && (
           <button
             type="button"
-            className="btn btn-primary kanban-board__cta"
+            className={`btn btn-primary kanban-board__cta${workspaceType === 'RUPTURE' ? ' kanban-board__cta--urgent' : ''}`}
+            style={workspaceType === 'RUPTURE' ? { background: '#dc2626', borderColor: '#dc2626' } : undefined}
             onClick={() => {
               setEditingTask(null);
               setShowTaskModal(true);
             }}
           >
-            {isCommercial ? '+ Nouvelle commande client' : '+ Nouvelle fiche'}
+            {ctaLabel}
           </button>
         )}
 
@@ -394,6 +423,7 @@ const KanbanBoard = ({
           users={users}
           canAssign={canChangeStatus}
           isCommercial={isCommercial}
+          workspaceType={workspaceType}
           onSave={handleSaveTask}
           onClose={() => {
             setShowTaskModal(false);
