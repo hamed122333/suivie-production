@@ -2,6 +2,7 @@ const TaskModel = require('../models/taskModel');
 const TaskCommentModel = require('../models/taskCommentModel');
 const TaskHistoryModel = require('../models/taskHistoryModel');
 const StockImportModel = require('../models/stockImportModel');
+const WorkspaceModel = require('../models/workspaceModel');
 const { TASK_STATUSES, TASK_STATUS_LABELS, TRACKED_TASK_FIELDS } = require('../constants/task');
 const { createHttpError, isHttpError } = require('../utils/httpErrors');
 const { applyTaskVisibility, buildTaskFilters, canAccessTask, parseWorkspaceId } = require('../utils/taskScope');
@@ -66,6 +67,11 @@ function buildUpdateHistoryEntries(beforeTask, payload, actorId) {
       };
     })
     .filter(Boolean);
+}
+
+async function resolveCommercialWorkspaceId() {
+  const workspace = await WorkspaceModel.ensureCommercialMonthlyWorkspace();
+  return workspace.id;
 }
 
 const taskController = {
@@ -187,7 +193,7 @@ const taskController = {
   async create(req, res) {
     try {
       const taskInput = normalizeTaskDraft(req.body);
-      const workspaceId = parseWorkspaceId(req.body.workspaceId, { required: true });
+      const workspaceId = await resolveCommercialWorkspaceId();
       if (req.body.status && req.body.status !== 'TODO') {
         throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
       }
@@ -217,7 +223,7 @@ const taskController = {
   async createBulk(req, res) {
     try {
       const tasks = normalizeTaskBatch(req.body.tasks);
-      const workspaceId = parseWorkspaceId(req.body.workspaceId, { required: true });
+      const workspaceId = await resolveCommercialWorkspaceId();
       if (req.body.status && req.body.status !== 'TODO') {
         throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
       }

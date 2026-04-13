@@ -53,6 +53,22 @@
   gap: 0.25rem;
 }
 
+.dashboard__export-btn {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+  font-size: 0.78rem;
+  border-radius: 999px;
+  padding: 0.38rem 0.75rem;
+  cursor: pointer;
+}
+
+.dashboard__export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .dashboard__date,
 .dashboard__user {
   color: #64748b;

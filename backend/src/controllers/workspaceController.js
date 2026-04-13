@@ -3,7 +3,13 @@ const WorkspaceModel = require('../models/workspaceModel');
 const workspaceController = {
   async getAll(req, res) {
     try {
-      const workspaces = await WorkspaceModel.getAll();
+      let workspaces;
+      if (req.user?.role === 'commercial') {
+        await WorkspaceModel.ensureCommercialMonthlyWorkspace();
+        workspaces = await WorkspaceModel.getCommercialMonthlyWorkspaces();
+      } else {
+        workspaces = await WorkspaceModel.getAll();
+      }
       res.json(workspaces);
     } catch (err) {
       console.error(err);
@@ -13,6 +19,9 @@ const workspaceController = {
 
   async create(req, res) {
     try {
+      if (req.user?.role === 'commercial') {
+        return res.status(403).json({ error: 'Creation manuelle des espaces desactivee pour les commerciaux' });
+      }
       const { name } = req.body;
       const trimmed = (name || '').trim();
       if (trimmed.length < 2) {
@@ -32,4 +41,3 @@ const workspaceController = {
 };
 
 module.exports = workspaceController;
-

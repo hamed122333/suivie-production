@@ -6,6 +6,19 @@ import { STATUS_COUNT_FIELDS, TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, TASK_STA
 import { formatDate, formatRelativeDate, getInitials } from '../utils/formatters';
 import './DashboardPage.css';
 
+const escapeHtml = (value) =>
+  String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+
+const getMonthKeyFromWorkspaceName = (name) => {
+  const match = String(name || '').match(/(\d{4}-\d{2})$/);
+  return match ? match[1] : null;
+};
+
 const MetricTile = ({ label, value, tone = 'blue', helper }) => (
   <div className={`dashboard-tile dashboard-tile--${tone}`}>
     <strong>{value}</strong>
@@ -18,11 +31,84 @@ const DashboardPage = () => {
   const [stats, setStats] = useState(null);
   const [recentTasks, setRecentTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const { workspaceId, loadingWorkspaces, workspaces } = useWorkspace();
   const { user } = useAuth();
 
   const activeWorkspace = workspaces?.find((workspace) => String(workspace.id) === String(workspaceId));
   const workspaceName = workspaceId === 'all' ? 'Tous les espaces' : activeWorkspace?.name || '';
+
+  const exportMonthlyPdf = async () => {
+    if (!workspaceId || workspaceId === 'all') return;
+
+    setExporting(true);
+    try {
+      const monthKey = getMonthKeyFromWorkspaceName(workspaceName) || new Date().toISOString().slice(0, 7);
+      const response = await taskAPI.getAll({ workspaceId });
+      const monthlyTasks = (response.data || []).filter((task) =>
+        String(task.created_at || '').startsWith(monthKey)
+      );
+
+      const rowsHtml = monthlyTasks
+        .map(
+          (task) => `
+            <tr>
+              <td>SP-${task.id}</td>
+              <td>${escapeHtml(task.title)}</td>
+              <td>${escapeHtml(task.client_name || task.order_code || '—')}</td>
+              <td>${escapeHtml(task.priority)}</td>
+              <td>${escapeHtml(task.status)}</td>
+              <td>${escapeHtml(formatDate(task.due_date, { withYear: true }) || '—')}</td>
+            </tr>`
+        )
+        .join('');
+
+      const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+      if (!printWindow) return;
+
+      printWindow.document.write(`
+        <!doctype html>
+        <html lang="fr">
+          <head>
+            <meta charset="utf-8" />
+            <title>Suivi mensuel ${escapeHtml(monthKey)}</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
+              h1 { font-size: 20px; margin: 0 0 6px; }
+              p { margin: 0 0 16px; color: #475569; }
+              table { width: 100%; border-collapse: collapse; }
+              th, td { border: 1px solid #dbe4ef; padding: 8px; text-align: left; font-size: 12px; }
+              th { background: #f8fafc; }
+            </style>
+          </head>
+          <body>
+            <h1>Suivi mensuel - ${escapeHtml(workspaceName || monthKey)}</h1>
+            <p>Mois: ${escapeHtml(monthKey)} • Généré le ${escapeHtml(new Date().toLocaleDateString('fr-FR'))} • Responsable: ${escapeHtml(user?.name || '—')}</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Tâche</th>
+                  <th>Client / Ordre</th>
+                  <th>Priorité</th>
+                  <th>Statut</th>
+                  <th>Échéance</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml || '<tr><td colspan="6">Aucune tâche sur ce mois.</td></tr>'}
+              </tbody>
+            </table>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 300);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     if (loadingWorkspaces) return;
@@ -85,6 +171,14 @@ const DashboardPage = () => {
           </p>
         </div>
         <div className="dashboard__meta">
+          <button
+            type="button"
+            className="dashboard__export-btn"
+            onClick={exportMonthlyPdf}
+            disabled={!workspaceId || workspaceId === 'all' || exporting}
+          >
+            {exporting ? 'Export…' : 'Exporter PDF du mois'}
+          </button>
           <span className="dashboard__date">
             {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </span>

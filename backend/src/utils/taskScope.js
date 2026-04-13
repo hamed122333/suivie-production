@@ -55,7 +55,7 @@ function buildTaskFilters(query = {}) {
 }
 
 function applyTaskVisibility(filters, user) {
-  if (!isPrivilegedTaskRole(user?.role)) {
+  if (user?.role === 'user') {
     return { ...filters, createdBy: user?.id };
   }
 
