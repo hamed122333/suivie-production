@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TASK_PRIORITY_OPTIONS } from '../constants/task';
+import { useWorkspace } from '../context/WorkspaceContext';
 import { stockImportAPI } from '../services/api';
 import './TaskModal.css';
 
@@ -78,6 +79,16 @@ const TaskModal = ({
 
   const isEditing = Boolean(task);
 
+  // Workspace type detection for commercial mode
+  const { workspaceId, workspaces } = useWorkspace();
+  const activeWorkspace = useMemo(
+    () => workspaces.find((w) => String(w.id) === String(workspaceId)),
+    [workspaces, workspaceId]
+  );
+  const workspaceName = (activeWorkspace?.name || '').toLowerCase();
+  const isPlanned = workspaceName.includes('planif');
+  const isUrgent = workspaceName.includes('urgent');
+
   useEffect(() => {
     if (task) {
       setForm({
@@ -118,6 +129,13 @@ const TaskModal = ({
       .catch(() => setStockArticles([]))
       .finally(() => setStockLoading(false));
   }, [isCommercial, isEditing]);
+
+  // Force URGENT priority when in Urgent workspace (commercial create mode)
+  useEffect(() => {
+    if (isUrgent && isCommercial && !isEditing) {
+      setForm((prev) => ({ ...prev, priority: 'URGENT' }));
+    }
+  }, [isUrgent, isCommercial, isEditing]);
 
   const assignableUsers = useMemo(
     () =>
@@ -162,12 +180,20 @@ const TaskModal = ({
           delete newQ[article.id];
           return newQ;
         });
+        // Clear plannedDate if no articles remain selected in Planifié mode
+        if (isPlanned && next.size === 0) {
+          setForm((f) => ({ ...f, plannedDate: '' }));
+        }
       } else {
         next.add(article.id);
         setRequestedQuantities((q) => ({
           ...q,
           [article.id]: Number(article.quantity)
         }));
+        // Auto-fill plannedDate from the article's ready_date in Planifié mode
+        if (isPlanned && article.ready_date) {
+          setForm((f) => ({ ...f, plannedDate: toInputDate(article.ready_date) }));
+        }
       }
       return next;
     });
@@ -177,19 +203,32 @@ const TaskModal = ({
     setRequestedQuantities((q) => ({ ...q, [articleId]: value }));
   };
 
-  // Number of ready articles that are available but unused
+  // Workspace-filtered articles for commercial mode
+  const workspaceArticles = useMemo(() => {
+    return stockArticles.filter((article) => {
+      if (article.is_used) return false;
+      if (isPlanned) {
+        // Planifié: show only articles with a future date (not yet ready)
+        return !article.is_ready;
+      }
+      // Standard / Urgent (and default): show only immediately available articles
+      return article.is_ready;
+    });
+  }, [stockArticles, isPlanned]);
+
+  // Number of workspace-relevant articles available
   const availableReadyCount = useMemo(
-    () => stockArticles.filter((a) => a.is_ready && !a.is_used).length,
-    [stockArticles]
+    () => workspaceArticles.length,
+    [workspaceArticles]
   );
 
   const filteredArticles = useMemo(() => {
-    if (!searchQuery.trim()) return stockArticles;
+    if (!searchQuery.trim()) return workspaceArticles;
     const q = searchQuery.toLowerCase().trim();
-    return stockArticles.filter((article) => 
+    return workspaceArticles.filter((article) =>
       article.article?.toLowerCase().includes(q)
     );
-  }, [stockArticles, searchQuery]);
+  }, [workspaceArticles, searchQuery]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -231,6 +270,11 @@ const TaskModal = ({
           throw new Error('Sélectionnez au moins un article disponible.');
         }
 
+        // Planifié workspace: plannedDate is required
+        if (isPlanned && !form.plannedDate) {
+          throw new Error('Pour une commande planifiée, sélectionnez un article (la date sera automatiquement remplie).');
+        }
+
         const selectedArticles = stockArticles.filter((a) => selectedArticleIds.has(a.id));
         const preparedTasks = selectedArticles.map((article) => {
           const reqQty = Number(requestedQuantities[article.id] || article.quantity);
@@ -243,6 +287,7 @@ const TaskModal = ({
             quantity: reqQty,
             quantityUnit: 'pcs',
             stockImportId: article.id,
+            ...(isPlanned ? { plannedDate: toInputDate(article.ready_date) } : {}),
           };
         });
 
@@ -306,6 +351,18 @@ const TaskModal = ({
           <form className="task-modal-classic__form" onSubmit={handleSubmit}>
             {error && <div className="task-modal__error">{error}</div>}
 
+            {isUrgent && (
+              <div className="task-modal-classic__workspace-banner task-modal-classic__workspace-banner--urgent">
+                🚨 Espace Urgent — La priorité est automatiquement fixée sur <strong>Urgente</strong>.
+              </div>
+            )}
+
+            {isPlanned && (
+              <div className="task-modal-classic__workspace-banner task-modal-classic__workspace-banner--planned">
+                📅 Espace Planifié — Seuls les produits à venir sont affichés. La date planifiée est remplie automatiquement.
+              </div>
+            )}
+
             <div className="form-group task-modal-classic__group">
               <label>Nom du client</label>
               <input
@@ -318,21 +375,48 @@ const TaskModal = ({
             </div>
 
             <div className="form-group task-modal-classic__group">
-              <label>Niveau de priorité</label>
-              <select value={form.priority} onChange={updateForm('priority')}>
-                {CREATE_PRIORITY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
+              <label>Niveau de priorité{isUrgent ? ' (forcé)' : ''}</label>
+              <select value={form.priority} onChange={updateForm('priority')} disabled={isUrgent}>
+                {isUrgent ? (
+                  <option value="URGENT">🚨 Urgente (Forcé)</option>
+                ) : (
+                  CREATE_PRIORITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
+            {isPlanned && (
+              <div className="form-group task-modal-classic__group">
+                <label>Date planifiée (automatique) *</label>
+                <input
+                  type="date"
+                  value={form.plannedDate}
+                  onChange={updateForm('plannedDate')}
+                  readOnly
+                  required={isPlanned}
+                  style={{ background: '#f0fdf4', borderColor: '#86efac' }}
+                />
+                {form.plannedDate ? (
+                  <small className="task-modal-classic__hint">
+                    Remplie automatiquement depuis la date de disponibilité du produit sélectionné.
+                  </small>
+                ) : (
+                  <small className="task-modal-classic__hint">
+                    Sélectionnez un article ci-dessous pour remplir cette date.
+                  </small>
+                )}
+              </div>
+            )}
+
             <div className="form-group task-modal-classic__group">
               <label>
-                Articles disponibles
+                {isPlanned ? 'Articles à venir (en cours de fabrication)' : 'Articles disponibles'}
                 {availableReadyCount > 0 && (
-                  <span className="stock-article-ready-badge">{availableReadyCount} prêt(s)</span>
+                  <span className="stock-article-ready-badge">{availableReadyCount} disponible(s)</span>
                 )}
               </label>
 
@@ -356,54 +440,51 @@ const TaskModal = ({
                 </div>
               ) : filteredArticles.length === 0 ? (
                 <div className="stock-article-empty">
-                  Aucun article trouvé pour "{searchQuery}".
+                  {searchQuery.trim()
+                    ? `Aucun article trouvé pour "${searchQuery}".`
+                    : isPlanned
+                    ? 'Aucun article en cours de fabrication pour le moment.'
+                    : 'Aucun article disponible en stock immédiat.'}
                 </div>
               ) : (
                 <div className="stock-article-list">
                   {filteredArticles.map((article) => {
-                    const readyDate = new Date(article.ready_date);
-                    const isReady = article.is_ready;
-                    const isUsed = article.is_used;
-                    const isDisabled = !isReady || isUsed;
                     const isSelected = selectedArticleIds.has(article.id);
                     const reqQty = requestedQuantities[article.id] ?? Number(article.quantity);
+                    const articleDate = article.ready_date
+                      ? new Date(article.ready_date).toLocaleDateString('fr-FR')
+                      : null;
 
                     return (
                       <div
                         key={article.id}
                         className={[
                           'stock-article-item',
-                          isDisabled ? 'stock-article-item--disabled' : 'stock-article-item--ready',
+                          'stock-article-item--ready',
                           isSelected ? 'stock-article-item--selected' : '',
                         ]
                           .filter(Boolean)
                           .join(' ')}
-                        onClick={() => !isDisabled && toggleArticle(article)}
+                        onClick={() => toggleArticle(article)}
                         role="checkbox"
                         aria-checked={isSelected}
-                        aria-disabled={isDisabled}
-                        tabIndex={isDisabled ? -1 : 0}
+                        tabIndex={0}
                         onKeyDown={(e) => {
-                          if (!isDisabled && (e.key === ' ' || e.key === 'Enter')) {
+                          if (e.key === ' ' || e.key === 'Enter') {
                             e.preventDefault();
                             toggleArticle(article);
                           }
                         }}
                       >
                         <div className="stock-article-item__check">
-                          {isUsed ? (
-                            <span className="stock-article-item__used-mark" title="Déjà utilisé">✓</span>
-                          ) : (
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              disabled={isDisabled}
-                              onChange={() => toggleArticle(article)}
-                              onClick={(e) => e.stopPropagation()}
-                              tabIndex={-1}
-                              aria-hidden
-                            />
-                          )}
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleArticle(article)}
+                            onClick={(e) => e.stopPropagation()}
+                            tabIndex={-1}
+                            aria-hidden
+                          />
                         </div>
                         <div className="stock-article-item__info">
                           <span className="stock-article-item__name">{article.article}</span>
@@ -421,17 +502,13 @@ const TaskModal = ({
                           )}
                         </div>
                         <div className="stock-article-item__status">
-                          {isUsed ? (
-                            <span className="stock-article-item__tag stock-article-item__tag--used">
-                              Déjà utilisé
-                            </span>
-                          ) : isReady ? (
-                            <span className="stock-article-item__tag stock-article-item__tag--ready">
-                              Disponible
+                          {isPlanned && articleDate ? (
+                            <span className="stock-article-item__tag stock-article-item__tag--pending">
+                              Prévu le {articleDate}
                             </span>
                           ) : (
-                            <span className="stock-article-item__tag stock-article-item__tag--pending">
-                              Prêt le {readyDate.toLocaleDateString('fr-FR')}
+                            <span className="stock-article-item__tag stock-article-item__tag--ready">
+                              En stock immédiat
                             </span>
                           )}
                         </div>

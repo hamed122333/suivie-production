@@ -575,3 +575,32 @@
   background: #e2e8f0;
   color: #94a3b8;
 }
+
+/* ── Workspace-specific banners in commercial create mode ── */
+
+.task-modal-classic__workspace-banner {
+  padding: 0.6rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.task-modal-classic__workspace-banner--urgent {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+}
+
+.task-modal-classic__workspace-banner--planned {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #166534;
+}
+
+.task-modal-classic__hint {
+  display: block;
+  font-size: 0.76rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
