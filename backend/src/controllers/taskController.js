@@ -6,6 +6,7 @@ const { TASK_STATUSES, TASK_STATUS_LABELS, TRACKED_TASK_FIELDS } = require('../c
 const { createHttpError, isHttpError } = require('../utils/httpErrors');
 const { applyTaskVisibility, buildTaskFilters, canAccessTask, parseWorkspaceId } = require('../utils/taskScope');
 const { normalizeCommentBody, normalizeTaskBatch, normalizeTaskDraft, normalizeTaskUpdatePayload } = require('../utils/taskValidation');
+const ExcelJS = require('exceljs'); // Add ExcelJS import for exports
 
 const fieldLabels = {
   title: 'Titre',
@@ -148,6 +149,70 @@ const taskController = {
       }
       console.error(err);
       res.status(500).json({ error: 'Server error' });
+    }
+  },
+
+  async exportExcel(req, res) {
+    try {
+      const filters = applyTaskVisibility(buildTaskFilters(req.query), req.user);
+      const tasks = await TaskModel.getAll(filters);
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Taches');
+
+      worksheet.columns = [
+        { header: 'ID', key: 'id', width: 10 },
+        { header: 'Titre', key: 'title', width: 30 },
+        { header: 'Statut', key: 'status', width: 15 },
+        { header: 'Priorite', key: 'priority', width: 15 },
+        { header: 'Commercial', key: 'commercialName', width: 20 },
+        { header: 'Assignee a', key: 'assigneeName', width: 20 },
+        { header: 'Client', key: 'clientName', width: 20 },
+        { header: 'Code commande', key: 'orderCode', width: 20 },
+        { header: 'Article', key: 'itemReference', width: 20 },
+        { header: 'Quantite', key: 'quantity', width: 15 },
+        { header: 'Date Echeance', key: 'dueDate', width: 15 },
+        { header: 'Description', key: 'description', width: 40 },
+        { header: 'Espace (Workspace)', key: 'workspaceName', width: 25 },
+        { header: 'Date de Creation', key: 'createdAt', width: 20 }
+      ];
+
+      tasks.forEach(t => {
+        worksheet.addRow({
+          id: t.id,
+          title: t.title,
+          status: TASK_STATUS_LABELS[t.status] || t.status,
+          priority: t.priority,
+          commercialName: t.creator_name || '-',
+          assigneeName: t.assignee_name || '-',
+          clientName: t.client_name || '-',
+          orderCode: t.order_code || '-',
+          itemReference: t.item_reference || '-',
+          quantity: t.quantity != null ? `${t.quantity} ${t.quantity_unit || ''}`.trim() : '-',
+          dueDate: t.due_date ? new Date(t.due_date).toLocaleDateString() : '-',
+          description: t.description || '-',
+          workspaceName: t.workspace_name || '-',
+          createdAt: t.created_at ? new Date(t.created_at).toLocaleString() : '-'
+        });
+      });
+
+      // Styling headers
+      worksheet.getRow(1).font = { bold: true };
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="export_taches_${new Date().toISOString().slice(0, 10)}.xlsx"`
+      );
+
+      await workbook.xlsx.write(res);
+      res.end();
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error during Excel export' });
     }
   },
 

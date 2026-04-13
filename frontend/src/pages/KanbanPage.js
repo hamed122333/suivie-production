@@ -36,7 +36,7 @@ const KanbanPage = () => {
 
   const fetchStats = useCallback(async () => {
     try {
-      // Ne passer workspaceId à l'API que si c'est un ID numérique
+      // Ne passer workspaceId a l'API que si c'est un ID numerique
       const statsWorkspaceId = workspaceId && workspaceId !== 'all' ? workspaceId : null;
       const res = await dashboardAPI.getStats(statsWorkspaceId);
       setStats(res.data);
@@ -44,6 +44,25 @@ const KanbanPage = () => {
       console.error('Failed to fetch stats', err);
     }
   }, [workspaceId]);
+
+  const handleExport = async () => {
+    try {
+      const params = {};
+      if (workspaceId && workspaceId !== 'all' && workspaceId !== null) {
+        params.workspaceId = workspaceId;
+      }
+      const res = await taskAPI.exportExcel(params);
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Export_Taches_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (err) {
+      console.error('Failed to export tasks', err);
+    }
+  };
 
   useEffect(() => {
     const q = searchParams.get('q') || '';
@@ -103,6 +122,7 @@ const KanbanPage = () => {
         isAdmin={isPlanner}
         stats={stats}
         onRefresh={() => Promise.all([fetchTasks(workspaceId), fetchStats()])}
+        onExport={handleExport}
       />
       <KanbanBoard
         tasks={tasks}

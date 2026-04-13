@@ -1,9 +1,33 @@
 const WorkspaceModel = require('../models/workspaceModel');
 
+function getFrenchMonthName(monthIndex) {
+  const monthNames = [
+    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
+  ];
+  return monthNames[monthIndex] || '';
+}
+
 const workspaceController = {
   async getAll(req, res) {
     try {
-      const workspaces = await WorkspaceModel.getAll();
+      // Logic for automatic daily workspace
+      let workspaces = await WorkspaceModel.getAll();
+
+      const now = new Date();
+      const monthName = getFrenchMonthName(now.getMonth());
+      const day = String(now.getDate()).padStart(2, '0');
+      const year = now.getFullYear();
+      const currentWorkspaceName = `Production ${day} ${monthName} ${year}`;
+
+      const exists = workspaces.find((ws) => ws.name === currentWorkspaceName);
+
+      if (!exists) {
+        const newWorkspace = await WorkspaceModel.create({ name: currentWorkspaceName });
+        // After creation, refetch all to keep them sorted as in DB
+        workspaces = await WorkspaceModel.getAll();
+      }
+
       res.json(workspaces);
     } catch (err) {
       console.error(err);
@@ -32,4 +56,3 @@ const workspaceController = {
 };
 
 module.exports = workspaceController;
-

@@ -39,6 +39,7 @@ export const authAPI = {
 
 export const taskAPI = {
   getAll: (params = {}) => api.get('/tasks', { params }),
+  exportExcel: (params = {}) => api.get('/tasks/export', { params, responseType: 'blob' }),
   getById: (id) => api.get(`/tasks/${id}`),
   getDetail: (id) => api.get(`/tasks/${id}/details`),
   create: (data) => api.post('/tasks', data),

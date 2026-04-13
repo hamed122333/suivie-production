@@ -83,9 +83,9 @@ export const AuthProvider = ({ children }) => {
         isSuperAdmin: user?.role === 'super_admin',
         isPlanner: user?.role === 'planner',
         isCommercial: user?.role === 'commercial',
-        // Le commercial crée les tâches, uniquement dans TODO.
+        // Le commercial cree les taches, uniquement dans TODO.
         canCreateTask: user?.role === 'commercial',
-        canCreateWorkspace: user?.role === 'commercial',
+        canCreateWorkspace: false, // workspaces are now generated automatically each day
         // Le super_admin et le planner ont une vue globale.
         canViewAll: user?.role === 'super_admin' || user?.role === 'planner',
         // Le planificateur gère les mouvements et les statuts.

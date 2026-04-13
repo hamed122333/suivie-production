@@ -6,7 +6,10 @@ const { authenticate, requireRoles, requireCommercial, requirePlanner } = requir
 // Réordonner le tableau : planificateur uniquement
 router.patch('/board', authenticate, requirePlanner, taskController.reorderBoard);
 
-// Lire toutes les tâches (tous les utilisateurs authentifiés)
+// Exporter les tches via Excel
+router.get('/export', authenticate, taskController.exportExcel);
+
+// Lire toutes les tches (tous les utilisateurs authentifis)
 router.get('/', authenticate, taskController.getAll);
 router.post('/bulk', authenticate, requireCommercial, taskController.createBulk);
 router.get('/:id/details', authenticate, taskController.getDetail);

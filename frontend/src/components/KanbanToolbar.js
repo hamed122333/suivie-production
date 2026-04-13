@@ -18,6 +18,7 @@ const KanbanToolbar = ({
   isAdmin,
   stats,
   onRefresh,
+  onExport,
 }) => {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const counts = stats?.counts || {};
@@ -83,6 +84,9 @@ const KanbanToolbar = ({
       </div>
 
       <div className="kanban-toolbar__stats">
+        <button type="button" className="kanban-toolbar__refresh kanban-toolbar__export" title="Exporter Excel" onClick={onExport} style={{ marginRight: '8px' }}>
+          📥
+        </button>
         <button type="button" className="kanban-toolbar__refresh" title="Rafraîchir" onClick={onRefresh}>
           ↻
         </button>

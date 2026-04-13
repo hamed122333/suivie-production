@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -18,36 +18,11 @@ const getRoleLabel = (role) => {
 };
 
 const Sidebar = ({ closeSidebar }) => {
-  const { isSuperAdmin, canCreateWorkspace, user } = useAuth();
-  const { workspaces, workspaceId, selectWorkspace, createWorkspace, loadingWorkspaces } = useWorkspace();
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [error, setError] = useState('');
-  const [creating, setCreating] = useState(false);
+  const { isSuperAdmin, user } = useAuth();
+  const { workspaces, workspaceId, selectWorkspace, loadingWorkspaces } = useWorkspace();
 
   const activeId = workspaceId ? String(workspaceId) : '';
   const roleInfo = getRoleLabel(user?.role);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setError('');
-    const trimmed = (name || '').trim();
-    if (trimmed.length < 2) {
-      setError('Nom trop court (min. 2 caractères)');
-      return;
-    }
-    setCreating(true);
-    try {
-      await createWorkspace(trimmed);
-      setCreateOpen(false);
-      setName('');
-    } catch (err) {
-      setError(err?.response?.data?.error || 'Impossible de créer l\'espace');
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const options = workspaces || [];
 
@@ -71,14 +46,9 @@ const Sidebar = ({ closeSidebar }) => {
       {/* En-tête Espaces */}
       <div className="sidebar__header">
         <div className="sidebar__title">
-          <span className="sidebar__title-icon">⊞</span>
+          <span className="sidebar__title-icon">🗂️</span>
           Espaces
         </div>
-        {canCreateWorkspace && (
-          <button type="button" className="sidebar__create-btn" onClick={() => setCreateOpen(true)} title="Créer un espace">
-            +
-          </button>
-        )}
       </div>
 
       {/* Liste des workspaces */}
@@ -135,48 +105,10 @@ const Sidebar = ({ closeSidebar }) => {
         </NavLink>
         {isSuperAdmin && (
           <NavLink to="/users" onClick={closeSidebar} className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
-            <span>👤</span> Utilisateurs
+            <span>👥</span> Utilisateurs
           </NavLink>
         )}
       </nav>
-
-      {/* Modal: Créer un espace */}
-      {createOpen && canCreateWorkspace && (
-        <div className="modal-overlay" role="dialog" aria-label="Créer un espace de travail">
-          <div className="modal-content sidebar-modal">
-            <div className="modal-header">
-              <h3 className="modal-title">⊞ Nouvel espace</h3>
-              <button type="button" className="modal-close" onClick={() => { setCreateOpen(false); setError(''); setName(''); }}>
-                ✕
-              </button>
-            </div>
-            <form onSubmit={submit}>
-              {error && (
-                <div className="sidebar__modal-error">{error}</div>
-              )}
-              <div className="form-group">
-                <label>Nom de l'espace</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ex: Production Ligne 1"
-                  autoFocus
-                  required
-                />
-              </div>
-              <div className="sidebar__modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => { setCreateOpen(false); setError(''); setName(''); }}>
-                  Annuler
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={creating}>
-                  {creating ? 'Création…' : 'Créer l\'espace'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </aside>
   );
 };
