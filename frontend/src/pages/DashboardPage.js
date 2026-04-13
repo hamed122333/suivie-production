@@ -19,6 +19,13 @@ const getMonthKeyFromWorkspaceName = (name) => {
   return match ? match[1] : null;
 };
 
+const getMonthKeyFromDate = (value) => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
 const MetricTile = ({ label, value, tone = 'blue', helper }) => (
   <div className={`dashboard-tile dashboard-tile--${tone}`}>
     <strong>{value}</strong>
@@ -43,10 +50,14 @@ const DashboardPage = () => {
 
     setExporting(true);
     try {
-      const monthKey = getMonthKeyFromWorkspaceName(workspaceName) || new Date().toISOString().slice(0, 7);
+      const monthKey = getMonthKeyFromWorkspaceName(workspaceName);
+      if (!monthKey) {
+        window.alert('Impossible de déterminer le mois de cet espace.');
+        return;
+      }
       const response = await taskAPI.getAll({ workspaceId });
       const monthlyTasks = (response.data || []).filter((task) =>
-        String(task.created_at || '').startsWith(monthKey)
+        getMonthKeyFromDate(task.created_at) === monthKey
       );
 
       const rowsHtml = monthlyTasks
@@ -64,7 +75,10 @@ const DashboardPage = () => {
         .join('');
 
       const printWindow = window.open('', '_blank', 'noopener,noreferrer');
-      if (!printWindow) return;
+      if (!printWindow) {
+        window.alert('La fenêtre d’export a été bloquée. Autorisez les popups puis réessayez.');
+        return;
+      }
 
       printWindow.document.write(`
         <!doctype html>
@@ -103,8 +117,10 @@ const DashboardPage = () => {
         </html>
       `);
       printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => printWindow.print(), 300);
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
     } finally {
       setExporting(false);
     }

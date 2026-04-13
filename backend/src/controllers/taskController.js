@@ -193,9 +193,12 @@ const taskController = {
   async create(req, res) {
     try {
       const taskInput = normalizeTaskDraft(req.body);
-      const workspaceId = await resolveCommercialWorkspaceId();
+      const workspaceId =
+        req.user?.role === 'commercial'
+          ? await resolveCommercialWorkspaceId()
+          : parseWorkspaceId(req.body.workspaceId, { required: true });
       if (req.body.status && req.body.status !== 'TODO') {
-        throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
+        throw createHttpError(400, 'Le commercial ne peut créer des tâches que dans TODO');
       }
 
       const task = await TaskModel.create({
@@ -223,9 +226,12 @@ const taskController = {
   async createBulk(req, res) {
     try {
       const tasks = normalizeTaskBatch(req.body.tasks);
-      const workspaceId = await resolveCommercialWorkspaceId();
+      const workspaceId =
+        req.user?.role === 'commercial'
+          ? await resolveCommercialWorkspaceId()
+          : parseWorkspaceId(req.body.workspaceId, { required: true });
       if (req.body.status && req.body.status !== 'TODO') {
-        throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
+        throw createHttpError(400, 'Le commercial ne peut créer des tâches que dans TODO');
       }
 
       const createdTasks = await TaskModel.createMany({

@@ -55,7 +55,7 @@ function buildTaskFilters(query = {}) {
 }
 
 function applyTaskVisibility(filters, user) {
-  if (user?.role === 'user') {
+  if (!isPrivilegedTaskRole(user?.role) && user?.role !== 'commercial') {
     return { ...filters, createdBy: user?.id };
   }
 

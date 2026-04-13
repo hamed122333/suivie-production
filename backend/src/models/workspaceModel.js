@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 
-const COMMERCIAL_MONTHLY_NAME_PATTERN = /^Commercial \d{4}-\d{2}$/;
+const COMMERCIAL_MONTHLY_NAME_SQL_REGEX = '^Commercial [0-9]{4}-[0-9]{2}$';
+const COMMERCIAL_MONTHLY_NAME_PATTERN = new RegExp(COMMERCIAL_MONTHLY_NAME_SQL_REGEX);
 
 function getCommercialMonthlyWorkspaceName(date = new Date()) {
   const year = date.getFullYear();
@@ -33,7 +34,7 @@ const WorkspaceModel = {
     const result = await pool.query(
       `SELECT id, name, created_at
        FROM workspaces
-       WHERE name ~ '^Commercial [0-9]{4}-[0-9]{2}$'
+       WHERE name ~ '${COMMERCIAL_MONTHLY_NAME_SQL_REGEX}'
        ORDER BY name DESC`
     );
     return result.rows;

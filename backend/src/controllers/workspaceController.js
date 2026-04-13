@@ -19,9 +19,6 @@ const workspaceController = {
 
   async create(req, res) {
     try {
-      if (req.user?.role === 'commercial') {
-        return res.status(403).json({ error: 'Creation manuelle des espaces desactivee pour les commerciaux' });
-      }
       const { name } = req.body;
       const trimmed = (name || '').trim();
       if (trimmed.length < 2) {
