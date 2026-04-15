@@ -13,15 +13,15 @@ const workspaceController = {
     try {
       // Logic for automatic daily workspace
       let workspaces = await WorkspaceModel.getAll();
-
+      
       const now = new Date();
       const monthName = getFrenchMonthName(now.getMonth());
       const day = String(now.getDate()).padStart(2, '0');
       const year = now.getFullYear();
       const currentWorkspaceName = `Production ${day} ${monthName} ${year}`;
-
+      
       const exists = workspaces.find((ws) => ws.name === currentWorkspaceName);
-
+      
       if (!exists) {
         const newWorkspace = await WorkspaceModel.create({ name: currentWorkspaceName });
         // After creation, refetch all to keep them sorted as in DB

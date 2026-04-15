@@ -8,7 +8,15 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
   const priority = TASK_PRIORITY_CONFIG[task.priority] || TASK_PRIORITY_CONFIG.MEDIUM;
   const status = TASK_STATUS_CONFIG[task.status] || TASK_STATUS_CONFIG.TODO;
   const when = formatRelativeDate(task.updated_at || task.created_at);
-  const subtitle = [task.client_name, task.order_code].filter(Boolean).join(' • ');
+  // Éviter la duplication si le titre contient déjà le nom du client (ex: "PLASTICUM • CI0251")
+  const titleIncludesClient = task.client_name && typeof task.title === 'string' && task.title.includes(task.client_name);
+  const subtitleClientName = titleIncludesClient ? null : task.client_name;
+  const subtitle = [subtitleClientName, task.order_code].filter(Boolean).join(' • ');
+
+  // Eviter la duplication de la quantité (si elle est détaillée dans la description "pcs commandés")
+  const hideFooterQuantity = task.description && typeof task.description === 'string' && task.description.includes('commandés');
+
+  const showReference = task.item_reference && task.item_reference !== task.title;
 
   return (
     <article
@@ -34,9 +42,9 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
       {task.description && <p className="task-card__desc">{task.description}</p>}
 
       <div className="task-card__facts">
-        {task.item_reference && <span>Ref {task.item_reference}</span>}
-        {task.production_line && <span>{task.production_line}</span>}
-        {task.due_date && <span>Echeance {formatDate(task.due_date)}</span>}
+        {showReference && <span className="task-card__fact-ref">Réf {task.item_reference}</span>}
+        {task.production_line && <span className="task-card__fact-line">{task.production_line}</span>}
+        {task.due_date && <span className="task-card__fact-date">Echéance {formatDate(task.due_date)}</span>}
       </div>
 
       {task.blocked_reason && (
@@ -52,7 +60,7 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
       <div className="task-card__footer">
         <div className="task-card__footer-copy">
           <span className="task-card__time">{when}</span>
-          {task.quantity != null && (
+          {!hideFooterQuantity && task.quantity != null && (
             <span className="task-card__quantity">
               {task.quantity} {task.quantity_unit || 'pcs'}
             </span>

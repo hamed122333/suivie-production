@@ -231,13 +231,13 @@ const TaskModal = ({
           throw new Error('Sélectionnez au moins un article disponible.');
         }
 
-        const selectedArticles = stockArticles.filter((a) => selectedArticleIds.has(a.id));
-        const preparedTasks = selectedArticles.map((article) => {
-          const reqQty = Number(requestedQuantities[article.id] || article.quantity);
-          return {
-            title: `${article.article} — ${clientName}`,
-            description: `Réf. ${article.article} · ${reqQty} pcs commandés (Stock initial: ${Number(article.quantity)} pcs importées le ${new Date(article.imported_at).toLocaleDateString('fr-FR')})`,
-            priority: form.priority,
+          const selectedArticles = stockArticles.filter((a) => selectedArticleIds.has(a.id));
+          const preparedTasks = selectedArticles.map((article) => {
+            const reqQty = Number(requestedQuantities[article.id] || article.quantity);
+            return {
+              title: `${clientName} • ${article.article}`,
+              description: `${reqQty} pcs commandés (Stock initial: ${Number(article.quantity)} pcs)`,
+              priority: form.priority,
             clientName,
             itemReference: article.article,
             quantity: reqQty,
