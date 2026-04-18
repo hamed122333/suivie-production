@@ -2,6 +2,7 @@ import React, { startTransition, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import KanbanBoard from '../components/KanbanBoard';
 import KanbanToolbar from '../components/KanbanToolbar';
+import ExportModal from '../components/ExportModal';
 import { taskAPI, userAPI, dashboardAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -13,6 +14,7 @@ const KanbanPage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const { isPlanner } = useAuth();
   const { workspaceId, loadingWorkspaces } = useWorkspace();
@@ -45,12 +47,15 @@ const KanbanPage = () => {
     }
   }, [workspaceId]);
 
-  const handleExport = async () => {
+  const handleExport = async (startDate, endDate, exportAll) => {
     try {
       const params = {};
-      if (workspaceId && workspaceId !== 'all' && workspaceId !== null) {
+      if (!exportAll && workspaceId !== 'all' && workspaceId !== null) {
         params.workspaceId = workspaceId;
       }
+      if (startDate) params.createdFrom = startDate;
+      if (endDate) params.createdTo = endDate;
+
       const res = await taskAPI.exportExcel(params);
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
@@ -122,7 +127,7 @@ const KanbanPage = () => {
         isAdmin={isPlanner}
         stats={stats}
         onRefresh={() => Promise.all([fetchTasks(workspaceId), fetchStats()])}
-        onExport={handleExport}
+        onExport={() => setExportModalOpen(true)}
       />
       <KanbanBoard
         tasks={tasks}
@@ -133,6 +138,12 @@ const KanbanPage = () => {
         filterPriority={priorityFilter}
         onTasksChange={() => fetchTasks(workspaceId)}
         onStatsRefresh={fetchStats}
+      />
+      <ExportModal
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        onExport={handleExport}
+        currentWorkspaceId={workspaceId}
       />
     </div>
   );

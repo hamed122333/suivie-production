@@ -46,6 +46,14 @@ function buildTaskFilters(query = {}) {
     filters.date = query.date;
   }
 
+  if (query.createdFrom) {
+    filters.createdFrom = query.createdFrom;
+  }
+
+  if (query.createdTo) {
+    filters.createdTo = query.createdTo;
+  }
+
   const workspaceId = parseWorkspaceId(query.workspaceId || query.workspace);
   if (workspaceId) {
     filters.workspaceId = workspaceId;

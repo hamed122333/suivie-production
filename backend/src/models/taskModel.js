@@ -101,6 +101,16 @@ function appendFilters(filters, params) {
     conditions.push(`DATE(t.created_at) = $${params.length}`);
   }
 
+  if (filters.createdFrom) {
+    params.push(filters.createdFrom);
+    conditions.push(`DATE(t.created_at) >= $${params.length}`);
+  }
+
+  if (filters.createdTo) {
+    params.push(filters.createdTo);
+    conditions.push(`DATE(t.created_at) <= $${params.length}`);
+  }
+
   if (filters.productionLine) {
     params.push(filters.productionLine);
     conditions.push(`t.production_line = $${params.length}`);
