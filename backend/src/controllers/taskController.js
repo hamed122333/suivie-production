@@ -168,33 +168,27 @@ const taskController = {
         { header: 'Commercial', key: 'commercialName', width: 20 },
         { header: 'Assignee a', key: 'assigneeName', width: 20 },
         { header: 'Client', key: 'clientName', width: 20 },
-        { header: 'Code commande', key: 'orderCode', width: 20 },
         { header: 'Article', key: 'itemReference', width: 20 },
         { header: 'Quantite', key: 'quantity', width: 15 },
-        { header: 'Date Echeance', key: 'dueDate', width: 15 },
         { header: 'Description', key: 'description', width: 40 },
         { header: 'Espace (Workspace)', key: 'workspaceName', width: 25 },
         { header: 'Date de Creation', key: 'createdAt', width: 20 }
       ];
 
-      tasks.forEach(t => {
-        worksheet.addRow({
-          id: t.id,
-          title: t.title,
-          status: TASK_STATUS_LABELS[t.status] || t.status,
-          priority: t.priority,
-          commercialName: t.creator_name || '-',
-          assigneeName: t.assignee_name || '-',
-          clientName: t.client_name || '-',
-          orderCode: t.order_code || '-',
-          itemReference: t.item_reference || '-',
-          quantity: t.quantity != null ? `${t.quantity} ${t.quantity_unit || ''}`.trim() : '-',
-          dueDate: t.due_date ? new Date(t.due_date).toLocaleDateString() : '-',
-          description: t.description || '-',
-          workspaceName: t.workspace_name || '-',
-          createdAt: t.created_at ? new Date(t.created_at).toLocaleString() : '-'
-        });
-      });
+      worksheet.addRows(tasks.map(t => ({
+        id: `T-${t.id}`,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        commercialName: t.created_by_name || 'Systeme',
+        assigneeName: t.assigned_to_name || 'Non assigne',
+        clientName: t.client_name || '',
+        itemReference: t.item_reference || '',
+        quantity: t.quantity ? `${t.quantity} ${t.quantity_unit || 'pcs'}` : '',
+        description: t.description || '',
+        workspaceName: t.workspace_name || '',
+        createdAt: new Date(t.created_at).toLocaleDateString()
+      })));
 
       // Styling headers
       worksheet.getRow(1).font = { bold: true };

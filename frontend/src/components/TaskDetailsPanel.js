@@ -1,25 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, TASK_STATUS_OPTIONS } from '../constants/task';
 import { taskAPI } from '../services/api';
-import { formatDate, formatDateTime, formatNumber, formatRelativeDate, getInitials } from '../utils/formatters';
+import { formatDateTime, formatRelativeDate, getInitials } from '../utils/formatters';
 import './TaskDetailsPanel.css';
 
 const DETAIL_FIELDS = [
-  { key: 'client_name', label: 'Client' },
-  { key: 'order_code', label: 'Code commande' },
-  { key: 'item_reference', label: 'Reference article' },
+  { key: 'client_name', label: 'Client', icon: '👤' },
+  { key: 'item_reference', label: 'Article', icon: '📦' },
   {
     key: 'quantity',
-    label: 'Quantite',
-    render: (task) => (task.quantity != null ? `${formatNumber(task.quantity)} ${task.quantity_unit || ''}`.trim() : '—'),
+    label: 'Quantité',
+    icon: '📊',
+    format: (val, task) => `${val} ${task.quantity_unit || 'pcs'}`,
   },
-  { key: 'due_date', label: 'Echeance', render: (task) => formatDate(task.due_date, { withYear: true }) },
-  { key: 'planned_date', label: 'Planifiee', render: (task) => formatDate(task.planned_date, { withYear: true }) },
-  { key: 'production_line', label: 'Ligne' },
-  { key: 'machine', label: 'Machine' },
-  { key: 'workshop', label: 'Atelier' },
-  { key: 'assigned_to_name', label: 'Responsable' },
-  { key: 'workspace_name', label: 'Espace' },
 ];
 
 const TaskDetailsPanel = ({
@@ -165,51 +158,33 @@ const TaskDetailsPanel = ({
           <>
             {error && <div className="task-detail__error">{error}</div>}
 
-            <section className="task-detail__section">
-              <div className="task-detail__section-head">
-                <h4>Resume</h4>
-                <span>{formatRelativeDate(task.updated_at || task.created_at)}</span>
+            <section className="task-panel-section task-details">
+              <h4 className="task-panel-subtitle">Détails de production</h4>
+              <div className="task-details-grid">
+                {DETAIL_FIELDS.filter((f) => task[f.key]).map((f) => (
+                  <div key={f.key} className="task-detail-item">
+                    <span className="task-detail-label" aria-hidden>
+                      {f.icon} {f.label}
+                    </span>
+                    <strong className="task-detail-value">
+                      {f.format ? f.format(task[f.key], task) : task[f.key]}
+                    </strong>
+                  </div>
+                ))}
               </div>
-              <div className="task-detail__description" style={{ fontSize: '1.2em', fontWeight: '500', marginBottom: '1.5rem', background: '#f8f9fa', padding: '1rem', borderRadius: '4px' }}>
-                {task.description || 'Aucune consigne ou ligne specifique.'}
-              </div>
-
-              <div className="task-detail__meta-grid">
-                {DETAIL_FIELDS.map((field) => {
-                  const rawValue = field.render ? field.render(task) : task[field.key];
-                  if (!rawValue || rawValue === '—') return null; // Hide empty fields
-                  return (
-                    <div key={field.key} className="task-detail__meta-item">
-                      <span>{field.label}</span>
-                      <strong>{rawValue}</strong>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {(task.notes || task.expected_action || task.blocked_reason) && (
-                <div className="task-detail__stack">
-                  {task.notes && (
-                    <div className="task-detail__note">
-                      <span>Notes operatoires</span>
-                      <p>{task.notes}</p>
-                    </div>
-                  )}
-                  {task.expected_action && (
-                    <div className="task-detail__note">
-                      <span>Action attendue</span>
-                      <p>{task.expected_action}</p>
-                    </div>
-                  )}
-                  {task.blocked_reason && (
-                    <div className="task-detail__note task-detail__note--danger">
-                      <span>Motif de blocage</span>
-                      <p>{task.blocked_reason}</p>
-                    </div>
-                  )}
-                </div>
-              )}
             </section>
+
+            {task.description && (
+              <section className="task-detail__section">
+                <div className="task-detail__section-head">
+                  <h4>Resume</h4>
+                  <span>{formatRelativeDate(task.updated_at || task.created_at)}</span>
+                </div>
+                <div className="task-detail__description" style={{ fontSize: '1.2em', fontWeight: '500', marginBottom: '1.5rem', background: '#f8f9fa', padding: '1rem', borderRadius: '4px' }}>
+                  {task.description || 'Aucune consigne ou ligne specifique.'}
+                </div>
+              </section>
+            )}
 
             <section className="task-detail__section">
               <div className="task-detail__section-head">

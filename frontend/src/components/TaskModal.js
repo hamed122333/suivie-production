@@ -7,19 +7,10 @@ const EMPTY_FORM = {
   title: '',
   description: '',
   priority: 'MEDIUM',
-  clientName: '',
-  orderCode: '',
-  itemReference: '',
   quantity: '',
-  quantityUnit: 'pcs',
-  dueDate: '',
-  plannedDate: '',
-  productionLine: '',
-  machine: '',
-  workshop: '',
-  notes: '',
-  expectedAction: '',
-  assignedTo: '',
+  quantity_unit: 'pcs',
+  client_name: '',
+  item_reference: '',
 };
 
 const EMPTY_LINE = '';
@@ -31,21 +22,6 @@ const CREATE_PRIORITY_OPTIONS = [
   { value: 'URGENT', label: 'Urgente' },
 ];
 
-function toInputDate(value) {
-  return value ? String(value).slice(0, 10) : '';
-}
-
-function normalizeOptionalString(value) {
-  const normalized = `${value || ''}`.trim();
-  return normalized || null;
-}
-
-function normalizeOptionalNumber(value) {
-  if (value == null || value === '') return null;
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function buildTaskTitleFromLine(line) {
   const normalized = `${line || ''}`.trim().replace(/\s+/g, ' ');
   if (!normalized) {
@@ -55,15 +31,7 @@ function buildTaskTitleFromLine(line) {
   return normalized.length > 84 ? `${normalized.slice(0, 81).trim()}...` : normalized;
 }
 
-const TaskModal = ({
-  task,
-  defaultStatus = 'TODO',
-  onSave,
-  onClose,
-  users = [],
-  canAssign = false,
-  isCommercial = false,
-}) => {
+const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = false }) => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [lines, setLines] = useState([EMPTY_LINE]);
   const [error, setError] = useState('');
@@ -81,43 +49,33 @@ const TaskModal = ({
   useEffect(() => {
     if (task) {
       setForm({
+        ...EMPTY_FORM,
         title: task.title || '',
         description: task.description || '',
         priority: task.priority || 'MEDIUM',
-        clientName: task.client_name || '',
-        orderCode: task.order_code || '',
-        itemReference: task.item_reference || '',
-        quantity: task.quantity ?? '',
-        quantityUnit: task.quantity_unit || 'pcs',
-        dueDate: toInputDate(task.due_date),
-        plannedDate: toInputDate(task.planned_date),
-        productionLine: task.production_line || '',
-        machine: task.machine || '',
-        workshop: task.workshop || '',
-        notes: task.notes || '',
-        expectedAction: task.expected_action || '',
-        assignedTo: task.assigned_to ? String(task.assigned_to) : '',
+        client_name: task.client_name || '',
+        item_reference: task.item_reference || '',
+        quantity: task.quantity?.toString() || '',
+        quantity_unit: task.quantity_unit || 'pcs',
       });
-      setLines([EMPTY_LINE]);
-      setError('');
-      return;
+    } else {
+      setForm(EMPTY_FORM);
     }
 
-    setForm(EMPTY_FORM);
     setLines([EMPTY_LINE]);
     setError('');
   }, [task]);
 
   // Load stock import articles when commercial opens the create modal
   useEffect(() => {
-    if (!isCommercial || isEditing) return;
+    if (!isCommercialMode || isEditing) return;
     setStockLoading(true);
     stockImportAPI
       .getAll()
       .then((res) => setStockArticles(res.data || []))
       .catch(() => setStockArticles([]))
       .finally(() => setStockLoading(false));
-  }, [isCommercial, isEditing]);
+  }, [isCommercialMode, isEditing]);
 
   const assignableUsers = useMemo(
     () =>
@@ -191,98 +149,89 @@ const TaskModal = ({
     );
   }, [stockArticles, searchQuery]);
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setError('');
-    setSaving(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.title.trim() && !isCommercialMode) {
+      alert('Le titre est requis');
+      return;
+    }
 
-    try {
-      if (isEditing) {
-        if (!form.title.trim()) {
-          throw new Error('Le titre de la fiche est obligatoire.');
-        }
+    const payload = { ...form };
 
-        await onSave({
-          title: form.title.trim(),
-          description: normalizeOptionalString(form.description),
-          priority: form.priority,
-          clientName: normalizeOptionalString(form.clientName),
-          orderCode: normalizeOptionalString(form.orderCode),
-          itemReference: normalizeOptionalString(form.itemReference),
-          quantity: normalizeOptionalNumber(form.quantity),
-          quantityUnit: normalizeOptionalString(form.quantityUnit) || 'pcs',
-          dueDate: form.dueDate || null,
-          plannedDate: form.plannedDate || null,
-          productionLine: normalizeOptionalString(form.productionLine),
-          machine: normalizeOptionalString(form.machine),
-          workshop: normalizeOptionalString(form.workshop),
-          notes: normalizeOptionalString(form.notes),
-          expectedAction: normalizeOptionalString(form.expectedAction),
-          ...(canAssign ? { assignedTo: form.assignedTo || null } : {}),
-        });
-      } else if (isCommercial) {
-        // Commercial create mode: tasks from selected stock import articles
-        const clientName = `${form.clientName || ''}`.trim();
-        if (!clientName) {
-          throw new Error('Le nom du client est obligatoire.');
-        }
-
-        if (selectedArticleIds.size === 0) {
-          throw new Error('Sélectionnez au moins un article disponible.');
-        }
-
-          const selectedArticles = stockArticles.filter((a) => selectedArticleIds.has(a.id));
-          const preparedTasks = selectedArticles.map((article) => {
-            const reqQty = Number(requestedQuantities[article.id] || article.quantity);
-            return {
-              title: `${clientName} • ${article.article}`,
-              description: `${reqQty} pcs commandés (Stock initial: ${Number(article.quantity)} pcs)`,
-              priority: form.priority,
-            clientName,
-            itemReference: article.article,
-            quantity: reqQty,
-            quantityUnit: 'pcs',
-            stockImportId: article.id,
-          };
-        });
-
-        await onSave({
-          status: defaultStatus,
-          tasks: preparedTasks,
-        });
-      } else {
-        const clientName = `${form.clientName || ''}`.trim();
-        const preparedTasks = lines
-          .map((line) => `${line || ''}`.trim())
-          .filter(Boolean)
-          .map((line) => ({
-            title: buildTaskTitleFromLine(line),
-            description: line,
-            priority: form.priority,
-            clientName,
-          }));
-
-        if (!clientName) {
-          throw new Error('Le nom du client est obligatoire.');
-        }
-
-        if (preparedTasks.length === 0) {
-          throw new Error('Ajoute au moins une ligne d article.');
-        }
-
-        await onSave({
-          status: defaultStatus,
-          tasks: preparedTasks,
-        });
+    // Normaliser la quantité
+    if (payload.quantity) {
+      payload.quantity = Number(payload.quantity);
+      if (isNaN(payload.quantity)) {
+        alert('La quantité doit être un nombre valide');
+        return;
       }
-    } catch (err) {
-      setError(err?.response?.data?.error || err.message || 'Erreur lors de la sauvegarde.');
-    } finally {
-      setSaving(false);
+    } else {
+      payload.quantity = null;
+    }
+
+    const normalizeOptionalString = (val) => val?.trim() || null;
+    payload.description = normalizeOptionalString(payload.description);
+    payload.client_name = normalizeOptionalString(payload.client_name);
+    payload.item_reference = normalizeOptionalString(payload.item_reference);
+
+    if (isCommercialMode) {
+      // Commercial create mode: tasks from selected stock import articles
+      const clientName = `${form.clientName || ''}`.trim();
+      if (!clientName) {
+        throw new Error('Le nom du client est obligatoire.');
+      }
+
+      if (selectedArticleIds.size === 0) {
+        throw new Error('Sélectionnez au moins un article disponible.');
+      }
+
+        const selectedArticles = stockArticles.filter((a) => selectedArticleIds.has(a.id));
+        const preparedTasks = selectedArticles.map((article) => {
+          const reqQty = Number(requestedQuantities[article.id] || article.quantity);
+          return {
+            title: `${clientName} • ${article.article}`,
+            description: `${reqQty} pcs commandés (Stock initial: ${Number(article.quantity)} pcs)`,
+            priority: form.priority,
+          clientName,
+          itemReference: article.article,
+          quantity: reqQty,
+          quantityUnit: 'pcs',
+          stockImportId: article.id,
+        };
+      });
+
+      await onSave({
+        status: defaultStatus,
+        tasks: preparedTasks,
+      });
+    } else {
+      const clientName = `${form.clientName || ''}`.trim();
+      const preparedTasks = lines
+        .map((line) => `${line || ''}`.trim())
+        .filter(Boolean)
+        .map((line) => ({
+          title: buildTaskTitleFromLine(line),
+          description: line,
+          priority: form.priority,
+          clientName,
+        }));
+
+      if (!clientName) {
+        throw new Error('Le nom du client est obligatoire.');
+      }
+
+      if (preparedTasks.length === 0) {
+        throw new Error('Ajoute au moins une ligne d article.');
+      }
+
+      await onSave({
+        status: defaultStatus,
+        tasks: preparedTasks,
+      });
     }
   };
 
-  if (!isEditing && isCommercial) {
+  if (!isEditing && isCommercialMode) {
     // Commercial create mode: show imported articles list
     return (
       <div className="modal-overlay task-modal-classic-overlay" onClick={onClose}>
