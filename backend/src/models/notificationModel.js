@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const MAX_NOTIFICATIONS_PER_PAGE = 100;
 
 const NotificationModel = {
   async createTaskCreatedNotifications({ taskIds, recipientUserIds, createdByName }) {
@@ -15,8 +16,8 @@ const NotificationModel = {
           recipientUserId,
           taskId,
           'task_created',
-          'Nouvelle tache creee',
-          `${createdByName || 'Un commercial'} a cree la tache SP-${taskId}`
+          'Nouvelle tâche créée',
+          `${createdByName || 'Un commercial'} a créé la tâche SP-${taskId}`
         );
         placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
         index += 5;
@@ -34,7 +35,7 @@ const NotificationModel = {
 
   async listByRecipient({ recipientUserId, page = 1, perPage = 20 }) {
     const safePage = Number.isInteger(page) && page > 0 ? page : 1;
-    const safePerPage = Number.isInteger(perPage) && perPage > 0 ? Math.min(perPage, 100) : 20;
+    const safePerPage = Number.isInteger(perPage) && perPage > 0 ? Math.min(perPage, MAX_NOTIFICATIONS_PER_PAGE) : 20;
     const offset = (safePage - 1) * safePerPage;
 
     const [itemsResult, totalResult, unreadResult] = await Promise.all([

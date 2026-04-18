@@ -275,7 +275,7 @@ const taskController = {
         taskId: task.id,
         actorId: req.user.id,
         actionType: 'created',
-        message: 'Tache creee par le commercial',
+        message: 'Tâche créée par le commercial',
       });
       await notifyTaskCreation([task], req.user);
       res.status(201).json(task);
@@ -308,7 +308,7 @@ const taskController = {
           taskId: task.id,
           actorId: req.user.id,
           actionType: 'created',
-          message: 'Tache creee par le commercial',
+          message: 'Tâche créée par le commercial',
         }))
       );
       await notifyTaskCreation(createdTasks, req.user);

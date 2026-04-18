@@ -12,6 +12,7 @@ const ROLE_CONFIG = {
   commercial: { label: 'Commercial', icon: '✉', color: '#b45309' },
   user: { label: 'Utilisateur', icon: '○', color: '#374151' },
 };
+const NOTIFICATION_POLL_INTERVAL_MS = 30000;
 
 const Header = ({ toggleSidebar, isSidebarOpen }) => {
   const { user, logout, isSuperAdmin, isPlanner } = useAuth();
@@ -60,7 +61,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
     if (!canViewNotifications) return;
     loadNotifications();
 
-    const interval = window.setInterval(loadNotifications, 25000);
+    const interval = window.setInterval(loadNotifications, NOTIFICATION_POLL_INTERVAL_MS);
     const onFocus = () => loadNotifications();
     window.addEventListener('focus', onFocus);
     return () => {
