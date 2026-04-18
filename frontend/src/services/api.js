@@ -34,7 +34,15 @@ api.interceptors.response.use(
 
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
   me: () => api.get('/auth/me'),
+};
+
+export const notificationAPI = {
+  getAll: (params = {}) => api.get('/notifications', { params }),
+  markRead: (id) => api.patch(`/notifications/${id}/read`),
+  markAllRead: () => api.patch('/notifications/read-all'),
 };
 
 export const taskAPI = {

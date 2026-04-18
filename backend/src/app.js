@@ -9,6 +9,7 @@ const userRoutes = require('./routes/userRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const workspaceRoutes = require('./routes/workspaceRoutes');
 const stockImportRoutes = require('./routes/stockImportRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/stock-import', stockImportRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Suivi Production API running' });

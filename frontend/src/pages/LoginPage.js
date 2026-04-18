@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -197,6 +197,11 @@ const LoginPage = () => {
                     </svg>
                   )}
                 </button>
+              </div>
+              <div style={{ marginTop: '0.5rem', textAlign: 'right' }}>
+                <Link to="/forgot-password" style={{ color: '#93c5fd', fontSize: '0.8rem', textDecoration: 'none' }}>
+                  Mot de passe oublié ?
+                </Link>
               </div>
             </div>
 

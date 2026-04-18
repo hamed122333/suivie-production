@@ -8,6 +8,8 @@ import DashboardPage from "./pages/DashboardPage";
 import KanbanPage from "./pages/KanbanPage";
 import UsersPage from "./pages/UsersPage";
 import StockPage from "./pages/StockPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import "./App.css";
 import { WorkspaceProvider } from "./context/WorkspaceContext";
 
@@ -87,6 +89,14 @@ const AppRoutes = () => {
       <Route
         path="/login"
         element={user ? <Navigate to="/kanban" replace /> : <LoginPage />}
+      />
+      <Route
+        path="/forgot-password"
+        element={user ? <Navigate to="/kanban" replace /> : <ForgotPasswordPage />}
+      />
+      <Route
+        path="/reset-password"
+        element={user ? <Navigate to="/kanban" replace /> : <ResetPasswordPage />}
       />
       <Route
         path="/dashboard"

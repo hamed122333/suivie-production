@@ -17,6 +17,15 @@ const UserModel = {
     return result.rows;
   },
 
+  async findByRoles(roles = []) {
+    if (!Array.isArray(roles) || roles.length === 0) return [];
+    const result = await pool.query(
+      'SELECT id, name, email, role FROM users WHERE role = ANY($1::text[]) ORDER BY id ASC',
+      [roles]
+    );
+    return result.rows;
+  },
+
   async create(name, email, password, role = 'user') {
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
@@ -28,6 +37,11 @@ const UserModel = {
 
   async validatePassword(plainPassword, hashedPassword) {
     return bcrypt.compare(plainPassword, hashedPassword);
+  },
+
+  async updatePassword(userId, newPassword) {
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, userId]);
   },
 
   async delete(id) {

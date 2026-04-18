@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { notificationAPI } from '../services/api';
 import { getInitials } from '../utils/formatters';
 import './Header.css';
 
@@ -19,7 +20,13 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifLoading, setNotifLoading] = useState(false);
   const menuRef = useRef(null);
+  const notifRef = useRef(null);
+  const canViewNotifications = isSuperAdmin || isPlanner;
 
   const roleInfo = ROLE_CONFIG[user?.role] || ROLE_CONFIG.user;
 
@@ -29,10 +36,73 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
   useEffect(() => {
     const onDoc = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
     };
     document.addEventListener('click', onDoc);
     return () => document.removeEventListener('click', onDoc);
   }, []);
+
+  const loadNotifications = useCallback(async () => {
+    if (!canViewNotifications) return;
+    setNotifLoading(true);
+    try {
+      const response = await notificationAPI.getAll({ page: 1, perPage: 10 });
+      setNotifications(response.data?.items || []);
+      setUnreadCount(response.data?.unreadCount || 0);
+    } catch (err) {
+      console.error('Failed to load notifications', err);
+    } finally {
+      setNotifLoading(false);
+    }
+  }, [canViewNotifications]);
+
+  useEffect(() => {
+    if (!canViewNotifications) return;
+    loadNotifications();
+
+    const interval = window.setInterval(loadNotifications, 25000);
+    const onFocus = () => loadNotifications();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [canViewNotifications, loadNotifications]);
+
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationAPI.markAllRead();
+      setNotifications((prev) => prev.map((entry) => ({ ...entry, is_read: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error('Failed to mark all notifications as read', err);
+    }
+  };
+
+  const handleOpenNotification = async (notification) => {
+    if (!notification.is_read) {
+      try {
+        await notificationAPI.markRead(notification.id);
+        setNotifications((prev) =>
+          prev.map((entry) =>
+            entry.id === notification.id
+              ? { ...entry, is_read: true, read_at: entry.read_at || new Date().toISOString() }
+              : entry
+          )
+        );
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      } catch (err) {
+        console.error('Failed to mark notification as read', err);
+      }
+    }
+
+    if (notification.task_id) {
+      navigate(`/kanban?q=${encodeURIComponent(`SP-${notification.task_id}`)}`);
+    } else {
+      navigate('/kanban');
+    }
+    setNotifOpen(false);
+  };
 
   useEffect(() => {
     if (location.pathname !== '/kanban') {
@@ -144,7 +214,65 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
 
         {/* Actions */}
         <div className="app-header__actions">
-          {/* Notifications placeholder */}
+          {canViewNotifications && (
+            <div className="app-header__notif-wrap" ref={notifRef}>
+              <button
+                type="button"
+                className="app-header__icon-btn"
+                title="Notifications"
+                aria-label="Notifications"
+                onClick={() => {
+                  const nextState = !notifOpen;
+                  setNotifOpen(nextState);
+                  if (nextState) loadNotifications();
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-5-5.91V4a1 1 0 1 0-2 0v1.09A6 6 0 0 0 6 11v3.2c0 .53-.21 1.04-.59 1.4L4 17h5" />
+                  <path d="M9 17a3 3 0 0 0 6 0" />
+                </svg>
+                {unreadCount > 0 && <span className="app-header__notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+              </button>
+
+              {notifOpen && (
+                <div className="app-header__notif-dropdown">
+                  <div className="app-header__notif-head">
+                    <strong>Notifications</strong>
+                    {unreadCount > 0 && (
+                      <button type="button" className="app-header__notif-mark-all" onClick={handleMarkAllRead}>
+                        Tout lire
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="app-header__notif-list">
+                    {notifLoading ? (
+                      <div className="app-header__notif-empty">Chargement...</div>
+                    ) : notifications.length === 0 ? (
+                      <div className="app-header__notif-empty">Aucune notification.</div>
+                    ) : (
+                      notifications.map((notification) => (
+                        <button
+                          type="button"
+                          key={notification.id}
+                          className={`app-header__notif-item ${notification.is_read ? '' : 'app-header__notif-item--unread'}`}
+                          onClick={() => handleOpenNotification(notification)}
+                        >
+                          <div className="app-header__notif-title">{notification.title}</div>
+                          <div className="app-header__notif-body">{notification.body}</div>
+                          <div className="app-header__notif-meta">
+                            {notification.workspace_name ? `${notification.workspace_name} • ` : ''}
+                            {new Date(notification.created_at).toLocaleString('fr-FR')}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <button type="button" className="app-header__icon-btn" title="Actualiser la page" onClick={() => window.location.reload()}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M1 4v6h6" /><path d="M23 20v-6h-6" />

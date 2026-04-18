@@ -2,6 +2,8 @@ const TaskModel = require('../models/taskModel');
 const TaskCommentModel = require('../models/taskCommentModel');
 const TaskHistoryModel = require('../models/taskHistoryModel');
 const StockImportModel = require('../models/stockImportModel');
+const UserModel = require('../models/userModel');
+const NotificationModel = require('../models/notificationModel');
 const { TASK_STATUSES, TASK_STATUS_LABELS, TRACKED_TASK_FIELDS } = require('../constants/task');
 const { createHttpError, isHttpError } = require('../utils/httpErrors');
 const { applyTaskVisibility, buildTaskFilters, canAccessTask, parseWorkspaceId } = require('../utils/taskScope');
@@ -67,6 +69,18 @@ function buildUpdateHistoryEntries(beforeTask, payload, actorId) {
       };
     })
     .filter(Boolean);
+}
+
+async function notifyTaskCreation(createdTasks, actor) {
+  if (!Array.isArray(createdTasks) || createdTasks.length === 0) return;
+  const recipients = await UserModel.findByRoles(['planner', 'super_admin']);
+  if (!Array.isArray(recipients) || recipients.length === 0) return;
+
+  await NotificationModel.createTaskCreatedNotifications({
+    taskIds: createdTasks.map((task) => task.id),
+    recipientUserIds: recipients.map((user) => user.id),
+    createdByName: actor?.name,
+  });
 }
 
 const taskController = {
@@ -263,6 +277,7 @@ const taskController = {
         actionType: 'created',
         message: 'Tache creee par le commercial',
       });
+      await notifyTaskCreation([task], req.user);
       res.status(201).json(task);
     } catch (err) {
       if (isHttpError(err)) {
@@ -296,6 +311,7 @@ const taskController = {
           message: 'Tache creee par le commercial',
         }))
       );
+      await notifyTaskCreation(createdTasks, req.user);
 
       // Do not mark as used immediately, let the deduction handle it when DONE
       // const stockImportIds = createdTasks
