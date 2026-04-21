@@ -1,0 +1,1 @@
+require('dotenv').config(); const db = require('./src/config/db'); async function clear() { try { await db.query('TRUNCATE TABLE stock_import RESTART IDENTITY CASCADE;'); console.log('Table stock_import complètement vidée.'); process.exit(0); } catch (e) { console.error(e); process.exit(1); } } clear();

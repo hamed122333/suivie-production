@@ -23,17 +23,6 @@ function extractCellNumber(cell) {
  *   Base date is taken from the file if provided, otherwise today.
  */
 function calculateReadyDate(articleName, baseDateInput) {
-  const name = `${articleName || ''}`.trim().toLowerCase();
-  let daysToAdd = 0;
-
-  if (name.startsWith('cv') || name.startsWith('ci')) {
-    daysToAdd = 6;
-  } else if (name.startsWith('di') || name.startsWith('dv')) {
-    daysToAdd = 9;
-  } else if (name.startsWith('pl')) {
-    daysToAdd = 4;
-  }
-
   let date = new Date();
 
   if (baseDateInput) {
@@ -62,8 +51,6 @@ function calculateReadyDate(articleName, baseDateInput) {
      date = new Date();
   }
 
-  // Add the delayed days
-  date.setDate(date.getDate() + daysToAdd);
 
   return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
 }

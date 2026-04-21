@@ -61,12 +61,9 @@ const ManualStockModal = ({ onClose, onAdded }) => {
           </p>
 
           <div className="stock-import-modal__rules">
-            <p className="stock-import-modal__rules-title">Règles de délai appliquées automatiquement :</p>
+            <p className="stock-import-modal__rules-title">Règles de date :</p>
             <ul>
-              <li><span className="badge badge--blue">ci / cv</span> +6 jours</li>
-              <li><span className="badge badge--orange">di / dv</span> +9 jours</li>
-              <li><span className="badge badge--green">pl</span> +4 jours</li>
-              <li><span className="badge badge--gray">autres</span> immédiat</li>
+              <li><span className="badge badge--gray">date</span> Utilise la base sélectionnée. Par défaut, la date du jour.</li>
             </ul>
           </div>
 
