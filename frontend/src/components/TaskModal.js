@@ -31,7 +31,8 @@ function buildTaskTitleFromLine(line) {
   return normalized.length > 84 ? `${normalized.slice(0, 81).trim()}...` : normalized;
 }
 
-const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = false }) => {
+const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = false, isCommercial = false, users = [], canAssign = false, defaultStatus = 'TODO' }) => {
+  const isCommMode = isCommercialMode || isCommercial;
   const [form, setForm] = useState(EMPTY_FORM);
   const [lines, setLines] = useState([EMPTY_LINE]);
   const [error, setError] = useState('');
@@ -68,14 +69,14 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
 
   // Load stock import articles when commercial opens the create modal
   useEffect(() => {
-    if (!isCommercialMode || isEditing) return;
+    if (!isCommMode || isEditing) return;
     setStockLoading(true);
     stockImportAPI
       .getAll()
       .then((res) => setStockArticles(res.data || []))
       .catch(() => setStockArticles([]))
       .finally(() => setStockLoading(false));
-  }, [isCommercialMode, isEditing]);
+  }, [isCommMode, isEditing]);
 
   const assignableUsers = useMemo(
     () =>
@@ -151,39 +152,41 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.title.trim() && !isCommercialMode) {
+    if (!form.title.trim() && !isCommMode) {
       alert('Le titre est requis');
       return;
     }
 
-    const payload = { ...form };
+    setSaving(true);
+    try {
+      const payload = { ...form };
 
-    // Normaliser la quantité
-    if (payload.quantity) {
-      payload.quantity = Number(payload.quantity);
-      if (isNaN(payload.quantity)) {
-        alert('La quantité doit être un nombre valide');
-        return;
-      }
-    } else {
-      payload.quantity = null;
-    }
-
-    const normalizeOptionalString = (val) => val?.trim() || null;
-    payload.description = normalizeOptionalString(payload.description);
-    payload.client_name = normalizeOptionalString(payload.client_name);
-    payload.item_reference = normalizeOptionalString(payload.item_reference);
-
-    if (isCommercialMode) {
-      // Commercial create mode: tasks from selected stock import articles
-      const clientName = `${form.clientName || ''}`.trim();
-      if (!clientName) {
-        throw new Error('Le nom du client est obligatoire.');
+      // Normaliser la quantité
+      if (payload.quantity) {
+        payload.quantity = Number(payload.quantity);
+        if (isNaN(payload.quantity)) {
+          alert('La quantité doit être un nombre valide');
+          return;
+        }
+      } else {
+        payload.quantity = null;
       }
 
-      if (selectedArticleIds.size === 0) {
-        throw new Error('Sélectionnez au moins un article disponible.');
-      }
+      const normalizeOptionalString = (val) => val?.trim() || null;
+      payload.description = normalizeOptionalString(payload.description);
+      payload.client_name = normalizeOptionalString(payload.client_name);
+      payload.item_reference = normalizeOptionalString(payload.item_reference);
+
+      if (isCommMode) {
+        // Commercial create mode: tasks from selected stock import articles
+        const clientName = `${form.clientName || ''}`.trim();
+        if (!clientName) {
+          throw new Error('Le nom du client est obligatoire.');
+        }
+
+        if (selectedArticleIds.size === 0) {
+          throw new Error('Sélectionnez au moins un article disponible.');
+        }
 
         const selectedArticles = stockArticles.filter((a) => selectedArticleIds.has(a.id));
         const preparedTasks = selectedArticles.map((article) => {
@@ -192,46 +195,55 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
             title: `${clientName} • ${article.article}`,
             description: `${reqQty} pcs commandés (Stock initial: ${Number(article.quantity)} pcs)`,
             priority: form.priority,
-          clientName,
-          itemReference: article.article,
-          quantity: reqQty,
-          quantityUnit: 'pcs',
-          stockImportId: article.id,
-        };
-      });
+            clientName,
+            itemReference: article.article,
+            quantity: reqQty,
+            quantityUnit: 'pcs',
+            stockImportId: article.id,
+          };
+        });
 
-      await onSave({
-        status: defaultStatus,
-        tasks: preparedTasks,
-      });
-    } else {
-      const clientName = `${form.clientName || ''}`.trim();
-      const preparedTasks = lines
-        .map((line) => `${line || ''}`.trim())
-        .filter(Boolean)
-        .map((line) => ({
-          title: buildTaskTitleFromLine(line),
-          description: line,
-          priority: form.priority,
-          clientName,
-        }));
+        await onSave({
+          status: defaultStatus,
+          tasks: preparedTasks,
+        });
+      } else {
+        const clientName = `${form.clientName || ''}`.trim();
+        const preparedTasks = lines
+          .map((line) => `${line || ''}`.trim())
+          .filter(Boolean)
+          .map((line) => ({
+            title: buildTaskTitleFromLine(line),
+            description: line,
+            priority: form.priority,
+            clientName,
+          }));
 
-      if (!clientName) {
-        throw new Error('Le nom du client est obligatoire.');
+        if (!clientName) {
+          throw new Error('Le nom du client est obligatoire.');
+        }
+
+        if (preparedTasks.length === 0) {
+          throw new Error('Ajoute au moins une ligne d article.');
+        }
+
+        await onSave({
+          status: defaultStatus,
+          tasks: preparedTasks,
+        });
       }
-
-      if (preparedTasks.length === 0) {
-        throw new Error('Ajoute au moins une ligne d article.');
+    } catch (err) {
+      if (err.message && err.message !== 'Le nom du client est obligatoire.' && err.message !== 'Sélectionnez au moins un article disponible.' && err.message !== 'Ajoute au moins une ligne d article.') {
+        setError(err.message);
+      } else if (err.message) {
+        alert(err.message);
       }
-
-      await onSave({
-        status: defaultStatus,
-        tasks: preparedTasks,
-      });
+    } finally {
+      setSaving(false);
     }
   };
 
-  if (!isEditing && isCommercialMode) {
+  if (!isEditing && isCommMode) {
     // Commercial create mode: show imported articles list
     return (
       <div className="modal-overlay task-modal-classic-overlay" onClick={onClose}>

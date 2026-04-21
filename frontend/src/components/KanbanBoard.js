@@ -1,4 +1,5 @@
-import React, { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import BlockReasonModal from './BlockReasonModal';
 import TaskCard from './TaskCard';
 import TaskDetailsPanel from './TaskDetailsPanel';
@@ -95,15 +96,43 @@ const KanbanBoard = ({
   onStatsRefresh,
 }) => {
   const { canChangeStatus, canCreateTask, isCommercial, isSuperAdmin } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [blockModal, setBlockModal] = useState({ open: false, task: null });
   const [dragOverColumn, setDragOverColumn] = useState(null);
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [selectedTaskId, setSelectedTaskId] = useState(() => {
+    const taskIdString = searchParams.get('taskId');
+    return taskIdString ? parseInt(taskIdString, 10) : null;
+  });
   const [error, setError] = useState('');
   const [detailRefreshSignal, setDetailRefreshSignal] = useState(0);
   const errorTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    const taskIdString = searchParams.get('taskId');
+    if (taskIdString) {
+      setSelectedTaskId(parseInt(taskIdString, 10));
+    }
+  }, [searchParams]);
+
+  const handleSelectTask = (taskId) => {
+    setSelectedTaskId(taskId);
+    if (!taskId) {
+      setSearchParams((prev) => {
+        const newParams = new URLSearchParams(prev);
+        newParams.delete('taskId');
+        return newParams;
+      });
+    } else {
+      setSearchParams((prev) => {
+        const newParams = new URLSearchParams(prev);
+        newParams.set('taskId', taskId.toString());
+        return newParams;
+      });
+    }
+  };
 
   const isAllWorkspaces = workspaceId === 'all';
   const deferredQuery = useDeferredValue(filterQuery);
@@ -364,7 +393,7 @@ const KanbanBoard = ({
                       onDrop={(event) => handleDropOnTask(event, task)}
                       style={{ outline: dragOverTaskId === task.id ? `2px solid ${column.color}` : 'none' }}
                     >
-                      <TaskCard task={task} onOpen={(currentTask) => setSelectedTaskId(currentTask.id)} isDragging={false} />
+                      <TaskCard task={task} onOpen={(currentTask) => handleSelectTask(currentTask.id)} isDragging={false} />
                     </div>
                   ))
                 )}
@@ -417,7 +446,7 @@ const KanbanBoard = ({
         refreshSignal={detailRefreshSignal}
         canManage={canChangeStatus}
         canEdit={canChangeStatus || canCreateTask || isSuperAdmin}
-        onClose={() => setSelectedTaskId(null)}
+        onClose={() => handleSelectTask(null)}
         onEditTask={(task) => {
           setEditingTask(task);
           setShowTaskModal(true);

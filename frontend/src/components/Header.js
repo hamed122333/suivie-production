@@ -16,7 +16,7 @@ const NOTIFICATION_POLL_INTERVAL_MS = 30000;
 
 const Header = ({ toggleSidebar, isSidebarOpen }) => {
   const { user, logout, isSuperAdmin, isPlanner } = useAuth();
-  const { workspaceId, workspaces } = useWorkspace();
+  const { workspaceId, workspaces, selectWorkspace } = useWorkspace();
   const location = useLocation();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -97,11 +97,13 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
       }
     }
 
-    if (notification.task_id) {
-      navigate(`/kanban?q=${encodeURIComponent(`SP-${notification.task_id}`)}`);
-    } else {
-      navigate('/kanban');
+    // Changer le workspace vers celui associé à la notification
+    if (notification.workspace_id) {
+      selectWorkspace(notification.workspace_id);
     }
+    
+    // Seulement naviguer vers la page Kanban, sans ouvrir le volet de détail
+    navigate('/kanban');
     setNotifOpen(false);
   };
 
