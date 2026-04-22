@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { stockImportAPI } from '../services/api';
 import StockImportModal from '../components/StockImportModal';
 import ManualStockModal from '../components/ManualStockModal';
+import ImportStock from '../components/ImportStock';
 import { useAuth } from '../context/AuthContext';
 import './StockPage.css';
 
@@ -173,6 +174,8 @@ const StockPage = () => {
 
       {error && <div className="error-alert">{error}</div>}
 
+      {isPlanner && <ImportStock onImported={handleImported} />}
+
       <div className="stock-content">
         {isLoading ? (
           <div className="loading-state">
@@ -275,4 +278,3 @@ const StockPage = () => {
 };
 
 export default StockPage;
-
