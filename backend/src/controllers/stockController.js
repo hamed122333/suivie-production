@@ -92,6 +92,7 @@ const stockController = {
     );
 
     const valuesToUpsert = [];
+    let skippedCount = 0;
     for (const row of normalizedRows) {
       const entryDate = parseDate(row[DATE_HEADER]);
       const itemCode = String(row[ITEM_CODE_HEADER] || '').trim();
@@ -103,6 +104,7 @@ const stockController = {
       const age = Number.isFinite(ageValue) ? Math.trunc(ageValue) : null;
 
       if (!entryDate || !itemCode || !clientCode || !Number.isFinite(quantity)) {
+        skippedCount += 1;
         continue;
       }
 
@@ -153,9 +155,11 @@ const stockController = {
       return res.status(200).json({
         message: 'Importation du stock terminée.',
         importedCount: valuesToUpsert.length,
+        skippedCount,
       });
     } catch (error) {
       await client.query('ROLLBACK');
+      console.error('Stock import error:', error);
       return res.status(500).json({ error: "Erreur lors de l'importation du stock." });
     } finally {
       client.release();
