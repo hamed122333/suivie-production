@@ -7,6 +7,15 @@ import './Sidebar.css';
 
 const WORKSPACE_ICONS = ['●', '○', '◎', '◉', '◌', '◍', '⚙'];
 
+function getWorkspaceIcon(ws, idx) {
+  if (ws.id === 'all') return '⌂';
+  const name = (ws.name || '').toLowerCase();
+  if (name.includes('standard')) return '📦';
+  if (name.includes('planif')) return '📅';
+  if (name.includes('urgent')) return '🚨';
+  return WORKSPACE_ICONS[(idx - 1) % WORKSPACE_ICONS.length];
+}
+
 const getRoleLabel = (role) => {
   const labels = {
     super_admin: { label: 'Suivi', color: '#7c3aed', bg: '#ede9fe' },
@@ -69,7 +78,7 @@ const Sidebar = ({ closeSidebar }) => {
             const id = String(ws.id);
             const active = id === activeId;
             const isAll = ws.id === 'all';
-            const icon = isAll ? '⌂' : WORKSPACE_ICONS[(idx - (isAll ? 0 : 1)) % WORKSPACE_ICONS.length];
+            const icon = getWorkspaceIcon(ws, idx);
             return (
               <button
                 type="button"
