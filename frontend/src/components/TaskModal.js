@@ -9,8 +9,8 @@ const EMPTY_FORM = {
   priority: 'MEDIUM',
   quantity: '',
   quantity_unit: 'pcs',
-  client_name: '',
-  item_reference: '',
+  clientName: '',
+  itemReference: '',
 };
 
 const EMPTY_LINE = '';
@@ -54,8 +54,8 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
         title: task.title || '',
         description: task.description || '',
         priority: task.priority || 'MEDIUM',
-        client_name: task.client_name || '',
-        item_reference: task.item_reference || '',
+        clientName: task.client_name || task.clientName || '',
+        itemReference: task.item_reference || task.itemReference || '',
         quantity: task.quantity?.toString() || '',
         quantity_unit: task.quantity_unit || 'pcs',
       });
@@ -127,6 +127,16 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
           ...q,
           [article.id]: Number(article.quantity)
         }));
+
+        if (article.client_name || article.clientName) {
+          const fetchedClientName = article.client_name || article.clientName;
+          setForm((f) => {
+            if (!f.clientName || f.clientName.trim() === '') {
+              return { ...f, clientName: fetchedClientName };
+            }
+            return f;
+          });
+        }
       }
       return next;
     });
@@ -174,8 +184,8 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
 
       const normalizeOptionalString = (val) => val?.trim() || null;
       payload.description = normalizeOptionalString(payload.description);
-      payload.client_name = normalizeOptionalString(payload.client_name);
-      payload.item_reference = normalizeOptionalString(payload.item_reference);
+      payload.clientName = normalizeOptionalString(payload.clientName);
+      payload.itemReference = normalizeOptionalString(payload.itemReference);
 
       if (isCommMode) {
         // Commercial create mode: tasks from selected stock import articles
