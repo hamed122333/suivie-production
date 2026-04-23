@@ -82,22 +82,54 @@ const stockImportController = {
         return res.status(400).json({ error: 'Le fichier Excel est vide ou invalide' });
       }
 
-      // Read header row to identify column indices
-      const headerRow = worksheet.getRow(1);
-      const headers = {};
-      headerRow.eachCell((cell, colNumber) => {
-        const value = `${cell.value || ''}`.trim().toLowerCase();
-        headers[value] = colNumber;
-      });
+      // Read header row to identify column indices (search in the first 10 rows)
+      let headerRow = null;
+      let headers = {};
+      let headerRowNumber = 1;
+
+      for (let r = 1; r <= 10; r++) {
+        const row = worksheet.getRow(r);
+        const tempHeaders = {};
+        let foundArticle = false;
+
+        row.eachCell((cell, colNumber) => {
+          const rawValue = typeof cell.value === 'object' && cell.value !== null ? (cell.value.richText?.map(rt => rt.text).join('') || cell.value.result || '') : cell.value;
+          const value = `${rawValue || ''}`.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          tempHeaders[value] = colNumber;
+
+          if (['article', 'code article', 'reference', 'ref'].includes(value)) {
+            foundArticle = true;
+          }
+        });
+
+        if (foundArticle) {
+          headerRow = row;
+          headers = tempHeaders;
+          headerRowNumber = r;
+          break;
+        }
+      }
+
+      if (!headerRow) {
+        return res.status(400).json({
+          error: 'Impossible de trouver la ligne d\'en-tête contenant "CODE ARTICLE" ou "ARTICLE".'
+        });
+      }
 
       // Resolve article and quantity column indices
-      const articleCandidates = ['article', 'articles', 'ref', 'reference', 'désignation', 'designation'];
-      const quantityCandidates = ['quantité', 'quantite', 'qté', 'qte', 'qty', 'quantity', 'quantités', 'quantites'];
-      const dateCandidates = ['date', 'dates', 'date_import', 'jour'];
+      const articleCandidates = ['article', 'articles', 'ref', 'reference', 'code article'];
+      const designationCandidates = ['designation', 'designation article'];
+      const clientCodeCandidates = ['client', 'code client'];
+      const clientNameCandidates = ['nomclient', 'nom client', 'nom_client'];
+      const quantityCandidates = ['quantite', 'qt', 'qte', 'qty', 'quantity', 'quantites', 'somme de quantite'];
+      const dateCandidates = ['date', 'dates', 'date_import', 'jour', 'date entree en stock'];
 
       let articleColIdx = null;
       let quantityColIdx = null;
       let dateColIdx = null;
+      let designationColIdx = null;
+      let clientCodeColIdx = null;
+      let clientNameColIdx = null;
 
       for (const candidate of articleCandidates) {
         if (headers[candidate] !== undefined) {
@@ -118,17 +150,36 @@ const stockImportController = {
         }
       }
 
+      for (const candidate of designationCandidates) {
+        if (headers[candidate] !== undefined) {
+          designationColIdx = headers[candidate];
+          break;
+        }
+      }
+      for (const candidate of clientCodeCandidates) {
+        if (headers[candidate] !== undefined) {
+          clientCodeColIdx = headers[candidate];
+          break;
+        }
+      }
+      for (const candidate of clientNameCandidates) {
+        if (headers[candidate] !== undefined) {
+          clientNameColIdx = headers[candidate];
+          break;
+        }
+      }
+
       if (articleColIdx === null || quantityColIdx === null) {
         return res.status(400).json({
           error:
-            'Colonnes introuvables. Le fichier doit contenir au moins les colonnes "article" et "quantit". (La colonne "date" est optionnelle)',
+            'Colonnes introuvables. Le fichier doit contenir au moins les colonnes "CODE ARTICLE" et "Somme de QUANTITE".',
         });
       }
 
       const recordsMap = new Map();
 
       worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return; // skip header
+        if (rowNumber <= headerRowNumber) return; // skip headers and above
 
         const articleCell = row.getCell(articleColIdx);
         const quantityCell = row.getCell(quantityColIdx);
@@ -140,7 +191,26 @@ const stockImportController = {
            rawDate = dateCell.value;
         }
 
-        const article = `${articleCell.value ?? ''}`.trim();
+        let designation = null;
+        if (designationColIdx !== null) {
+          const rawDesig = row.getCell(designationColIdx).value;
+          designation = `${typeof rawDesig === 'object' && rawDesig !== null ? (rawDesig.richText?.map(rt => rt.text).join('') || rawDesig.result || '') : (rawDesig ?? '')}`.trim() || null;
+        }
+
+        let clientCode = null;
+        if (clientCodeColIdx !== null) {
+          const rawCc = row.getCell(clientCodeColIdx).value;
+          clientCode = `${typeof rawCc === 'object' && rawCc !== null ? (rawCc.richText?.map(rt => rt.text).join('') || rawCc.result || '') : (rawCc ?? '')}`.trim() || null;
+        }
+
+        let clientName = null;
+        if (clientNameColIdx !== null) {
+          const rawCn = row.getCell(clientNameColIdx).value;
+          clientName = `${typeof rawCn === 'object' && rawCn !== null ? (rawCn.richText?.map(rt => rt.text).join('') || rawCn.result || '') : (rawCn ?? '')}`.trim() || null;
+        }
+
+        const rawArticle = typeof articleCell.value === 'object' && articleCell.value !== null ? (articleCell.value.richText?.map(rt => rt.text).join('') || articleCell.value.result || '') : articleCell.value;
+        const article = `${rawArticle ?? ''}`.trim();
         const quantity = extractCellNumber(quantityCell);
 
         if (!article || !Number.isFinite(quantity) || quantity <= 0) return;
@@ -149,17 +219,21 @@ const stockImportController = {
         const normalizedArticle = article.toUpperCase();
 
         if (recordsMap.has(normalizedArticle)) {
-            // Merge duplicate articles
+            // Remplacer l'état dupliqué avec le nouveau flux du fichier
             const existing = recordsMap.get(normalizedArticle);
-            existing.quantity += Number(quantity.toFixed(2));
-            if (new Date(readyDate) > new Date(existing.readyDate)) {
-               existing.readyDate = readyDate;
-            }
+            existing.quantity = Number(quantity.toFixed(2));
+            existing.readyDate = readyDate;
+            if (designation) existing.designation = designation;
+            if (clientCode) existing.clientCode = clientCode;
+            if (clientName) existing.clientName = clientName;
         } else {
             recordsMap.set(normalizedArticle, {
                 article,
                 quantity: Number(quantity.toFixed(2)),
-                readyDate
+                readyDate,
+                designation,
+                clientCode,
+                clientName
             });
         }
       });

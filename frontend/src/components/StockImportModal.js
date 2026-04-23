@@ -64,16 +64,17 @@ const StockImportModal = ({ onClose, onImported }) => {
 
         <div className="stock-import-modal__body">
           <p className="stock-import-modal__hint">
-            Le fichier Excel doit contenir au minimum deux colonnes :
-            <strong> article</strong> , <strong>quantité</strong> et la  <strong>date</strong>.
+            Le fichier Excel doit contenir au minimum les colonnes :
+            <strong> CODE ARTICLE</strong> et <strong>Somme de QUANTITE</strong>.
+            <br/><br/>
+            Colonnes recommandées pour faciliter le travail des commerciaux :
+            <br/>
+            <span className="badge badge--gray">DESIGNATION ARTICLE</span>
+            <span className="badge badge--gray">CLIENT</span>
+            <span className="badge badge--gray">NOMCLIENT</span>
+            <span className="badge badge--gray">DATE ENTREE EN STOCK</span>
           </p>
 
-          <div className="stock-import-modal__rules">
-            <p className="stock-import-modal__rules-title">Règles de date :</p>
-            <ul>
-              <li><span className="badge badge--gray">date d'import</span> Utilise la date spécifiée dans la colonne Excel. Par défaut, la date du jour.</li>
-            </ul>
-          </div>
 
           {error && <div className="stock-import-modal__error">{error}</div>}
 

@@ -20,19 +20,22 @@ const StockImportModel = {
           const existingId = check.rows[0].id;
           const result = await client.query(
             `UPDATE stock_import 
-             SET quantity = quantity + $2, 
-                 ready_date = GREATEST(ready_date, $3::DATE),
-                 is_used = FALSE
+             SET quantity = $2, 
+                 ready_date = $3::DATE,
+                 is_used = FALSE,
+                 designation = COALESCE($4, designation),
+                 client_code = COALESCE($5, client_code),
+                 client_name = COALESCE($6, client_name)
              WHERE id = $1 RETURNING *`,
-            [existingId, record.quantity, record.readyDate]
+            [existingId, record.quantity, record.readyDate, record.designation, record.clientCode, record.clientName]
           );
           created.push(result.rows[0]);
         } else {
           const result = await client.query(
-            `INSERT INTO stock_import (article, quantity, ready_date)
-             VALUES ($1, $2, $3)
+            `INSERT INTO stock_import (article, quantity, ready_date, designation, client_code, client_name)
+             VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING *`,
-            [record.article, record.quantity, record.readyDate]
+            [record.article, record.quantity, record.readyDate, record.designation, record.clientCode, record.clientName]
           );
           created.push(result.rows[0]);
         }

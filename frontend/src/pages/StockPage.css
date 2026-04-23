@@ -143,6 +143,36 @@
   opacity: 0.4;
 }
 
+/* New CSS utilities for StockPage table */
+.text-muted {
+  color: #94a3b8;
+}
+.italic {
+  font-style: italic;
+}
+.text-sm {
+  font-size: 0.875rem;
+}
+.text-xs {
+  font-size: 0.75rem;
+}
+.text-gray {
+  color: #64748b;
+}
+.ml-2 {
+  margin-left: 0.5rem;
+}
+.client-name {
+  font-weight: 600;
+  color: #334155;
+}
+.item-designation {
+  display: block;
+  max-width: 300px;
+  white-space: normal;
+  word-break: break-word;
+}
+
 .modern-table td {
   padding: 1.25rem 1.5rem;
   border-bottom: 1px solid #f1f5f9;

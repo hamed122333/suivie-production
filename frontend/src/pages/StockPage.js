@@ -35,9 +35,9 @@ const StockPage = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
 
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
-  const itemsPerPage = 15;
 
   const fetchStock = async () => {
     try {
@@ -100,6 +100,14 @@ const StockPage = () => {
           case 'quantity':
             aValue = Number(a.quantity || 0);
             bValue = Number(b.quantity || 0);
+            break;
+          case 'client':
+            aValue = (a.client_name || a.client_code || '').toLowerCase();
+            bValue = (b.client_name || b.client_code || '').toLowerCase();
+            break;
+          case 'designation':
+            aValue = (a.designation || '').toLowerCase();
+            bValue = (b.designation || '').toLowerCase();
             break;
           case 'date':
           default:
@@ -191,7 +199,13 @@ const StockPage = () => {
                 <thead>
                   <tr>
                     <th onClick={() => requestSort('article')} className="sortable-header">
-                      Produits / Articles {getSortIcon('article')}
+                      Code Article {getSortIcon('article')}
+                    </th>
+                    <th onClick={() => requestSort('designation')} className="sortable-header">
+                      Désignation {getSortIcon('designation')}
+                    </th>
+                    <th onClick={() => requestSort('client')} className="sortable-header">
+                      Client {getSortIcon('client')}
                     </th>
                     <th onClick={() => requestSort('quantity')} className="sortable-header text-center">
                       Quantité {getSortIcon('quantity')}
@@ -209,8 +223,24 @@ const StockPage = () => {
                           <div className="article-icon">📦</div>
                           <div className="article-info">
                             <span className="article-name">{item.article}</span>
-                            <span className="article-subtext">Réf: {(item.article || '').substring(0, 3).toUpperCase()}</span>
                           </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="item-designation text-sm text-gray">
+                          {item.designation || <span className="text-muted italic">Spécifiée par référence</span>}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="item-client">
+                          {item.client_name ? (
+                            <span className="client-name">{item.client_name}</span>
+                          ) : (
+                            <span className="text-muted italic">Non spécifié</span>
+                          )}
+                          {item.client_code && (
+                            <span className="client-code text-xs text-gray ml-2">({item.client_code})</span>
+                          )}
                         </div>
                       </td>
                       <td className="item-quantity text-center">
@@ -232,25 +262,45 @@ const StockPage = () => {
               </table>
             </div>
 
-            {totalPages > 1 && !isLoading && (
-              <div className="pagination-container">
-                <button
-                  className="btn-page"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                >
-                  &laquo; Précédent
-                </button>
-                <span className="page-indicator">
-                  Page {currentPage} sur {totalPages}
-                </span>
-                <button
-                  className="btn-page"
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Suivant &raquo;
-                </button>
+            {!isLoading && sortedStock.length > 0 && (
+              <div className="pagination-container" style={{ justifyContent: 'space-between' }}>
+                <div className="pagination-controls">
+                  <select 
+                    className="page-size-select" 
+                    value={itemsPerPage} 
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <option value={15}>15 par page</option>
+                    <option value={50}>50 par page</option>
+                    <option value={100}>100 par page</option>
+                    <option value={10000}>Tous les articles</option>
+                  </select>
+                </div>
+                
+                {totalPages > 1 && (
+                  <div className="pagination-buttons">
+                    <button
+                      className="btn-page"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    >
+                      &laquo; Précédent
+                    </button>
+                    <span className="page-indicator">
+                      Page {currentPage} sur {totalPages}
+                    </span>
+                    <button
+                      className="btn-page"
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      Suivant &raquo;
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
