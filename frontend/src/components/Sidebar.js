@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { getInitials } from '../utils/formatters';
@@ -20,6 +20,8 @@ const getRoleLabel = (role) => {
 const Sidebar = ({ closeSidebar }) => {
   const { isSuperAdmin, user } = useAuth();
   const { workspaces, workspaceId, selectWorkspace, loadingWorkspaces } = useWorkspace();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const activeId = workspaceId ? String(workspaceId) : '';
   const roleInfo = getRoleLabel(user?.role);
@@ -69,7 +71,7 @@ const Sidebar = ({ closeSidebar }) => {
             const id = String(ws.id);
             const active = id === activeId;
             const isAll = ws.id === 'all';
-            const icon = isAll ? '⌂' : WORKSPACE_ICONS[(idx - (isAll ? 0 : 1)) % WORKSPACE_ICONS.length];
+            const icon = isAll ? 'Œ‚' : WORKSPACE_ICONS[(idx - (isAll ? 0 : 1)) % WORKSPACE_ICONS.length];
             return (
               <button
                 type="button"
@@ -77,12 +79,15 @@ const Sidebar = ({ closeSidebar }) => {
                 className={`sidebar__item ${active ? 'sidebar__item--active' : ''} ${isAll ? 'sidebar__item--all' : ''}`}
                 onClick={() => {
                   selectWorkspace(ws.id);
+                  if (location.pathname !== '/kanban') {
+                    navigate('/kanban');
+                  }
                   if (closeSidebar) closeSidebar();
                 }}
               >
                 <span className="sidebar__item-icon">{icon}</span>
                 <span className="sidebar__item-name">{ws.name}</span>
-                {active && <span className="sidebar__item-check">✓</span>}
+                {active && <span className="sidebar__item-check">œ“</span>}
               </button>
             );
           })
