@@ -112,6 +112,21 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
   };
 
   const toggleArticle = (article) => {
+    const isAdding = !selectedArticleIds.has(article.id);
+
+    if (isAdding) {
+      // Si on ajoute l'article, on essaie de remplir les infos
+      const fetchedClientName = article.client_name || article.clientName;
+      if (fetchedClientName) {
+        setForm((f) => {
+          if (!f.clientName || f.clientName.trim() === '') {
+            return { ...f, clientName: fetchedClientName };
+          }
+          return f;
+        });
+      }
+    }
+
     setSelectedArticleIds((current) => {
       const next = new Set(current);
       if (next.has(article.id)) {
