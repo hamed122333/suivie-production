@@ -1,4 +1,5 @@
 export const TASK_STATUS_ORDER = [
+  'OUT_OF_STOCK',
   'TODO',
   'IN_PROGRESS',
   'BLOCKED',
@@ -6,6 +7,7 @@ export const TASK_STATUS_ORDER = [
 ];
 
 export const TASK_STATUS_CONFIG = {
+  OUT_OF_STOCK: { label: 'Hors stock', shortLabel: 'Hors stock', color: '#92400e', bg: '#fffbeb', headerBg: '#fef3c7' },
   TODO: { label: 'A faire', shortLabel: 'A faire', color: '#1d4ed8', bg: '#eff6ff', headerBg: '#dbeafe' },
   IN_PROGRESS: { label: 'En cours', shortLabel: 'En cours', color: '#c2410c', bg: '#fff7ed', headerBg: '#ffedd5' },
   DONE: { label: 'Terminee', shortLabel: 'Terminee', color: '#15803d', bg: '#f0fdf4', headerBg: '#dcfce7' },
@@ -27,6 +29,7 @@ export const TASK_PRIORITY_OPTIONS = [
 ];
 
 export const STATUS_COUNT_FIELDS = {
+  OUT_OF_STOCK: 'totalOutOfStock',
   TODO: 'totalTodo',
   IN_PROGRESS: 'totalInProgress',
   BLOCKED: 'totalBlocked',

@@ -114,6 +114,18 @@ const StockImportModel = {
     );
     return result.rows[0] || null;
   },
+
+  async findByArticle(article) {
+    if (!article) return null;
+    const result = await pool.query(
+      `SELECT * FROM stock_import
+       WHERE UPPER(article) = UPPER($1)
+       AND is_used = FALSE
+       LIMIT 1`,
+      [article]
+    );
+    return result.rows[0] || null;
+  },
 };
 
 module.exports = StockImportModel;

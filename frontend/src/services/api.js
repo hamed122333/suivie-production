@@ -54,6 +54,7 @@ export const taskAPI = {
   createBatch: ({ tasks, workspaceId, status = 'TODO' }) => api.post('/tasks/bulk', { tasks, workspaceId, status }),
   update: (id, data) => api.put(`/tasks/${id}`, data),
   updateStatus: (id, status, reasonBlocked) => api.put(`/tasks/${id}/status`, { status, reasonBlocked }),
+  approveStock: (id) => api.post(`/tasks/${id}/approve-stock`),
   addComment: (id, body) => api.post(`/tasks/${id}/comments`, { body }),
   patchBoard: ({ workspaceId, columnOrders }) => api.patch('/tasks/board', { workspaceId, columnOrders }),
   delete: (id) => api.delete(`/tasks/${id}`),
