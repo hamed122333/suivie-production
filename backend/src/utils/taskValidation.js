@@ -1,4 +1,4 @@
-const { TASK_CREATION_STATUSES, TASK_PRIORITIES, TASK_STATUSES } = require('../constants/task');
+const { TASK_CREATION_STATUSES, TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES } = require('../constants/task');
 const { createHttpError } = require('./httpErrors');
 
 function normalizeTitle(title) {
@@ -112,6 +112,9 @@ function normalizeTaskBatch(tasks) {
       if (Number.isInteger(id) && id > 0) {
         normalized.stockImportId = id;
       }
+    }
+    if (task.taskType != null && TASK_TYPES.includes(task.taskType)) {
+      normalized.taskType = task.taskType;
     }
     return normalized;
   });

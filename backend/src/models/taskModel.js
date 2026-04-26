@@ -12,6 +12,7 @@ const priorityOrderSql = `
 
 const statusOrderSql = `
   CASE t.status
+    WHEN 'OUT_OF_STOCK' THEN 0
     WHEN 'TODO' THEN 1
     WHEN 'IN_PROGRESS' THEN 2
     WHEN 'BLOCKED' THEN 3
@@ -436,6 +437,7 @@ const TaskModel = {
       `
       SELECT
         COUNT(*) AS total_tasks,
+        COUNT(*) FILTER (WHERE status = 'OUT_OF_STOCK') AS total_out_of_stock,
         COUNT(*) FILTER (WHERE status = 'TODO') AS total_todo,
         COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') AS total_in_progress,
         COUNT(*) FILTER (WHERE status = 'DONE') AS total_done,
@@ -476,7 +478,7 @@ const TaskModel = {
         COALESCE(NULLIF(t.production_line, ''), 'Non assignee') AS production_line,
         COUNT(*) AS task_count
       FROM tasks t
-      ${where}${where ? ' AND' : ' WHERE'} t.status IN ('TODO', 'IN_PROGRESS', 'BLOCKED')
+      ${where}${where ? ' AND' : ' WHERE'} t.status IN ('OUT_OF_STOCK', 'TODO', 'IN_PROGRESS', 'BLOCKED')
       GROUP BY COALESCE(NULLIF(t.production_line, ''), 'Non assignee')
       ORDER BY COUNT(*) DESC, production_line ASC
       LIMIT 8

@@ -99,6 +99,7 @@ const KanbanBoard = ({
   const [searchParams, setSearchParams] = useSearchParams();
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [createStatus, setCreateStatus] = useState('TODO');
   const [blockModal, setBlockModal] = useState({ open: false, task: null });
   const [dragOverColumn, setDragOverColumn] = useState(null);
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
@@ -271,7 +272,7 @@ const KanbanBoard = ({
         await taskAPI.createBatch({
           tasks: formData.tasks || [formData],
           workspaceId,
-          status: 'TODO',
+          status: formData.status || 'TODO',
         });
       }
 
@@ -301,7 +302,7 @@ const KanbanBoard = ({
     : canChangeStatus
     ? 'Le planificateur peut faire avancer les fiches entre A faire, En cours, Bloque et Termine.'
     : canCreateTask
-    ? 'Le commercial saisit les demandes clients uniquement dans la colonne A faire.'
+    ? 'Le commercial saisit les demandes clients dans A faire. Pour les commandes hors stock, utilisez la colonne Hors stock.'
     : isSuperAdmin
     ? 'Le role suivi observe les commandes, les retards et les blocages sans modifier le flux.'
     : 'Mode consultation.';
@@ -364,7 +365,7 @@ const KanbanBoard = ({
                   <span className="kanban-column__title" style={{ color: column.color }}>
                     {column.label}
                   </span>
-                  <div className="kanban-column__subtitle">{column.id === 'BLOCKED' ? 'Interventions requises' : column.id === 'DONE' ? 'Archive visuelle' : 'File active'}</div>
+                  <div className="kanban-column__subtitle">{column.id === 'BLOCKED' ? 'Interventions requises' : column.id === 'DONE' ? 'Archive visuelle' : column.id === 'OUT_OF_STOCK' ? 'En attente de stock' : 'File active'}</div>
                 </div>
                 <span className="kanban-column__count" style={{ background: column.color }}>
                   {deferredQuery.trim() || filterPriority ? `${columnTasks.length}/${totalInColumn}` : totalInColumn}

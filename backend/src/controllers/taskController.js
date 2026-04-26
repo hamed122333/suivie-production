@@ -261,21 +261,37 @@ const taskController = {
     try {
       const taskInput = normalizeTaskDraft(req.body);
       const workspaceId = parseWorkspaceId(req.body.workspaceId, { required: true });
-      if (req.body.status && req.body.status !== 'TODO') {
-        throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
+      const taskType = req.body.taskType === 'OUT_OF_STOCK_ORDER' ? 'OUT_OF_STOCK_ORDER' : 'PRODUCTION_ORDER';
+      const isOutOfStockOrder = taskType === 'OUT_OF_STOCK_ORDER';
+
+      if (isOutOfStockOrder) {
+        if (!taskInput.dueDate) {
+          throw createHttpError(400, 'La date prevue de livraison est obligatoire pour les commandes hors stock');
+        }
+        if (req.body.status && req.body.status !== 'OUT_OF_STOCK') {
+          throw createHttpError(400, 'Les commandes hors stock doivent etre creees dans le statut Hors stock');
+        }
+      } else {
+        if (req.body.status && req.body.status !== 'TODO') {
+          throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
+        }
       }
 
+      const targetStatus = isOutOfStockOrder ? 'OUT_OF_STOCK' : 'TODO';
       const task = await TaskModel.create({
         ...taskInput,
+        taskType,
         createdBy: req.user.id,
         workspaceId,
-        status: 'TODO',
+        status: targetStatus,
       });
       await TaskHistoryModel.log({
         taskId: task.id,
         actorId: req.user.id,
         actionType: 'created',
-        message: 'Tâche créée par le commercial',
+        message: isOutOfStockOrder
+          ? 'Commande hors stock créée par le commercial'
+          : 'Tâche créée par le commercial',
       });
       await notifyTaskCreation([task], req.user);
       res.status(201).json(task);
@@ -292,15 +308,30 @@ const taskController = {
     try {
       const tasks = normalizeTaskBatch(req.body.tasks);
       const workspaceId = parseWorkspaceId(req.body.workspaceId, { required: true });
-      if (req.body.status && req.body.status !== 'TODO') {
-        throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
+
+      const isOutOfStockBatch = tasks.every((t) => t.taskType === 'OUT_OF_STOCK_ORDER');
+
+      if (isOutOfStockBatch) {
+        if (req.body.status && req.body.status !== 'OUT_OF_STOCK') {
+          throw createHttpError(400, 'Les commandes hors stock doivent etre creees dans le statut Hors stock');
+        }
+        for (const task of tasks) {
+          if (!task.dueDate) {
+            throw createHttpError(400, 'La date prevue de livraison est obligatoire pour les commandes hors stock');
+          }
+        }
+      } else {
+        if (req.body.status && req.body.status !== 'TODO') {
+          throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
+        }
       }
 
+      const targetStatus = isOutOfStockBatch ? 'OUT_OF_STOCK' : 'TODO';
       const createdTasks = await TaskModel.createMany({
         tasks,
         createdBy: req.user.id,
         workspaceId,
-        status: 'TODO',
+        status: targetStatus,
       });
 
       await TaskHistoryModel.logMany(
@@ -308,7 +339,9 @@ const taskController = {
           taskId: task.id,
           actorId: req.user.id,
           actionType: 'created',
-          message: 'Tâche créée par le commercial',
+          message: isOutOfStockBatch
+            ? 'Commande hors stock créée par le commercial'
+            : 'Tâche créée par le commercial',
         }))
       );
       await notifyTaskCreation(createdTasks, req.user);
@@ -483,6 +516,64 @@ const taskController = {
 
       const enrichedComments = await TaskCommentModel.listByTask(task.id);
       res.status(201).json(enrichedComments.find((entry) => entry.id === comment.id) || comment);
+    } catch (err) {
+      if (isHttpError(err)) {
+        return res.status(err.status).json({ error: err.message });
+      }
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  },
+
+  async approveStock(req, res) {
+    try {
+      const task = await TaskModel.getById(req.params.id);
+      if (!task) return res.status(404).json({ error: 'Task not found' });
+
+      if (task.status !== 'OUT_OF_STOCK') {
+        return res.status(400).json({ error: 'Cette tache n est pas en attente de stock' });
+      }
+
+      // Check stock availability for the task's item reference
+      if (task.item_reference) {
+        const stockRecord = await StockImportModel.findByArticle(task.item_reference);
+        if (!stockRecord) {
+          return res.status(400).json({
+            error: `Stock introuvable pour l article "${task.item_reference}". Importez le stock avant d approuver.`,
+          });
+        }
+        const available = Number(stockRecord.quantity) || 0;
+        const requested = Number(task.quantity) || 0;
+        if (requested > 0 && available < requested) {
+          return res.status(400).json({
+            error: `Stock insuffisant pour "${task.item_reference}": ${available} disponible(s), ${requested} demande(s).`,
+          });
+        }
+      }
+
+      // Transition to TODO
+      const updatedTask = await TaskModel.updateStatus(task.id, 'TODO', null, req.user.id, req.user.role);
+
+      await TaskHistoryModel.log({
+        taskId: task.id,
+        actorId: req.user.id,
+        actionType: 'stock_approved',
+        fieldName: 'status',
+        oldValue: 'OUT_OF_STOCK',
+        newValue: 'TODO',
+        message: 'Stock approuve par le planificateur - Tache deplacee en A faire',
+      });
+
+      // Notify the commercial who created the task
+      if (task.created_by) {
+        await NotificationModel.createTaskCreatedNotifications({
+          taskIds: [task.id],
+          recipientUserIds: [task.created_by],
+          createdByName: req.user.name || 'Le planificateur',
+        });
+      }
+
+      res.json(updatedTask);
     } catch (err) {
       if (isHttpError(err)) {
         return res.status(err.status).json({ error: err.message });

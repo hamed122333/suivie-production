@@ -25,6 +25,9 @@ router.put('/:id', authenticate, requireRoles(['planner', 'commercial']), taskCo
 // Changer le statut : planificateur uniquement
 router.put('/:id/status', authenticate, requirePlanner, taskController.updateStatus);
 
+// Approuver le stock d une commande hors stock et la passer en TODO : planificateur uniquement
+router.post('/:id/approve-stock', authenticate, requirePlanner, taskController.approveStock);
+
 // Supprimer : planificateur, commercial et super_admin
 router.delete('/:id', authenticate, requireRoles(['planner', 'commercial', 'super_admin']), taskController.delete);
 
