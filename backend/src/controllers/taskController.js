@@ -114,6 +114,15 @@ function ensurePlannedDateForWaitingStock(taskInput, index = null) {
   throw createHttpError(400, `La date prevue de livraison est obligatoire pour le statut Hors stock PF${suffix}`);
 }
 
+function normalizeDateNegotiationDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw createHttpError(400, 'Date de livraison invalide');
+  }
+  return date.toISOString().slice(0, 10);
+}
+
 async function resolveCreationTarget(taskInput) {
   const quantity = Number(taskInput.quantity || 1);
   if (!Number.isFinite(quantity) || quantity <= 0) {
@@ -326,6 +335,11 @@ const taskController = {
         createdBy: req.user.id,
         workspaceId,
         status: resolved.status,
+        proposedDeliveryDate: resolved.plannedDate || null,
+        proposedByRole: 'commercial',
+        dateNegotiationStatus: resolved.plannedDate ? 'PENDING_PLANNER_REVIEW' : null,
+        dateNegotiationComment: null,
+        dateNegotiationUpdatedAt: resolved.plannedDate ? new Date() : null,
       });
       await TaskHistoryModel.log({
         taskId: task.id,
@@ -365,7 +379,14 @@ const taskController = {
       const [createdTodo, createdWaiting] = await Promise.all([
         todoDrafts.length > 0
           ? TaskModel.createMany({
-              tasks: todoDrafts,
+              tasks: todoDrafts.map((draft) => ({
+                ...draft,
+                proposedDeliveryDate: draft.plannedDate || null,
+                proposedByRole: 'commercial',
+                dateNegotiationStatus: draft.plannedDate ? 'PENDING_PLANNER_REVIEW' : null,
+                dateNegotiationComment: null,
+                dateNegotiationUpdatedAt: draft.plannedDate ? new Date() : null,
+              })),
               createdBy: req.user.id,
               workspaceId,
               status: 'TODO',
@@ -373,7 +394,14 @@ const taskController = {
           : Promise.resolve([]),
         waitingDrafts.length > 0
           ? TaskModel.createMany({
-              tasks: waitingDrafts,
+              tasks: waitingDrafts.map((draft) => ({
+                ...draft,
+                proposedDeliveryDate: draft.plannedDate || null,
+                proposedByRole: 'commercial',
+                dateNegotiationStatus: draft.plannedDate ? 'PENDING_PLANNER_REVIEW' : null,
+                dateNegotiationComment: null,
+                dateNegotiationUpdatedAt: draft.plannedDate ? new Date() : null,
+              })),
               createdBy: req.user.id,
               workspaceId,
               status: 'WAITING_STOCK',
@@ -534,6 +562,109 @@ const taskController = {
       }
       console.error(err);
       res.status(500).json({ error: 'Server error' });
+    }
+  },
+
+  async applyDateNegotiation(req, res) {
+    try {
+      const task = await TaskModel.getById(req.params.id);
+      if (!task) return res.status(404).json({ error: 'Task not found' });
+
+      const role = req.user?.role;
+      if (!['planner', 'commercial'].includes(role)) {
+        return res.status(403).json({ error: 'Acces refuse' });
+      }
+
+      const action = `${req.body.action || ''}`.trim().toUpperCase();
+      const comment = `${req.body.comment || ''}`.trim() || null;
+      const proposedDate = normalizeDateNegotiationDate(req.body.proposedDate);
+      const now = new Date();
+
+      let patch = null;
+      let historyMessage = null;
+      let historyOldValue = null;
+      let historyNewValue = null;
+
+      if (action === 'PROPOSE') {
+        if (!proposedDate) {
+          return res.status(400).json({ error: 'Date proposee obligatoire.' });
+        }
+        patch = {
+          proposedDeliveryDate: proposedDate,
+          proposedByRole: role,
+          dateNegotiationStatus: role === 'commercial' ? 'PENDING_PLANNER_REVIEW' : 'PENDING_COMMERCIAL_REVIEW',
+          dateNegotiationComment: comment,
+          dateNegotiationUpdatedAt: now,
+        };
+        historyMessage =
+          role === 'commercial'
+            ? 'Le commercial a propose une date de livraison au planner'
+            : 'Le planner a propose une date de livraison au commercial';
+        historyOldValue = task.proposed_delivery_date || task.planned_date || null;
+        historyNewValue = proposedDate;
+      } else if (action === 'ACCEPT') {
+        const pendingForPlanner = task.date_negotiation_status === 'PENDING_PLANNER_REVIEW' && role === 'planner';
+        const pendingForCommercial = task.date_negotiation_status === 'PENDING_COMMERCIAL_REVIEW' && role === 'commercial';
+        if (!pendingForPlanner && !pendingForCommercial) {
+          return res.status(400).json({ error: 'Aucune proposition en attente pour ce role.' });
+        }
+        const acceptedDate = task.proposed_delivery_date || task.planned_date;
+        if (!acceptedDate) {
+          return res.status(400).json({ error: 'Aucune date proposee a accepter.' });
+        }
+        patch = {
+          plannedDate: acceptedDate,
+          dateNegotiationStatus: 'ACCEPTED',
+          dateNegotiationComment: comment,
+          dateNegotiationUpdatedAt: now,
+        };
+        historyMessage =
+          role === 'planner'
+            ? 'Le planner a accepte la date proposee par le commercial'
+            : 'Le commercial a accepte la contre-proposition du planner';
+        historyOldValue = task.planned_date || null;
+        historyNewValue = acceptedDate;
+      } else if (action === 'REJECT') {
+        if (!proposedDate) {
+          return res.status(400).json({ error: 'Nouvelle date obligatoire en cas de refus.' });
+        }
+        if (!comment) {
+          return res.status(400).json({ error: 'Commentaire obligatoire en cas de refus.' });
+        }
+        patch = {
+          proposedDeliveryDate: proposedDate,
+          proposedByRole: role,
+          dateNegotiationStatus: role === 'planner' ? 'PENDING_COMMERCIAL_REVIEW' : 'PENDING_PLANNER_REVIEW',
+          dateNegotiationComment: comment,
+          dateNegotiationUpdatedAt: now,
+        };
+        historyMessage =
+          role === 'planner'
+            ? 'Le planner a refuse la date et propose une nouvelle date'
+            : 'Le commercial a refuse la date et propose une nouvelle date';
+        historyOldValue = task.proposed_delivery_date || task.planned_date || null;
+        historyNewValue = proposedDate;
+      } else {
+        return res.status(400).json({ error: 'Action invalide. Utilisez PROPOSE, ACCEPT ou REJECT.' });
+      }
+
+      const updated = await TaskModel.updateDateNegotiation(task.id, patch);
+      await TaskHistoryModel.log({
+        taskId: task.id,
+        actorId: req.user.id,
+        actionType: 'date_negotiation',
+        fieldName: 'planned_date',
+        oldValue: historyOldValue,
+        newValue: historyNewValue,
+        message: historyMessage,
+      });
+      return res.json(updated);
+    } catch (err) {
+      if (isHttpError(err)) {
+        return res.status(err.status).json({ error: err.message });
+      }
+      console.error(err);
+      return res.status(500).json({ error: 'Server error' });
     }
   },
 

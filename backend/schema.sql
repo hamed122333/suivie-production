@@ -98,6 +98,11 @@ WHERE NOT EXISTS (SELECT 1 FROM workspaces WHERE name = 'Default');
 ALTER TABLE IF EXISTS tasks ADD COLUMN IF NOT EXISTS due_date DATE;
 ALTER TABLE IF EXISTS tasks ADD COLUMN IF NOT EXISTS production_line VARCHAR(120);
 ALTER TABLE IF EXISTS tasks ADD COLUMN IF NOT EXISTS machine VARCHAR(120);
+ALTER TABLE IF EXISTS tasks ADD COLUMN IF NOT EXISTS proposed_delivery_date DATE;
+ALTER TABLE IF EXISTS tasks ADD COLUMN IF NOT EXISTS proposed_by_role VARCHAR(20);
+ALTER TABLE IF EXISTS tasks ADD COLUMN IF NOT EXISTS date_negotiation_status VARCHAR(40);
+ALTER TABLE IF EXISTS tasks ADD COLUMN IF NOT EXISTS date_negotiation_comment TEXT;
+ALTER TABLE IF EXISTS tasks ADD COLUMN IF NOT EXISTS date_negotiation_updated_at TIMESTAMP;
 
 CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
 CREATE INDEX IF NOT EXISTS idx_tasks_production_line ON tasks(production_line);

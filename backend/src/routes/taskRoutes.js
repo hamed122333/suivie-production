@@ -21,6 +21,7 @@ router.post('/', authenticate, requireCommercial, taskController.create);
 
 // Modifier une tâche complète : planificateur et commercial
 router.put('/:id', authenticate, requireRoles(['planner', 'commercial']), taskController.update);
+router.put('/:id/date-negotiation', authenticate, requireRoles(['planner', 'commercial']), taskController.applyDateNegotiation);
 
 // Changer le statut : planificateur uniquement
 router.put('/:id/status', authenticate, requirePlanner, taskController.updateStatus);

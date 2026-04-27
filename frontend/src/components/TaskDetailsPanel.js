@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, TASK_STATUS_OPTIONS } from '../constants/task';
+import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from '../constants/task';
 import { taskAPI } from '../services/api';
-import { formatDate, formatDateTime, formatNumber, formatRelativeDate, getInitials } from '../utils/formatters';
+import { useAuth } from '../context/AuthContext';
+import { formatDate, formatDateTime, formatNumber, formatRelativeDate } from '../utils/formatters';
 import './TaskDetailsPanel.css';
 
 const DETAIL_FIELDS = [
@@ -101,13 +102,12 @@ const TaskDetailsPanel = ({
   onDeleteTask,
   onTaskUpdated,
 }) => {
+  const { isPlanner, isCommercial } = useAuth();
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [commentBody, setCommentBody] = useState('');
-  const [nextStatus, setNextStatus] = useState('');
-  const [blockReason, setBlockReason] = useState('');
   const [savingAction, setSavingAction] = useState(false);
+  const [dateProposal, setDateProposal] = useState('');
 
   const fetchDetail = useCallback(async () => {
     if (!taskId || !open) return;
@@ -149,59 +149,69 @@ const TaskDetailsPanel = ({
     if (!open) {
       setDetail(null);
       setError('');
-      setCommentBody('');
-      setNextStatus('');
-      setBlockReason('');
+      setDateProposal('');
     }
   }, [open]);
 
   if (!open) return null;
 
   const task = detail?.task;
-  const comments = detail?.comments || [];
   const history = detail?.history || [];
   const statusConfig = task ? TASK_STATUS_CONFIG[task.status] || TASK_STATUS_CONFIG.TODO : TASK_STATUS_CONFIG.TODO;
   const priorityConfig = task ? TASK_PRIORITY_CONFIG[task.priority] || TASK_PRIORITY_CONFIG.MEDIUM : TASK_PRIORITY_CONFIG.MEDIUM;
   const qtyDisplay = task?.quantity != null ? `${task.quantity} ${task.quantity_unit || 'pcs'}` : '—';
-  const availableStatusOptions = TASK_STATUS_OPTIONS.filter(
-    (option) =>
-      option.value !== task?.status &&
-      option.value !== 'WAITING_STOCK' &&
-      task?.status !== 'WAITING_STOCK'
-  );
   const operationalSummary = buildOperationalSummary(task, history);
   const dateNegotiationSteps = buildDateNegotiationSteps(task, history);
-
-  const handleCommentSubmit = async (event) => {
-    event.preventDefault();
-    if (!task || !commentBody.trim()) return;
-
+  const dateNegotiationLabelMap = {
+    PENDING_PLANNER_REVIEW: 'En attente planner',
+    PENDING_COMMERCIAL_REVIEW: 'En attente commercial',
+    ACCEPTED: 'Date validée',
+    REJECTED: 'Refusée',
+  };
+  const plannerCanConfirmCommercialDate =
+    isPlanner && task?.date_negotiation_status === 'PENDING_PLANNER_REVIEW';
+  const commercialCanConfirmPlannerDate =
+    isCommercial && task?.date_negotiation_status === 'PENDING_COMMERCIAL_REVIEW';
+  const canConfirmCurrentProposedDate =
+    plannerCanConfirmCommercialDate || commercialCanConfirmPlannerDate;
+  const handleProposeDate = async () => {
+    if (!task) return;
+    if (!dateProposal) {
+      setError('Date proposée obligatoire.');
+      return;
+    }
     setSavingAction(true);
+    setError('');
     try {
-      await taskAPI.addComment(task.id, commentBody.trim());
-      setCommentBody('');
+      await taskAPI.dateNegotiation(task.id, {
+        action: 'PROPOSE',
+        proposedDate: dateProposal,
+        comment: null,
+      });
+      setDateProposal('');
       await fetchDetail();
       await onTaskUpdated?.();
     } catch (err) {
-      setError(err?.response?.data?.error || 'Impossible d ajouter le commentaire.');
+      setError(err?.response?.data?.error || 'Impossible de traiter la négociation de date.');
     } finally {
       setSavingAction(false);
     }
   };
 
-  const handleStatusApply = async () => {
-    if (!task || !nextStatus) return;
-
+  const handleConfirmDate = async () => {
+    if (!task) return;
     setSavingAction(true);
     setError('');
     try {
-      await taskAPI.updateStatus(task.id, nextStatus, nextStatus === 'BLOCKED' ? blockReason : null);
-      setNextStatus('');
-      setBlockReason('');
+      await taskAPI.dateNegotiation(task.id, {
+        action: 'ACCEPT',
+        proposedDate: null,
+        comment: null,
+      });
       await fetchDetail();
       await onTaskUpdated?.();
     } catch (err) {
-      setError(err?.response?.data?.error || 'Impossible de mettre a jour le statut.');
+      setError(err?.response?.data?.error || 'Impossible de confirmer la date.');
     } finally {
       setSavingAction(false);
     }
@@ -243,7 +253,7 @@ const TaskDetailsPanel = ({
             {error && <div className="task-detail__error">{error}</div>}
 
             <section className="task-panel-section task-details">
-              <h4 className="task-panel-subtitle">Détails de production</h4>
+              <h4 className="task-panel-subtitle">Détails essentiels</h4>
               <div className="task-details-grid">
                 {DETAIL_FIELDS.filter((f) => task[f.key]).map((f) => (
                   <div key={f.key} className="task-detail-item">
@@ -270,11 +280,6 @@ const TaskDetailsPanel = ({
                   <strong>{qtyDisplay}</strong>
                 </div>
               </div>
-              {task.expected_action && (
-                <div className="task-detail__expected-action">
-                  <strong>Action attendue:</strong> {task.expected_action}
-                </div>
-              )}
             </section>
 
             <section className="task-detail__section">
@@ -290,6 +295,50 @@ const TaskDetailsPanel = ({
                 <h4>Négociation date</h4>
                 <span>{dateNegotiationSteps.length}</span>
               </div>
+              <div className="task-detail__meta-strip" style={{ marginBottom: '0.75rem' }}>
+                <div className="task-detail__meta-pill">
+                  <span>Statut</span>
+                  <strong>{dateNegotiationLabelMap[task.date_negotiation_status] || 'Non démarrée'}</strong>
+                </div>
+                <div className="task-detail__meta-pill">
+                  <span>Date proposée</span>
+                  <strong>{task.proposed_delivery_date ? formatDate(task.proposed_delivery_date, { withYear: true }) : '—'}</strong>
+                </div>
+                <div className="task-detail__meta-pill">
+                  <span>Proposé par</span>
+                  <strong>{task.proposed_by_role || '—'}</strong>
+                </div>
+              </div>
+              {(isCommercial || isPlanner) && (
+                <div className="task-detail__action-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <input
+                    type="date"
+                    value={dateProposal}
+                    onChange={(event) => setDateProposal(event.target.value)}
+                    placeholder="Proposer date"
+                  />
+                  <div className="task-detail__button-row">
+                    <button type="button" className="btn btn-secondary" disabled={savingAction || !dateProposal} onClick={handleProposeDate}>
+                      {savingAction ? 'Traitement...' : 'Proposer date'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={savingAction || !canConfirmCurrentProposedDate || Boolean(dateProposal)}
+                      onClick={handleConfirmDate}
+                      title={
+                        plannerCanConfirmCommercialDate
+                          ? 'Le planner confirme la date proposée par le commercial'
+                          : commercialCanConfirmPlannerDate
+                          ? 'Le commercial confirme automatiquement la date proposée par le planner'
+                          : 'Confirmation non disponible pour ce statut'
+                      }
+                    >
+                      {savingAction ? 'Traitement...' : 'Confirmer date'}
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="task-detail__timeline">
                 {dateNegotiationSteps.length === 0 ? (
                   <div className="task-detail__empty">Aucune négociation de date enregistrée.</div>
@@ -320,7 +369,7 @@ const TaskDetailsPanel = ({
 
             <section className="task-detail__section">
               <div className="task-detail__section-head">
-                <h4>Actions</h4>
+                <h4>Actions fiche</h4>
               </div>
               <div className="task-detail__button-row">
                 {canEdit && (
@@ -332,101 +381,6 @@ const TaskDetailsPanel = ({
                       Supprimer la commande
                     </button>
                   </>
-                )}
-              </div>
-              {canManage && (
-                <div style={{ marginTop: '1rem' }}>
-                  <h4 style={{ marginBottom: '0.5rem', fontSize: '0.85rem', color: '#6b7280', textTransform: 'uppercase' }}>Changer le statut</h4>
-                  <div className="task-detail__action-row">
-                    <select value={nextStatus} onChange={(event) => setNextStatus(event.target.value)}>
-                      <option value="">Nouveau statut...</option>
-                      {availableStatusOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={!nextStatus || savingAction || (nextStatus === 'BLOCKED' && !blockReason.trim())}
-                      onClick={handleStatusApply}
-                    >
-                      {savingAction ? 'Mise a jour...' : 'Appliquer'}
-                    </button>
-                  </div>
-                  {nextStatus === 'BLOCKED' && (
-                    <div className="form-group" style={{ marginBottom: 0, marginTop: '0.5rem' }}>
-                      <label>Motif du blocage</label>
-                      <textarea rows={3} value={blockReason} onChange={(event) => setBlockReason(event.target.value)} />
-                    </div>
-                  )}
-                </div>
-              )}
-            </section>
-
-            <section className="task-detail__section">
-              <div className="task-detail__section-head">
-                <h4>Commentaires</h4>
-                <span>{comments.length}</span>
-              </div>
-              <form className="task-detail__comment-form" onSubmit={handleCommentSubmit}>
-                <textarea
-                  rows={3}
-                  value={commentBody}
-                  onChange={(event) => setCommentBody(event.target.value)}
-                  placeholder="Ajouter un commentaire de suivi..."
-                />
-                <button type="submit" className="btn btn-primary" disabled={!commentBody.trim() || savingAction}>
-                  Ajouter
-                </button>
-              </form>
-              <div className="task-detail__timeline">
-                {comments.length === 0 ? (
-                  <div className="task-detail__empty">Aucun commentaire pour le moment.</div>
-                ) : (
-                  comments.map((comment) => (
-                    <div key={comment.id} className="task-detail__timeline-item">
-                      <span className="task-detail__avatar">{getInitials(comment.author_name)}</span>
-                      <div>
-                        <div className="task-detail__timeline-head">
-                          <strong>{comment.author_name || 'Utilisateur'}</strong>
-                          <span>{formatDateTime(comment.created_at)}</span>
-                        </div>
-                        <p>{comment.body}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <section className="task-detail__section">
-              <div className="task-detail__section-head">
-                <h4>Historique</h4>
-                <span>{history.length}</span>
-              </div>
-              <div className="task-detail__timeline">
-                {history.length === 0 ? (
-                  <div className="task-detail__empty">Aucun historique enregistre.</div>
-                ) : (
-                  history.map((entry) => (
-                    <div key={entry.id} className="task-detail__timeline-item task-detail__timeline-item--history">
-                      <span className="task-detail__history-dot" />
-                      <div>
-                        <div className="task-detail__timeline-head">
-                          <strong>{entry.message || entry.action_type}</strong>
-                          <span>{formatDateTime(entry.created_at)}</span>
-                        </div>
-                        <p>
-                          {entry.actor_name ? `${entry.actor_name} ` : ''}
-                          {entry.old_value || entry.new_value
-                            ? `(${entry.old_value || '—'} → ${entry.new_value || '—'})`
-                            : 'a realise cette action.'}
-                        </p>
-                      </div>
-                    </div>
-                  ))
                 )}
               </div>
             </section>

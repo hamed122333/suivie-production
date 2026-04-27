@@ -52,6 +52,11 @@ const createFieldMap = {
   notes: 'notes',
   expectedAction: 'expected_action',
   stockImportId: 'stock_import_id',
+  proposedDeliveryDate: 'proposed_delivery_date',
+  proposedByRole: 'proposed_by_role',
+  dateNegotiationStatus: 'date_negotiation_status',
+  dateNegotiationComment: 'date_negotiation_comment',
+  dateNegotiationUpdatedAt: 'date_negotiation_updated_at',
 };
 
 const updateFieldMap = {
@@ -72,6 +77,11 @@ const updateFieldMap = {
   workshop: 'workshop',
   notes: 'notes',
   expectedAction: 'expected_action',
+  proposedDeliveryDate: 'proposed_delivery_date',
+  proposedByRole: 'proposed_by_role',
+  dateNegotiationStatus: 'date_negotiation_status',
+  dateNegotiationComment: 'date_negotiation_comment',
+  dateNegotiationUpdatedAt: 'date_negotiation_updated_at',
 };
 
 function appendFilters(filters, params) {
@@ -446,6 +456,39 @@ const TaskModel = {
   async delete(id) {
     const result = await pool.query('DELETE FROM tasks WHERE id = $1 RETURNING *', [id]);
     return result.rows[0] || null;
+  },
+
+  async updateDateNegotiation(id, data) {
+    const sets = [];
+    const values = [];
+    const mapping = {
+      proposedDeliveryDate: 'proposed_delivery_date',
+      proposedByRole: 'proposed_by_role',
+      dateNegotiationStatus: 'date_negotiation_status',
+      dateNegotiationComment: 'date_negotiation_comment',
+      dateNegotiationUpdatedAt: 'date_negotiation_updated_at',
+      plannedDate: 'planned_date',
+    };
+
+    for (const [key, column] of Object.entries(mapping)) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        values.push(data[key] ?? null);
+        sets.push(`${column} = $${values.length}`);
+      }
+    }
+
+    if (sets.length === 0) return this.getById(id);
+    values.push(id);
+
+    const result = await pool.query(
+      `UPDATE tasks
+       SET ${sets.join(', ')}, updated_at = NOW()
+       WHERE id = $${values.length}
+       RETURNING id`,
+      values
+    );
+    if (result.rows.length === 0) return null;
+    return this.getById(id);
   },
 
   async getDashboardStats(filters = {}) {

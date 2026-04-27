@@ -32,6 +32,29 @@ function buildShortOpsMessage(task) {
   return null;
 }
 
+function getDateConfirmationBadge(task) {
+  if (task?.status !== 'WAITING_STOCK') return null;
+
+  const negotiationStatus = task?.date_negotiation_status;
+  const proposedByRole = `${task?.proposed_by_role || ''}`.toLowerCase();
+
+  // Cas 1: dès que la négociation est ACCEPTED, la date est confirmée.
+  if (negotiationStatus === 'ACCEPTED') {
+    return {
+      className: 'task-card__date-check--ok',
+      icon: '✓',
+      text: proposedByRole === 'planner' ? 'Date modifiée confirmée' : 'Date confirmée',
+    };
+  }
+
+  // Cas 2: le planner a modifié la date, attente de validation commercial.
+  if (negotiationStatus === 'PENDING_COMMERCIAL_REVIEW' && proposedByRole === 'planner') {
+    return { className: 'task-card__date-check--info', icon: '●', text: 'Date modifiée (attente commercial)' };
+  }
+
+  return { className: 'task-card__date-check--ko', icon: '✕', text: 'Date non confirmée' };
+}
+
 const TaskCard = ({ task, onOpen, isDragging }) => {
   if (!task) return null;
   const priority = TASK_PRIORITY_CONFIG[task.priority] || TASK_PRIORITY_CONFIG.MEDIUM;
@@ -47,6 +70,7 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
 
   const showReference = task.item_reference && task.item_reference !== task.title;
   const shortOpsMessage = buildShortOpsMessage(task);
+  const dateCheck = getDateConfirmationBadge(task);
 
   return (
     <article
@@ -70,6 +94,15 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
       {subtitle && <div className="task-card__subtitle">{subtitle}</div>}
 
       {shortOpsMessage ? <p className="task-card__desc">{shortOpsMessage}</p> : task.description && <p className="task-card__desc">{task.description}</p>}
+
+      {dateCheck && (
+        <div className={`task-card__date-check ${dateCheck.className}`} title={dateCheck.text}>
+          <span className="task-card__date-check-icon" aria-hidden>
+            {dateCheck.icon}
+          </span>
+          <span>{dateCheck.text}</span>
+        </div>
+      )}
 
       <div className="task-card__facts">
         {showReference && <span className="task-card__fact-ref">Réf {task.item_reference}</span>}

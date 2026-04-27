@@ -116,6 +116,59 @@
   overflow: hidden;
 }
 
+.task-card__date-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.69rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.18rem 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.task-card__date-check-icon {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.task-card__date-check--ok {
+  background: #ecfdf3;
+  color: #15803d;
+}
+
+.task-card__date-check--ok .task-card__date-check-icon {
+  background: #22c55e;
+  color: #fff;
+}
+
+.task-card__date-check--ko {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.task-card__date-check--ko .task-card__date-check-icon {
+  background: #ef4444;
+  color: #fff;
+}
+
+.task-card__date-check--info {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.task-card__date-check--info .task-card__date-check-icon {
+  background: #3b82f6;
+  color: #fff;
+}
+
 .task-card__facts {
   display: flex;
   flex-wrap: wrap;
