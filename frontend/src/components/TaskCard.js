@@ -3,6 +3,35 @@ import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, getTaskKey } from '../constan
 import { formatDate, formatRelativeDate, getInitials } from '../utils/formatters';
 import './TaskCard.css';
 
+function buildShortOpsMessage(task) {
+  const qty = Number(task?.quantity || 0);
+  const status = task?.status;
+  const hasPlannedDate = Boolean(task?.planned_date);
+  const expectedAction = `${task?.expected_action || ''}`.toUpperCase();
+
+  if (status === 'WAITING_STOCK') {
+    if (expectedAction.includes('NEW_PRODUCT')) {
+      return hasPlannedDate
+        ? `Nouveau produit en attente stock • Liv. prévue ${formatDate(task.planned_date)}`
+        : 'Nouveau produit en attente stock';
+    }
+    return hasPlannedDate
+      ? `Stock insuffisant • ${qty || '—'} pcs demandés • Liv. prévue ${formatDate(task.planned_date)}`
+      : `Stock insuffisant • ${qty || '—'} pcs demandés`;
+  }
+
+  if (status === 'TODO') {
+    return hasPlannedDate
+      ? `Stock validé • Prêt à lancer • Date confirmée ${formatDate(task.planned_date)}`
+      : 'Stock validé • Prêt à lancer';
+  }
+
+  if (status === 'BLOCKED') return 'Bloquée • Action planner requise';
+  if (status === 'DONE') return 'Terminé • Sortie stock appliquée';
+  if (status === 'IN_PROGRESS') return 'En production';
+  return null;
+}
+
 const TaskCard = ({ task, onOpen, isDragging }) => {
   if (!task) return null;
   const priority = TASK_PRIORITY_CONFIG[task.priority] || TASK_PRIORITY_CONFIG.MEDIUM;
@@ -17,6 +46,7 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
   const hideFooterQuantity = task.description && typeof task.description === 'string' && task.description.includes('commandés');
 
   const showReference = task.item_reference && task.item_reference !== task.title;
+  const shortOpsMessage = buildShortOpsMessage(task);
 
   return (
     <article
@@ -39,7 +69,7 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
       <h4 className="task-card__title">{task.title}</h4>
       {subtitle && <div className="task-card__subtitle">{subtitle}</div>}
 
-      {task.description && <p className="task-card__desc">{task.description}</p>}
+      {shortOpsMessage ? <p className="task-card__desc">{shortOpsMessage}</p> : task.description && <p className="task-card__desc">{task.description}</p>}
 
       <div className="task-card__facts">
         {showReference && <span className="task-card__fact-ref">Réf {task.item_reference}</span>}

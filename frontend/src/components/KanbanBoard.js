@@ -181,6 +181,11 @@ const KanbanBoard = ({
 
   const handleDragStart = (event, task) => {
     if (!canChangeStatus) return;
+    if (task.status === 'WAITING_STOCK') {
+      setErrorShort('Le statut Hors stock est gere automatiquement par le systeme.');
+      event.preventDefault();
+      return;
+    }
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData(DRAG_MIME, JSON.stringify({ id: task.id, status: task.status }));
     event.dataTransfer.setData('text/plain', JSON.stringify({ id: task.id, status: task.status }));
@@ -209,6 +214,12 @@ const KanbanBoard = ({
   const runDrop = async (draggedId, targetStatus, insertBeforeId) => {
     const task = tasks.find((entry) => entry.id === draggedId);
     if (!task) {
+      clearDragHighlights();
+      return;
+    }
+
+    if (task.status === 'WAITING_STOCK' || targetStatus === 'WAITING_STOCK') {
+      setErrorShort('Drag & drop interdit sur le statut Hors stock (gestion systeme uniquement).');
       clearDragHighlights();
       return;
     }
@@ -271,7 +282,7 @@ const KanbanBoard = ({
         await taskAPI.createBatch({
           tasks: formData.tasks || [formData],
           workspaceId,
-          status: 'TODO',
+          status: formData.status || null,
         });
       }
 
@@ -299,9 +310,9 @@ const KanbanBoard = ({
   const roleHint = isAllWorkspaces
     ? 'Vue transverse sur tous les espaces de production.'
     : canChangeStatus
-    ? 'Le planificateur peut faire avancer les fiches entre A faire, En cours, Bloque et Termine.'
+    ? 'Le planificateur valide le stock et pilote le flux complet.'
     : canCreateTask
-    ? 'Le commercial saisit les demandes clients uniquement dans la colonne A faire.'
+    ? 'Le commercial saisit les commandes hors stock avec date prevue.'
     : isSuperAdmin
     ? 'Le role suivi observe les commandes, les retards et les blocages sans modifier le flux.'
     : 'Mode consultation.';
@@ -364,7 +375,15 @@ const KanbanBoard = ({
                   <span className="kanban-column__title" style={{ color: column.color }}>
                     {column.label}
                   </span>
-                  <div className="kanban-column__subtitle">{column.id === 'BLOCKED' ? 'Interventions requises' : column.id === 'DONE' ? 'Archive visuelle' : 'File active'}</div>
+                  <div className="kanban-column__subtitle">
+                    {column.id === 'WAITING_STOCK'
+                      ? 'Commandes hors stock PF'
+                      : column.id === 'BLOCKED'
+                      ? 'Interventions requises'
+                      : column.id === 'DONE'
+                      ? 'Archive visuelle'
+                      : 'File active'}
+                  </div>
                 </div>
                 <span className="kanban-column__count" style={{ background: column.color }}>
                   {deferredQuery.trim() || filterPriority ? `${columnTasks.length}/${totalInColumn}` : totalInColumn}
@@ -381,7 +400,7 @@ const KanbanBoard = ({
                     <div
                       key={task.id}
                       className="kanban-card-slot"
-                      draggable={canChangeStatus}
+                      draggable={canChangeStatus && task.status !== 'WAITING_STOCK'}
                       onDragStart={(event) => handleDragStart(event, task)}
                       onDragEnd={clearDragHighlights}
                       onDragOver={(event) => {
@@ -399,7 +418,7 @@ const KanbanBoard = ({
                 )}
               </div>
 
-              {canCreateTask && !isAllWorkspaces && column.id === 'TODO' && (
+              {canCreateTask && !isAllWorkspaces && column.id === 'WAITING_STOCK' && (
                 <button
                   type="button"
                   className="kanban-column__create"
@@ -419,7 +438,7 @@ const KanbanBoard = ({
       {showTaskModal && (
         <TaskModal
           task={editingTask}
-          defaultStatus="TODO"
+          defaultStatus="WAITING_STOCK"
           users={users}
           canAssign={canChangeStatus}
           isCommercial={isCommercial}

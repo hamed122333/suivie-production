@@ -1,5 +1,67 @@
 const ExcelJS = require('exceljs');
 const StockImportModel = require('../models/stockImportModel');
+const TaskModel = require('../models/taskModel');
+const TaskHistoryModel = require('../models/taskHistoryModel');
+const { isValidArticleCode, normalizeArticleCode } = require('../utils/articleCode');
+
+async function autoPromoteWaitingTasksByArticles(articles, actorId) {
+  const articleSet = new Set((articles || []).map((a) => `${a || ''}`.trim().toUpperCase()).filter(Boolean));
+  if (articleSet.size === 0) return 0;
+
+  const waitingTasks = await TaskModel.getAll({ status: 'WAITING_STOCK' });
+  const candidates = waitingTasks.filter((task) => articleSet.has(`${task.item_reference || ''}`.trim().toUpperCase()));
+  let promoted = 0;
+
+  for (const task of candidates) {
+    const stockAvailable = await StockImportModel.hasAvailableQuantity({
+      stockImportId: task.stock_import_id,
+      itemReference: task.item_reference,
+      requiredQuantity: task.quantity || 1,
+    });
+    if (!stockAvailable) continue;
+
+    const moved = await TaskModel.updateStatus(task.id, 'TODO', null, actorId, 'planner', {
+      systemAutoPromotion: true,
+    });
+    if (!moved) continue;
+    promoted += 1;
+    await TaskHistoryModel.log({
+      taskId: moved.id,
+      actorId,
+      actionType: 'stock_confirmed',
+      fieldName: 'stock',
+      message: 'Stock mis a jour puis fiche deplacee automatiquement vers A faire',
+    });
+  }
+
+  return promoted;
+}
+
+async function autoPromoteAllWaitingTasks(actorId = null) {
+  const waitingTasks = await TaskModel.getAll({ status: 'WAITING_STOCK' });
+  let promoted = 0;
+  for (const task of waitingTasks) {
+    const stockAvailable = await StockImportModel.hasAvailableQuantity({
+      stockImportId: task.stock_import_id,
+      itemReference: task.item_reference,
+      requiredQuantity: task.quantity || 1,
+    });
+    if (!stockAvailable) continue;
+    const moved = await TaskModel.updateStatus(task.id, 'TODO', null, actorId, 'planner', {
+      systemAutoPromotion: true,
+    });
+    if (!moved) continue;
+    promoted += 1;
+    await TaskHistoryModel.log({
+      taskId: moved.id,
+      actorId,
+      actionType: 'stock_confirmed',
+      fieldName: 'stock',
+      message: 'Auto-check stock: fiche deplacee automatiquement vers A faire',
+    });
+  }
+  return promoted;
+}
 
 /**
  * Extract a numeric value from an ExcelJS cell that may contain a raw
@@ -210,16 +272,17 @@ const stockImportController = {
         }
 
         const rawArticle = typeof articleCell.value === 'object' && articleCell.value !== null ? (articleCell.value.richText?.map(rt => rt.text).join('') || articleCell.value.result || '') : articleCell.value;
-        const article = `${rawArticle ?? ''}`.trim();
+        const article = normalizeArticleCode(rawArticle);
         const quantity = extractCellNumber(quantityCell);
 
-        if (!article || !Number.isFinite(quantity) || quantity <= 0) return;
+        if (!article || !isValidArticleCode(article) || !Number.isFinite(quantity) || quantity <= 0) return;
 
         const readyDate = calculateReadyDate(article, rawDate);
-        const normalizedArticle = article.toUpperCase();
+        const normalizedArticle = article;
 
         if (recordsMap.has(normalizedArticle)) {
-            // Remplacer l'état dupliqué avec le nouveau flux du fichier
+            // Duplicate in same file is considered a data-entry mistake:
+            // keep latest row values, do not sum quantities.
             const existing = recordsMap.get(normalizedArticle);
             existing.quantity = Number(quantity.toFixed(2));
             existing.readyDate = readyDate;
@@ -248,7 +311,11 @@ const stockImportController = {
       }
 
       const created = await StockImportModel.createMany(records);
-      res.status(201).json({ imported: created.length, records: created });
+      const promotedTasks = await autoPromoteWaitingTasksByArticles(
+        created.map((row) => row.article),
+        req.user?.id || null
+      );
+      res.status(201).json({ imported: created.length, records: created, promotedTasks });
     } catch (err) {
       console.error('Excel import error:', err);
       res.status(500).json({ error: "Erreur lors de l'importation du fichier: " + err.message });
@@ -267,23 +334,39 @@ const stockImportController = {
 
   async createManual(req, res) {
     try {
-      const { article, quantity, baseDate } = req.body;
+      const { article, quantity, designation, clientCode, clientName } = req.body;
+      const normalizedArticle = normalizeArticleCode(article);
 
-      if (!article || !Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
+      if (!normalizedArticle || !Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
         return res.status(400).json({ error: 'Article et quantité valides requis.' });
       }
+      if (!isValidArticleCode(normalizedArticle)) {
+        return res.status(400).json({ error: 'Code article invalide. Prefixes autorises: CI, CV, DI, DV, PL' });
+      }
 
-      const readyDate = calculateReadyDate(article, baseDate);
-      const normalizedArticle = article.trim().toUpperCase();
+      const existing = await StockImportModel.findByArticle(normalizedArticle);
+      const resolvedMode = existing ? 'add_stock' : 'new_product';
 
-      const records = [{
+      const readyDate = calculateReadyDate(normalizedArticle, null);
+      const { row, action } = await StockImportModel.upsertManual({
         article: normalizedArticle,
         quantity: Number(Number(quantity).toFixed(2)),
-        readyDate
-      }];
-
-      const created = await StockImportModel.createMany(records);
-      res.status(201).json({ imported: created.length, records: created });
+        designation: designation || null,
+        clientCode: clientCode || null,
+        clientName: clientName || null,
+        readyDate,
+      });
+      const promotedTasks = await autoPromoteWaitingTasksByArticles(
+        [row.article],
+        req.user?.id || null
+      );
+      res.status(201).json({
+        imported: 1,
+        records: [row],
+        promotedTasks,
+        action,
+        mode: resolvedMode,
+      });
     } catch (err) {
       console.error('Manual import error:', err);
       res.status(500).json({ error: "Erreur lors de l'ajout manuel: " + err.message });
@@ -293,3 +376,4 @@ const stockImportController = {
 
 module.exports = stockImportController;
 module.exports.calculateReadyDate = calculateReadyDate;
+module.exports.autoPromoteAllWaitingTasks = autoPromoteAllWaitingTasks;

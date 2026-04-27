@@ -1,4 +1,5 @@
 export const TASK_STATUS_ORDER = [
+  'WAITING_STOCK',
   'TODO',
   'IN_PROGRESS',
   'BLOCKED',
@@ -7,6 +8,7 @@ export const TASK_STATUS_ORDER = [
 
 export const TASK_STATUS_CONFIG = {
   TODO: { label: 'A faire', shortLabel: 'A faire', color: '#1d4ed8', bg: '#eff6ff', headerBg: '#dbeafe' },
+  WAITING_STOCK: { label: 'Hors stock PF', shortLabel: 'Hors stock', color: '#7c3aed', bg: '#f5f3ff', headerBg: '#ede9fe' },
   IN_PROGRESS: { label: 'En cours', shortLabel: 'En cours', color: '#c2410c', bg: '#fff7ed', headerBg: '#ffedd5' },
   DONE: { label: 'Terminee', shortLabel: 'Terminee', color: '#15803d', bg: '#f0fdf4', headerBg: '#dcfce7' },
   BLOCKED: { label: 'Bloquee', shortLabel: 'Bloquee', color: '#b91c1c', bg: '#fef2f2', headerBg: '#fee2e2' },
@@ -28,6 +30,7 @@ export const TASK_PRIORITY_OPTIONS = [
 
 export const STATUS_COUNT_FIELDS = {
   TODO: 'totalTodo',
+  WAITING_STOCK: 'totalWaitingStock',
   IN_PROGRESS: 'totalInProgress',
   BLOCKED: 'totalBlocked',
   DONE: 'totalDone',

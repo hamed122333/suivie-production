@@ -1,19 +1,30 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TASK_PRIORITY_OPTIONS } from '../constants/task';
 import { stockImportAPI } from '../services/api';
+import { ALLOWED_ARTICLE_PREFIXES, isValidArticleCode, normalizeArticleCode } from '../utils/articleCode';
 import './TaskModal.css';
 
 const EMPTY_FORM = {
   title: '',
   description: '',
   priority: 'MEDIUM',
+  plannedDate: '',
   quantity: '',
-  quantity_unit: 'pcs',
-  client_name: '',
-  item_reference: '',
+  quantityUnit: 'pcs',
+  clientName: '',
+  itemReference: '',
+  assignedTo: '',
 };
 
 const EMPTY_LINE = '';
+const EMPTY_MANUAL_ITEM = {
+  itemReference: '',
+  designation: '',
+  clientCode: '',
+  clientName: '',
+  quantity: '1',
+};
+const STOCK_PREVIEW_LIMIT = 120;
 
 const CREATE_PRIORITY_OPTIONS = [
   { value: 'LOW', label: 'Basse' },
@@ -44,6 +55,9 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
   const [selectedArticleIds, setSelectedArticleIds] = useState(new Set());
   const [requestedQuantities, setRequestedQuantities] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [manualItems, setManualItems] = useState([EMPTY_MANUAL_ITEM]);
+  const [entryMode, setEntryMode] = useState('existing_product');
+  const [showAllStockRows, setShowAllStockRows] = useState(false);
 
   const isEditing = Boolean(task);
 
@@ -54,16 +68,21 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
         title: task.title || '',
         description: task.description || '',
         priority: task.priority || 'MEDIUM',
-        client_name: task.client_name || '',
-        item_reference: task.item_reference || '',
+        plannedDate: task.planned_date ? String(task.planned_date).slice(0, 10) : '',
+        clientName: task.client_name || '',
+        itemReference: task.item_reference || '',
         quantity: task.quantity?.toString() || '',
-        quantity_unit: task.quantity_unit || 'pcs',
+        quantityUnit: task.quantity_unit || 'pcs',
+        assignedTo: task.assigned_to ? String(task.assigned_to) : '',
       });
     } else {
       setForm(EMPTY_FORM);
     }
 
     setLines([EMPTY_LINE]);
+    setManualItems([EMPTY_MANUAL_ITEM]);
+    setEntryMode('existing_product');
+    setShowAllStockRows(false);
     setError('');
   }, [task]);
 
@@ -93,7 +112,8 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
   );
 
   const updateForm = (field) => (event) => {
-    const { value } = event.target;
+    const raw = event.target.value;
+    const value = field === 'itemReference' ? normalizeArticleCode(raw) : raw;
     setForm((current) => ({ ...current, [field]: value }));
   };
 
@@ -110,6 +130,14 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
   const removeLine = (index) => {
     setLines((current) => current.filter((_, currentIndex) => currentIndex !== index));
   };
+
+  const updateManualItem = (index, field, value) => {
+    const normalizedValue = field === 'itemReference' ? normalizeArticleCode(value) : value;
+    setManualItems((current) => current.map((item, i) => (i === index ? { ...item, [field]: normalizedValue } : item)));
+  };
+
+  const addManualItem = () => setManualItems((current) => [...current, EMPTY_MANUAL_ITEM]);
+  const removeManualItem = (index) => setManualItems((current) => current.filter((_, i) => i !== index));
 
   const toggleArticle = (article) => {
     const isAdding = !selectedArticleIds.has(article.id);
@@ -165,6 +193,11 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
     );
   }, [stockArticles, searchQuery]);
 
+  const visibleArticles = useMemo(() => {
+    if (showAllStockRows || searchQuery.trim()) return filteredArticles;
+    return filteredArticles.slice(0, STOCK_PREVIEW_LIMIT);
+  }, [filteredArticles, showAllStockRows, searchQuery]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.title.trim() && !isCommMode) {
@@ -189,8 +222,16 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
 
       const normalizeOptionalString = (val) => val?.trim() || null;
       payload.description = normalizeOptionalString(payload.description);
-      payload.client_name = normalizeOptionalString(payload.client_name);
-      payload.item_reference = normalizeOptionalString(payload.item_reference);
+      payload.clientName = normalizeOptionalString(payload.clientName);
+      payload.itemReference = normalizeOptionalString(payload.itemReference);
+      if (payload.itemReference) {
+        payload.itemReference = normalizeArticleCode(payload.itemReference);
+        if (!isValidArticleCode(payload.itemReference)) {
+          throw new Error(`Code article invalide. Préfixes autorisés: ${ALLOWED_ARTICLE_PREFIXES.join(', ')}`);
+        }
+      }
+      payload.quantityUnit = normalizeOptionalString(payload.quantityUnit) || 'pcs';
+      payload.assignedTo = payload.assignedTo ? Number(payload.assignedTo) : null;
 
       if (isCommMode) {
         // Commercial create mode: tasks from selected stock import articles
@@ -199,17 +240,19 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
           throw new Error('Le nom du client est obligatoire.');
         }
 
-        if (selectedArticleIds.size === 0) {
-          throw new Error('Sélectionnez au moins un article disponible.');
+        if (entryMode === 'existing_product' && selectedArticleIds.size === 0) {
+          throw new Error('Sélectionnez au moins un article existant.');
         }
 
         const selectedArticles = stockArticles.filter((a) => selectedArticleIds.has(a.id));
-        const preparedTasks = selectedArticles.map((article) => {
+        const fromStockTasks = selectedArticles.map((article) => {
           const reqQty = Number(requestedQuantities[article.id] || article.quantity);
           return {
             title: `${clientName} • ${article.article}`,
             description: `${reqQty} pcs commandés (Stock initial: ${Number(article.quantity)} pcs)`,
             priority: form.priority,
+            plannedDate: form.plannedDate || null,
+            expectedAction: 'EXISTING_PRODUCT_AUTO_STOCK_CHECK',
             clientName,
             itemReference: article.article,
             quantity: reqQty,
@@ -217,6 +260,41 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
             stockImportId: article.id,
           };
         });
+
+        const fromManualTasks = manualItems
+          .map((item) => ({
+            itemReference: normalizeArticleCode(item.itemReference),
+            designation: `${item.designation || ''}`.trim(),
+            clientCode: `${item.clientCode || ''}`.trim(),
+            clientName: `${item.clientName || ''}`.trim(),
+            quantity: Number(item.quantity || 0),
+          }))
+          .filter((item) => item.itemReference && isValidArticleCode(item.itemReference) && Number.isFinite(item.quantity) && item.quantity > 0)
+          .map((item) => ({
+            title: `${clientName} • ${item.itemReference}`,
+            description: `${item.quantity} pcs commandés (article hors liste stock)${
+              item.designation ? ` • ${item.designation}` : ''
+            }${item.clientCode ? ` • Code client: ${item.clientCode}` : ''}`,
+            priority: form.priority,
+            plannedDate: form.plannedDate || null,
+            expectedAction: 'NEW_PRODUCT',
+            clientName: item.clientName || clientName,
+            itemReference: item.itemReference,
+            quantity: item.quantity,
+            quantityUnit: 'pcs',
+          }));
+
+        const preparedTasks = [
+          ...(entryMode === 'existing_product' ? fromStockTasks : []),
+          ...(entryMode === 'new_product' ? fromManualTasks : []),
+        ];
+        if (preparedTasks.length === 0) {
+          throw new Error(
+            entryMode === 'existing_product'
+              ? 'Sélectionnez au moins un article existant.'
+              : `Ajoutez au moins un nouveau produit valide (préfixes: ${ALLOWED_ARTICLE_PREFIXES.join(', ')}) avec quantité.`
+          );
+        }
 
         await onSave({
           status: defaultStatus,
@@ -248,7 +326,13 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
         });
       }
     } catch (err) {
-      if (err.message && err.message !== 'Le nom du client est obligatoire.' && err.message !== 'Sélectionnez au moins un article disponible.' && err.message !== 'Ajoute au moins une ligne d article.') {
+      if (
+        err.message &&
+        err.message !== 'Le nom du client est obligatoire.' &&
+        err.message !== 'Sélectionnez au moins un article existant.' &&
+        err.message !== 'Ajoutez au moins un nouveau produit avec code article et quantité.' &&
+        err.message !== 'Ajoute au moins une ligne d article.'
+      ) {
         setError(err.message);
       } else if (err.message) {
         alert(err.message);
@@ -305,8 +389,34 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
             </div>
 
             <div className="form-group task-modal-classic__group">
+              <label>Date prévue de livraison</label>
+              <input type="date" value={form.plannedDate || ''} onChange={updateForm('plannedDate')} required />
+            </div>
+
+            <div className="form-group task-modal-classic__group">
+              <label>Mode de saisie</label>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className={`btn ${entryMode === 'existing_product' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setEntryMode('existing_product')}
+                >
+                  Produit existant (stock auto)
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${entryMode === 'new_product' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setEntryMode('new_product')}
+                >
+                  Nouveau produit (non existant)
+                </button>
+              </div>
+            </div>
+
+            {entryMode === 'existing_product' && (
+            <div className="form-group task-modal-classic__group">
               <label>
-                Articles disponibles
+                Articles produits finis (existants)
                 {availableReadyCount > 0 && (
                   <span className="stock-article-ready-badge">{availableReadyCount} prêt(s)</span>
                 )}
@@ -336,11 +446,11 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
                 </div>
               ) : (
                 <div className="stock-article-list">
-                  {filteredArticles.map((article) => {
+                  {visibleArticles.map((article) => {
                     const readyDate = new Date(article.ready_date);
                     const isReady = article.is_ready;
                     const isUsed = article.is_used;
-                    const isDisabled = !isReady || isUsed;
+                    const isDisabled = false;
                     const isSelected = selectedArticleIds.has(article.id);
                     const reqQty = requestedQuantities[article.id] ?? Number(article.quantity);
 
@@ -390,7 +500,6 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
                               className="stock-article-item__input-qty"
                               value={reqQty}
                               min="1"
-                              max={Number(article.quantity)}
                               onChange={(e) => updateArticleQuantity(article.id, e.target.value)}
                               onClick={(e) => e.stopPropagation()}
                             />
@@ -416,7 +525,72 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
                   })}
                 </div>
               )}
+              {!searchQuery.trim() && filteredArticles.length > STOCK_PREVIEW_LIMIT && (
+                <div style={{ marginTop: '0.5rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowAllStockRows((current) => !current)}
+                  >
+                    {showAllStockRows
+                      ? `Afficher moins (${STOCK_PREVIEW_LIMIT})`
+                      : `Afficher toute la liste (${filteredArticles.length})`}
+                  </button>
+                </div>
+              )}
             </div>
+            )}
+
+            {entryMode === 'new_product' && (
+            <div className="form-group task-modal-classic__group">
+              <label>Nouveau produit (meme structure PF)</label>
+              <div className="task-modal-classic__lines">
+                {manualItems.map((item, index) => (
+                  <div key={`manual-${index}`} className="task-modal-classic__line" style={{ display: 'grid', gap: '0.5rem' }}>
+                    <input
+                      type="text"
+                      placeholder="Code article (ex: CI2682)"
+                      value={item.itemReference}
+                      onChange={(event) => updateManualItem(index, 'itemReference', event.target.value)}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Designation article"
+                      value={item.designation}
+                      onChange={(event) => updateManualItem(index, 'designation', event.target.value)}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Code client"
+                      value={item.clientCode}
+                      onChange={(event) => updateManualItem(index, 'clientCode', event.target.value)}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Nom client (optionnel)"
+                      value={item.clientName}
+                      onChange={(event) => updateManualItem(index, 'clientName', event.target.value)}
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Quantité"
+                      value={item.quantity}
+                      onChange={(event) => updateManualItem(index, 'quantity', event.target.value)}
+                    />
+                    {manualItems.length > 1 && (
+                      <button type="button" className="btn btn-secondary task-modal-classic__remove" onClick={() => removeManualItem(index)}>
+                        Supprimer
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button type="button" className="btn btn-secondary task-modal-classic__add" onClick={addManualItem}>
+                + Ajouter un nouveau produit
+              </button>
+            </div>
+            )}
 
             <div className="task-modal-classic__footer">
               <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
@@ -425,11 +599,11 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
               <button
                 type="submit"
                 className="btn btn-primary"
-                disabled={saving || selectedArticleIds.size === 0}
+                disabled={saving}
               >
                 {saving
                   ? 'Création…'
-                  : `Créer ${selectedArticleIds.size > 0 ? `${selectedArticleIds.size} commande(s)` : 'la commande'}`}
+                  : 'Créer les commandes'}
               </button>
             </div>
           </form>
@@ -521,6 +695,11 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
               </select>
             </div>
 
+            <div className="form-group task-modal-classic__group">
+              <label>Date prevue de livraison</label>
+              <input type="date" value={form.plannedDate || ''} onChange={updateForm('plannedDate')} required />
+            </div>
+
             <div className="task-modal-classic__footer">
               <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
                 Annuler
@@ -566,6 +745,21 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
           </div>
 
           <div className="form-group task-modal-classic__group">
+            <label>Référence article</label>
+            <input type="text" value={form.itemReference} onChange={updateForm('itemReference')} />
+          </div>
+
+          <div className="form-group task-modal-classic__group">
+            <label>Quantité</label>
+            <input type="number" min="0" step="0.01" value={form.quantity} onChange={updateForm('quantity')} />
+          </div>
+
+          <div className="form-group task-modal-classic__group">
+            <label>Unité</label>
+            <input type="text" value={form.quantityUnit} onChange={updateForm('quantityUnit')} />
+          </div>
+
+          <div className="form-group task-modal-classic__group">
             <label>Niveau de priorite</label>
             <select value={form.priority} onChange={updateForm('priority')}>
               {TASK_PRIORITY_OPTIONS.map((option) => (
@@ -574,6 +768,16 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="form-group task-modal-classic__group">
+            <label>Date prevue de livraison</label>
+            <input
+              type="date"
+              value={form.plannedDate || ''}
+              onChange={updateForm('plannedDate')}
+              required={task?.status === 'WAITING_STOCK'}
+            />
           </div>
 
           {canAssign && (

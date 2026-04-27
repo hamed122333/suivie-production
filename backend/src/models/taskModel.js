@@ -12,10 +12,11 @@ const priorityOrderSql = `
 
 const statusOrderSql = `
   CASE t.status
-    WHEN 'TODO' THEN 1
-    WHEN 'IN_PROGRESS' THEN 2
-    WHEN 'BLOCKED' THEN 3
-    WHEN 'DONE' THEN 4
+    WHEN 'WAITING_STOCK' THEN 1
+    WHEN 'TODO' THEN 2
+    WHEN 'IN_PROGRESS' THEN 3
+    WHEN 'BLOCKED' THEN 4
+    WHEN 'DONE' THEN 5
     ELSE 9
   END`;
 
@@ -310,9 +311,22 @@ const TaskModel = {
     }
 
     const allowedIds = new Set(currentTasks.map((task) => task.id));
+    const currentStatusById = new Map(currentTasks.map((task) => [task.id, task.status]));
     for (const taskId of uniqueIds) {
       if (!allowedIds.has(taskId)) {
         throw new Error('Unknown task id in board order');
+      }
+    }
+
+    for (const status of TASK_BOARD_STATUSES) {
+      const taskIds = columnOrders[status] || [];
+      for (const rawId of taskIds) {
+        const taskId = Number(rawId);
+        const currentStatus = currentStatusById.get(taskId);
+        const changedStatus = currentStatus && currentStatus !== status;
+        if (changedStatus && (currentStatus === 'WAITING_STOCK' || status === 'WAITING_STOCK')) {
+          throw new Error('WAITING_STOCK status can only be changed by system auto promotion');
+        }
       }
     }
 
@@ -349,7 +363,7 @@ const TaskModel = {
     }
   },
 
-  async updateStatus(id, status, reasonBlocked = null, userId, userRole) {
+  async updateStatus(id, status, reasonBlocked = null, userId, userRole, options = {}) {
     const client = await pool.connect();
 
     try {
@@ -375,6 +389,13 @@ const TaskModel = {
       if (currentTask.status === status) {
         await client.query('COMMIT');
         return this.getById(id);
+      }
+
+      const changingWaitingStock =
+        currentTask.status === 'WAITING_STOCK' || status === 'WAITING_STOCK';
+      if (changingWaitingStock && !options.systemAutoPromotion) {
+        await client.query('ROLLBACK');
+        throw new Error('WAITING_STOCK status can only be changed by system auto promotion');
       }
 
       await client.query(
@@ -437,6 +458,7 @@ const TaskModel = {
       SELECT
         COUNT(*) AS total_tasks,
         COUNT(*) FILTER (WHERE status = 'TODO') AS total_todo,
+        COUNT(*) FILTER (WHERE status = 'WAITING_STOCK') AS total_waiting_stock,
         COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') AS total_in_progress,
         COUNT(*) FILTER (WHERE status = 'DONE') AS total_done,
         COUNT(*) FILTER (WHERE status = 'BLOCKED') AS total_blocked,
@@ -476,7 +498,7 @@ const TaskModel = {
         COALESCE(NULLIF(t.production_line, ''), 'Non assignee') AS production_line,
         COUNT(*) AS task_count
       FROM tasks t
-      ${where}${where ? ' AND' : ' WHERE'} t.status IN ('TODO', 'IN_PROGRESS', 'BLOCKED')
+      ${where}${where ? ' AND' : ' WHERE'} t.status IN ('TODO', 'WAITING_STOCK', 'IN_PROGRESS', 'BLOCKED')
       GROUP BY COALESCE(NULLIF(t.production_line, ''), 'Non assignee')
       ORDER BY COUNT(*) DESC, production_line ASC
       LIMIT 8

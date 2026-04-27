@@ -1,5 +1,6 @@
 const { TASK_CREATION_STATUSES, TASK_PRIORITIES, TASK_STATUSES } = require('../constants/task');
 const { createHttpError } = require('./httpErrors');
+const { isValidArticleCode, normalizeArticleCode } = require('./articleCode');
 
 function normalizeTitle(title) {
   const value = `${title || ''}`.trim();
@@ -50,11 +51,21 @@ function normalizeOptionalQuantity(value) {
   return Number(numericValue.toFixed(2));
 }
 
+function normalizeOptionalArticleCode(value, label = 'Reference article') {
+  const normalized = normalizeOptionalString(value, { label, maxLength: 255 });
+  if (!normalized) return null;
+  const upper = normalizeArticleCode(normalized);
+  if (!isValidArticleCode(upper)) {
+    throw createHttpError(400, 'Code article invalide. Prefixes autorises: CI, CV, DI, DV, PL');
+  }
+  return upper;
+}
+
 function normalizeTaskMetadata(data = {}) {
   return {
     clientName: normalizeOptionalString(data.clientName, { label: 'Client', maxLength: 255 }),
     orderCode: normalizeOptionalString(data.orderCode, { label: 'Code commande', maxLength: 100 }),
-    itemReference: normalizeOptionalString(data.itemReference, { label: 'Reference article', maxLength: 255 }),
+    itemReference: normalizeOptionalArticleCode(data.itemReference, 'Reference article'),
     quantity: normalizeOptionalQuantity(data.quantity),
     quantityUnit: normalizeOptionalString(data.quantityUnit, { label: 'Unite', maxLength: 50 }) || 'pcs',
     dueDate: normalizeOptionalDate(data.dueDate, 'Date d echeance'),

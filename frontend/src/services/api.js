@@ -51,7 +51,7 @@ export const taskAPI = {
   getById: (id) => api.get(`/tasks/${id}`),
   getDetail: (id) => api.get(`/tasks/${id}/details`),
   create: (data) => api.post('/tasks', data),
-  createBatch: ({ tasks, workspaceId, status = 'TODO' }) => api.post('/tasks/bulk', { tasks, workspaceId, status }),
+  createBatch: ({ tasks, workspaceId, status = null }) => api.post('/tasks/bulk', { tasks, workspaceId, status }),
   update: (id, data) => api.put(`/tasks/${id}`, data),
   updateStatus: (id, status, reasonBlocked) => api.put(`/tasks/${id}/status`, { status, reasonBlocked }),
   addComment: (id, body) => api.post(`/tasks/${id}/comments`, { body }),

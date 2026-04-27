@@ -83,6 +83,66 @@ async function notifyTaskCreation(createdTasks, actor) {
   });
 }
 
+async function deductStockForTask(taskLike, quantityOverride = null) {
+  const qty = Number(quantityOverride ?? taskLike?.quantity ?? 1);
+  if (!Number.isFinite(qty) || qty <= 0) return;
+  if (taskLike?.stock_import_id) {
+    await StockImportModel.deductQuantity(taskLike.stock_import_id, qty);
+    return;
+  }
+  if (taskLike?.item_reference) {
+    await StockImportModel.deductQuantityByArticle(taskLike.item_reference, qty);
+  }
+}
+
+async function addStockForTask(taskLike, quantityOverride = null) {
+  const qty = Number(quantityOverride ?? taskLike?.quantity ?? 1);
+  if (!Number.isFinite(qty) || qty <= 0) return;
+  if (taskLike?.stock_import_id) {
+    await StockImportModel.addQuantity(taskLike.stock_import_id, qty);
+    return;
+  }
+  if (taskLike?.item_reference) {
+    await StockImportModel.addQuantityByArticle(taskLike.item_reference, qty);
+  }
+}
+
+function ensurePlannedDateForWaitingStock(taskInput, index = null) {
+  if (taskInput.status !== 'WAITING_STOCK') return;
+  if (taskInput.plannedDate) return;
+  const suffix = Number.isInteger(index) ? ` (ligne ${index + 1})` : '';
+  throw createHttpError(400, `La date prevue de livraison est obligatoire pour le statut Hors stock PF${suffix}`);
+}
+
+async function resolveCreationTarget(taskInput) {
+  const quantity = Number(taskInput.quantity || 1);
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw createHttpError(400, 'Quantite invalide pour la commande');
+  }
+
+  const stockProbe = await StockImportModel.findAvailableForTask({
+    stockImportId: taskInput.stockImportId,
+    itemReference: taskInput.itemReference,
+    requiredQuantity: quantity,
+  });
+
+  if (stockProbe?.available) {
+    return {
+      ...taskInput,
+      status: 'TODO',
+      stockImportId: taskInput.stockImportId || stockProbe.stockImportId,
+      autoReason: 'stock_available',
+    };
+  }
+
+  return {
+    ...taskInput,
+    status: 'WAITING_STOCK',
+    stockImportId: taskInput.stockImportId || stockProbe?.stockImportId || null,
+    autoReason: stockProbe ? 'stock_insufficient' : 'stock_missing',
+  };
+}
+
 const taskController = {
   async reorderBoard(req, res) {
     try {
@@ -112,13 +172,10 @@ const taskController = {
             });
 
             // Handle stock quantities based on status changes
-            if (beforeTask.stock_import_id) {
-              const qty = beforeTask.quantity || 1;
-              if (afterStatus === 'DONE' && beforeTask.status !== 'DONE') {
-                await StockImportModel.deductQuantity(beforeTask.stock_import_id, qty);
-              } else if (beforeTask.status === 'DONE' && afterStatus !== 'DONE') {
-                await StockImportModel.addQuantity(beforeTask.stock_import_id, qty);
-              }
+            if (afterStatus === 'DONE' && beforeTask.status !== 'DONE') {
+              await deductStockForTask(beforeTask);
+            } else if (beforeTask.status === 'DONE' && afterStatus !== 'DONE') {
+              await addStockForTask(beforeTask);
             }
         }
       }
@@ -261,15 +318,14 @@ const taskController = {
     try {
       const taskInput = normalizeTaskDraft(req.body);
       const workspaceId = parseWorkspaceId(req.body.workspaceId, { required: true });
-      if (req.body.status && req.body.status !== 'TODO') {
-        throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
-      }
+      const resolved = await resolveCreationTarget(taskInput);
+      ensurePlannedDateForWaitingStock(resolved);
 
       const task = await TaskModel.create({
-        ...taskInput,
+        ...resolved,
         createdBy: req.user.id,
         workspaceId,
-        status: 'TODO',
+        status: resolved.status,
       });
       await TaskHistoryModel.log({
         taskId: task.id,
@@ -278,7 +334,11 @@ const taskController = {
         message: 'Tâche créée par le commercial',
       });
       await notifyTaskCreation([task], req.user);
-      res.status(201).json(task);
+      res.status(201).json({
+        task,
+        autoStatus: resolved.status,
+        reason: resolved.autoReason,
+      });
     } catch (err) {
       if (isHttpError(err)) {
         return res.status(err.status).json({ error: err.message });
@@ -292,16 +352,35 @@ const taskController = {
     try {
       const tasks = normalizeTaskBatch(req.body.tasks);
       const workspaceId = parseWorkspaceId(req.body.workspaceId, { required: true });
-      if (req.body.status && req.body.status !== 'TODO') {
-        throw createHttpError(400, 'Le commercial ne peut creer des taches que dans TODO');
+      const resolvedTasks = [];
+      for (let index = 0; index < tasks.length; index += 1) {
+        const resolved = await resolveCreationTarget(tasks[index]);
+        ensurePlannedDateForWaitingStock(resolved, index);
+        resolvedTasks.push(resolved);
       }
 
-      const createdTasks = await TaskModel.createMany({
-        tasks,
-        createdBy: req.user.id,
-        workspaceId,
-        status: 'TODO',
-      });
+      const todoDrafts = resolvedTasks.filter((task) => task.status === 'TODO');
+      const waitingDrafts = resolvedTasks.filter((task) => task.status === 'WAITING_STOCK');
+
+      const [createdTodo, createdWaiting] = await Promise.all([
+        todoDrafts.length > 0
+          ? TaskModel.createMany({
+              tasks: todoDrafts,
+              createdBy: req.user.id,
+              workspaceId,
+              status: 'TODO',
+            })
+          : Promise.resolve([]),
+        waitingDrafts.length > 0
+          ? TaskModel.createMany({
+              tasks: waitingDrafts,
+              createdBy: req.user.id,
+              workspaceId,
+              status: 'WAITING_STOCK',
+            })
+          : Promise.resolve([]),
+      ]);
+      const createdTasks = [...createdTodo, ...createdWaiting];
 
       await TaskHistoryModel.logMany(
         createdTasks.map((task) => ({
@@ -321,7 +400,11 @@ const taskController = {
       //   await StockImportModel.markManyAsUsed(stockImportIds);
       // }
 
-      res.status(201).json(createdTasks);
+      res.status(201).json({
+        tasks: createdTasks,
+        createdTodo: createdTodo.length,
+        createdWaitingStock: createdWaiting.length,
+      });
     } catch (err) {
       if (isHttpError(err)) {
         return res.status(err.status).json({ error: err.message });
@@ -337,31 +420,33 @@ const taskController = {
       if (!previousTask) return res.status(404).json({ error: 'Task not found' });
 
       const payload = normalizeTaskUpdatePayload(req.body);
+      if (Object.prototype.hasOwnProperty.call(payload, 'status')) {
+        return res.status(400).json({ error: 'Le statut doit etre change via endpoint de statut dedie.' });
+      }
       const task = await TaskModel.update(req.params.id, payload);
       if (!task) return res.status(404).json({ error: 'Task not found' });
 
       // Handle stock quantities if the task is already DONE and quantity changed
-      if (previousTask.status === 'DONE' && task.status === 'DONE' && task.stock_import_id) {
+      if (previousTask.status === 'DONE' && task.status === 'DONE') {
         const oldQty = previousTask.quantity || 1;
         const newQty = task.quantity || 1;
         
         if (newQty !== oldQty) {
           const diff = newQty - oldQty;
           if (diff > 0) {
-            await StockImportModel.deductQuantity(task.stock_import_id, diff);
+            await deductStockForTask(task, diff);
           } else if (diff < 0) {
-            await StockImportModel.addQuantity(task.stock_import_id, Math.abs(diff));
+            await addStockForTask(task, Math.abs(diff));
           }
         }
       }
 
       // Handle stock quantities if the API payload also somehow changed the status
-      if (task.stock_import_id && payload.status && previousTask.status !== payload.status) {
-        const qty = task.quantity || 1;
+      if (payload.status && previousTask.status !== payload.status) {
         if (previousTask.status !== 'DONE' && task.status === 'DONE') {
-          await StockImportModel.deductQuantity(task.stock_import_id, qty);
+          await deductStockForTask(task);
         } else if (previousTask.status === 'DONE' && task.status !== 'DONE') {
-          await StockImportModel.addQuantity(task.stock_import_id, qty);
+          await addStockForTask(task);
         }
       }
 
@@ -404,13 +489,10 @@ const taskController = {
       if (!task) return res.status(404).json({ error: 'Task not found' });
 
       // Handle stock quantities based on status changes
-      if (task.stock_import_id) {
-        const qty = task.quantity || 1;
-        if (previousTask.status !== 'DONE' && task.status === 'DONE') {
-          await StockImportModel.deductQuantity(task.stock_import_id, qty);
-        } else if (previousTask.status === 'DONE' && task.status !== 'DONE') {
-          await StockImportModel.addQuantity(task.stock_import_id, qty);
-        }
+      if (previousTask.status !== 'DONE' && task.status === 'DONE') {
+        await deductStockForTask(task);
+      } else if (previousTask.status === 'DONE' && task.status !== 'DONE') {
+        await addStockForTask(task);
       }
 
       await TaskHistoryModel.log({
@@ -422,6 +504,16 @@ const taskController = {
         newValue: task.status,
         message: `Statut change de ${TASK_STATUS_LABELS[previousTask.status] || previousTask.status} vers ${TASK_STATUS_LABELS[task.status] || task.status}`,
       });
+
+      if (previousTask.status === 'WAITING_STOCK' && task.status === 'TODO') {
+        await TaskHistoryModel.log({
+          taskId: task.id,
+          actorId: req.user.id,
+          actionType: 'stock_confirmed',
+          fieldName: 'stock',
+          message: 'Stock confirme par le planner, fiche deplacee vers A faire',
+        });
+      }
 
       if (status === 'BLOCKED' && reasonBlocked) {
         await TaskHistoryModel.log({
@@ -437,6 +529,9 @@ const taskController = {
       if (err.message === 'Not authorized to update this task') {
         return res.status(403).json({ error: err.message });
       }
+      if (err.message === 'WAITING_STOCK status can only be changed by system auto promotion') {
+        return res.status(400).json({ error: 'Le statut Hors stock est gere uniquement par le systeme.' });
+      }
       console.error(err);
       res.status(500).json({ error: 'Server error' });
     }
@@ -450,8 +545,8 @@ const taskController = {
       if (!task) return res.status(404).json({ error: 'Task not found' });
 
       // If we delete a task that was DONE, restore the stock
-      if (taskToDelete && taskToDelete.status === 'DONE' && taskToDelete.stock_import_id) {
-        await StockImportModel.addQuantity(taskToDelete.stock_import_id, taskToDelete.quantity || 1);
+      if (taskToDelete && taskToDelete.status === 'DONE') {
+        await addStockForTask(taskToDelete);
       }
 
       res.json({ message: 'Task deleted' });
