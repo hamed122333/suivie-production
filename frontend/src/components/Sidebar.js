@@ -71,7 +71,8 @@ const Sidebar = ({ closeSidebar }) => {
             const id = String(ws.id);
             const active = id === activeId;
             const isAll = ws.id === 'all';
-            const icon = isAll ? 'Œ‚' : WORKSPACE_ICONS[(idx - (isAll ? 0 : 1)) % WORKSPACE_ICONS.length];
+            const icon = isAll ? '*' +
+                '' : WORKSPACE_ICONS[(idx - (isAll ? 0 : 1)) % WORKSPACE_ICONS.length];
             return (
               <button
                 type="button"
@@ -87,7 +88,7 @@ const Sidebar = ({ closeSidebar }) => {
               >
                 <span className="sidebar__item-icon">{icon}</span>
                 <span className="sidebar__item-name">{ws.name}</span>
-                {active && <span className="sidebar__item-check">œ“</span>}
+                {active && <span className="sidebar__item-check">✔</span>}
               </button>
             );
           })

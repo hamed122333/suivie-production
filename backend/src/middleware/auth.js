@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-const hasRole = (userRole, allowed) => allowed.includes(userRole);
+const hasRole = (userRole, allowed) => userRole === 'super_admin' || allowed.includes(userRole);
 
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
