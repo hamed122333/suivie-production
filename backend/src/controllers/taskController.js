@@ -2,6 +2,7 @@ const TaskModel = require('../models/taskModel');
 const TaskCommentModel = require('../models/taskCommentModel');
 const TaskHistoryModel = require('../models/taskHistoryModel');
 const StockImportModel = require('../models/stockImportModel');
+const WorkspaceModel = require('../models/workspaceModel');
 const UserModel = require('../models/userModel');
 const NotificationModel = require('../models/notificationModel');
 const { TASK_STATUSES, TASK_STATUS_LABELS, TRACKED_TASK_FIELDS } = require('../constants/task');
@@ -9,6 +10,7 @@ const { createHttpError, isHttpError } = require('../utils/httpErrors');
 const { applyTaskVisibility, buildTaskFilters, canAccessTask, parseWorkspaceId } = require('../utils/taskScope');
 const { normalizeCommentBody, normalizeTaskBatch, normalizeTaskDraft, normalizeTaskUpdatePayload } = require('../utils/taskValidation');
 const ExcelJS = require('exceljs'); // Add ExcelJS import for exports
+const { normalizeArticleCode, isValidArticleCode } = require('../utils/articleCode');
 
 const fieldLabels = {
   title: 'Titre',
@@ -121,6 +123,64 @@ function normalizeDateNegotiationDate(value) {
     throw createHttpError(400, 'Date de livraison invalide');
   }
   return date.toISOString().slice(0, 10);
+}
+
+function parseExcelDate(rawValue) {
+  if (rawValue == null || rawValue === '') return null;
+  if (rawValue instanceof Date && !Number.isNaN(rawValue.getTime())) {
+    return rawValue.toISOString().slice(0, 10);
+  }
+  const normalized = `${rawValue}`.trim();
+  if (!normalized) return null;
+  const parts = normalized.split(/[\/\-]/);
+  if (parts.length === 3) {
+    let [d, m, y] = parts.map((p) => Number.parseInt(p, 10));
+    if (Number.isInteger(d) && Number.isInteger(m) && Number.isInteger(y)) {
+      if (y < 100) y += 2000;
+      const dt = new Date(y, m - 1, d);
+      if (!Number.isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
+    }
+  }
+  const fallback = new Date(normalized);
+  if (!Number.isNaN(fallback.getTime())) return fallback.toISOString().slice(0, 10);
+  return null;
+}
+
+function parseExcelQuantity(rawValue) {
+  if (rawValue == null || rawValue === '') return NaN;
+  if (typeof rawValue === 'number') return rawValue;
+  const normalized = `${rawValue}`.replace(/\s/g, '').replace(',', '.');
+  return Number.parseFloat(normalized);
+}
+
+function resolveWorkspaceNameFromTask(taskLike) {
+  const anchor = taskLike?.plannedDate || taskLike?.dueDate || new Date().toISOString().slice(0, 10);
+  const [year, month, day] = `${anchor}`.slice(0, 10).split('-');
+  return `CMD ${day}-${month}-${year}`;
+}
+
+function normalizeHeaderLabel(value) {
+  return `${value || ''}`
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s]/g, '');
+}
+
+function pickHeaderColumn(headers, predicates) {
+  for (const [label, col] of Object.entries(headers)) {
+    if (predicates.some((predicate) => predicate(label))) {
+      return col;
+    }
+  }
+  return null;
+}
+
+function buildWorkspaceNameFromOrderDate(orderDate) {
+  const [year, month, day] = `${orderDate}`.slice(0, 10).split('-');
+  return `CMD ${day}-${month}-${year}`;
 }
 
 async function resolveCreationTarget(taskInput) {
@@ -326,9 +386,13 @@ const taskController = {
   async create(req, res) {
     try {
       const taskInput = normalizeTaskDraft(req.body);
-      const workspaceId = parseWorkspaceId(req.body.workspaceId, { required: true });
+      let workspaceId = parseWorkspaceId(req.body.workspaceId, { required: false });
       const resolved = await resolveCreationTarget(taskInput);
       ensurePlannedDateForWaitingStock(resolved);
+      if (!workspaceId) {
+        const workspace = await WorkspaceModel.findOrCreateByName(resolveWorkspaceNameFromTask(resolved));
+        workspaceId = workspace.id;
+      }
 
       const task = await TaskModel.create({
         ...resolved,
@@ -365,7 +429,7 @@ const taskController = {
   async createBulk(req, res) {
     try {
       const tasks = normalizeTaskBatch(req.body.tasks);
-      const workspaceId = parseWorkspaceId(req.body.workspaceId, { required: true });
+      const explicitWorkspaceId = parseWorkspaceId(req.body.workspaceId, { required: false });
       const resolvedTasks = [];
       for (let index = 0; index < tasks.length; index += 1) {
         const resolved = await resolveCreationTarget(tasks[index]);
@@ -373,42 +437,50 @@ const taskController = {
         resolvedTasks.push(resolved);
       }
 
-      const todoDrafts = resolvedTasks.filter((task) => task.status === 'TODO');
-      const waitingDrafts = resolvedTasks.filter((task) => task.status === 'WAITING_STOCK');
+      const grouped = new Map();
+      for (const resolved of resolvedTasks) {
+        const workspaceKey = explicitWorkspaceId ? `ID:${explicitWorkspaceId}` : resolveWorkspaceNameFromTask(resolved);
+        if (!grouped.has(workspaceKey)) grouped.set(workspaceKey, []);
+        grouped.get(workspaceKey).push({
+          ...resolved,
+          proposedDeliveryDate: resolved.plannedDate || null,
+          proposedByRole: 'commercial',
+          dateNegotiationStatus: resolved.plannedDate ? 'PENDING_PLANNER_REVIEW' : null,
+          dateNegotiationComment: null,
+          dateNegotiationUpdatedAt: resolved.plannedDate ? new Date() : null,
+        });
+      }
 
-      const [createdTodo, createdWaiting] = await Promise.all([
-        todoDrafts.length > 0
-          ? TaskModel.createMany({
-              tasks: todoDrafts.map((draft) => ({
-                ...draft,
-                proposedDeliveryDate: draft.plannedDate || null,
-                proposedByRole: 'commercial',
-                dateNegotiationStatus: draft.plannedDate ? 'PENDING_PLANNER_REVIEW' : null,
-                dateNegotiationComment: null,
-                dateNegotiationUpdatedAt: draft.plannedDate ? new Date() : null,
-              })),
-              createdBy: req.user.id,
-              workspaceId,
-              status: 'TODO',
-            })
-          : Promise.resolve([]),
-        waitingDrafts.length > 0
-          ? TaskModel.createMany({
-              tasks: waitingDrafts.map((draft) => ({
-                ...draft,
-                proposedDeliveryDate: draft.plannedDate || null,
-                proposedByRole: 'commercial',
-                dateNegotiationStatus: draft.plannedDate ? 'PENDING_PLANNER_REVIEW' : null,
-                dateNegotiationComment: null,
-                dateNegotiationUpdatedAt: draft.plannedDate ? new Date() : null,
-              })),
-              createdBy: req.user.id,
-              workspaceId,
-              status: 'WAITING_STOCK',
-            })
-          : Promise.resolve([]),
-      ]);
-      const createdTasks = [...createdTodo, ...createdWaiting];
+      const createdTasks = [];
+      for (const [workspaceKey, drafts] of grouped.entries()) {
+        let workspaceId = explicitWorkspaceId;
+        if (!workspaceId) {
+          const workspace = await WorkspaceModel.findOrCreateByName(workspaceKey);
+          workspaceId = workspace.id;
+        }
+
+        const todoDrafts = drafts.filter((task) => task.status === 'TODO');
+        const waitingDrafts = drafts.filter((task) => task.status === 'WAITING_STOCK');
+        const [createdTodo, createdWaiting] = await Promise.all([
+          todoDrafts.length
+            ? TaskModel.createMany({
+                tasks: todoDrafts,
+                createdBy: req.user.id,
+                workspaceId,
+                status: 'TODO',
+              })
+            : Promise.resolve([]),
+          waitingDrafts.length
+            ? TaskModel.createMany({
+                tasks: waitingDrafts,
+                createdBy: req.user.id,
+                workspaceId,
+                status: 'WAITING_STOCK',
+              })
+            : Promise.resolve([]),
+        ]);
+        createdTasks.push(...createdTodo, ...createdWaiting);
+      }
 
       await TaskHistoryModel.logMany(
         createdTasks.map((task) => ({
@@ -428,10 +500,13 @@ const taskController = {
       //   await StockImportModel.markManyAsUsed(stockImportIds);
       // }
 
+      const createdTodoCount = createdTasks.filter((task) => task.status === 'TODO').length;
+      const createdWaitingCount = createdTasks.filter((task) => task.status === 'WAITING_STOCK').length;
+
       res.status(201).json({
         tasks: createdTasks,
-        createdTodo: createdTodo.length,
-        createdWaitingStock: createdWaiting.length,
+        createdTodo: createdTodoCount,
+        createdWaitingStock: createdWaitingCount,
       });
     } catch (err) {
       if (isHttpError(err)) {
@@ -439,6 +514,194 @@ const taskController = {
       }
       console.error(err);
       res.status(500).json({ error: 'Server error' });
+    }
+  },
+
+  async importOrders(req, res) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'Aucun fichier fourni' });
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(req.file.buffer);
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        return res.status(400).json({ error: 'Fichier Excel invalide' });
+      }
+
+      const headers = {};
+      const headerRow = worksheet.getRow(1);
+      headerRow.eachCell((cell, col) => {
+        const key = normalizeHeaderLabel(cell.value);
+        headers[key] = col;
+      });
+
+      const dateCol = pickHeaderColumn(headers, [(h) => h === 'date']);
+      const orderCol = pickHeaderColumn(headers, [(h) => h.startsWith('piece n'), (h) => h === 'piece no', (h) => h === 'piece']);
+      const clientCol = pickHeaderColumn(headers, [(h) => h === 'nom', (h) => h.startsWith('client')]);
+      const refCol = pickHeaderColumn(headers, [(h) => h === 'reference', (h) => h.includes('reference')]);
+      const qtyCol = pickHeaderColumn(headers, [(h) => h === 'quantite', (h) => h.includes('quantite')]);
+      const requestedDateCol = pickHeaderColumn(headers, [
+        (h) => h.startsWith('delai'),
+        (h) => h.includes('delai demand'),
+        (h) => h.includes('date liv'),
+      ]);
+
+      if (!dateCol || !clientCol || !refCol || !qtyCol) {
+        return res.status(400).json({
+          error: 'Colonnes requises introuvables. Attendu: Date, Nom, Référence, Quantité (+ optionnel Pièce n°, délai demandé).',
+        });
+      }
+
+      const groupedByWorkspace = new Map();
+      let skipped = 0;
+
+      // Forward-fill context for "header" fields (Date / Piece no / Nom)
+      // to support Excel layouts where repeated order lines leave these cells empty.
+      const currentOrderContext = {
+        orderDate: null,
+        orderCode: null,
+        clientName: null,
+      };
+
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+
+        const parsedOrderDate = parseExcelDate(row.getCell(dateCol).value);
+        const parsedClientName = `${row.getCell(clientCol).value || ''}`.trim();
+        const parsedOrderCode = orderCol ? `${row.getCell(orderCol).value || ''}`.trim() : '';
+
+        if (parsedOrderDate) currentOrderContext.orderDate = parsedOrderDate;
+        if (parsedClientName) currentOrderContext.clientName = parsedClientName;
+        if (parsedOrderCode) currentOrderContext.orderCode = parsedOrderCode;
+
+        const orderDate = currentOrderContext.orderDate;
+        const clientName = currentOrderContext.clientName;
+        const orderCode = currentOrderContext.orderCode || null;
+        const itemReference = normalizeArticleCode(row.getCell(refCol).value);
+        const quantity = parseExcelQuantity(row.getCell(qtyCol).value);
+        const requestedDate = requestedDateCol ? parseExcelDate(row.getCell(requestedDateCol).value) : null;
+
+        if (!orderDate || !clientName || !itemReference || !isValidArticleCode(itemReference) || !Number.isFinite(quantity) || quantity <= 0) {
+          skipped += 1;
+          return;
+        }
+
+        const workspaceKey = buildWorkspaceNameFromOrderDate(orderDate);
+        if (!groupedByWorkspace.has(workspaceKey)) {
+          groupedByWorkspace.set(workspaceKey, []);
+        }
+        groupedByWorkspace.get(workspaceKey).push({
+          title: `${clientName} • ${itemReference}`,
+          description: `Import commande client • Quantité ${Number(quantity.toFixed(2))} pcs`,
+          priority: 'MEDIUM',
+          clientName,
+          orderCode: orderCode || null,
+          itemReference,
+          quantity: Number(quantity.toFixed(2)),
+          quantityUnit: 'pcs',
+          plannedDate: requestedDate || orderDate,
+          expectedAction: 'EXISTING_PRODUCT_AUTO_STOCK_CHECK',
+        });
+      });
+
+      if (groupedByWorkspace.size === 0) {
+        return res.status(400).json({ error: 'Aucune ligne valide trouvée dans le fichier' });
+      }
+
+      const createdTasks = [];
+      const workspacesTouched = [];
+      let skippedExisting = 0;
+      for (const [workspaceName, drafts] of groupedByWorkspace.entries()) {
+        const workspace = await WorkspaceModel.findOrCreateByName(workspaceName);
+        workspacesTouched.push({ id: workspace.id, name: workspace.name });
+
+        const orderCodes = Array.from(new Set(drafts.map((d) => d.orderCode).filter(Boolean)));
+        const existingLines = await TaskModel.listExistingOrderLines({
+          workspaceId: workspace.id,
+          orderCodes,
+        });
+        const existingKeySet = new Set(
+          existingLines
+            .map((row) => `${row.order_code || ''}`.trim() + '||' + `${row.item_reference || ''}`.trim().toUpperCase())
+            .filter((k) => k !== '||')
+        );
+
+        const uniqueDrafts = drafts.filter((draft) => {
+          if (!draft.orderCode || !draft.itemReference) return true;
+          const key = `${draft.orderCode}`.trim() + '||' + `${draft.itemReference}`.trim().toUpperCase();
+          if (existingKeySet.has(key)) {
+            skippedExisting += 1;
+            return false;
+          }
+          return true;
+        });
+
+        if (uniqueDrafts.length === 0) {
+          continue;
+        }
+        const resolvedTasks = [];
+        for (const draft of uniqueDrafts) {
+          const resolved = await resolveCreationTarget(draft);
+          ensurePlannedDateForWaitingStock(resolved);
+          resolvedTasks.push({
+            ...resolved,
+            proposedDeliveryDate: resolved.plannedDate || null,
+            proposedByRole: 'commercial',
+            dateNegotiationStatus: resolved.plannedDate ? 'PENDING_PLANNER_REVIEW' : null,
+            dateNegotiationComment: null,
+            dateNegotiationUpdatedAt: resolved.plannedDate ? new Date() : null,
+          });
+        }
+
+        const todoDrafts = resolvedTasks.filter((task) => task.status === 'TODO');
+        const waitingDrafts = resolvedTasks.filter((task) => task.status === 'WAITING_STOCK');
+
+        const [createdTodo, createdWaiting] = await Promise.all([
+          todoDrafts.length
+            ? TaskModel.createMany({
+                tasks: todoDrafts,
+                createdBy: req.user.id,
+                workspaceId: workspace.id,
+                status: 'TODO',
+              })
+            : Promise.resolve([]),
+          waitingDrafts.length
+            ? TaskModel.createMany({
+                tasks: waitingDrafts,
+                createdBy: req.user.id,
+                workspaceId: workspace.id,
+                status: 'WAITING_STOCK',
+              })
+            : Promise.resolve([]),
+        ]);
+
+        const createdForWorkspace = [...createdTodo, ...createdWaiting];
+        if (createdForWorkspace.length > 0) {
+          await TaskHistoryModel.logMany(
+            createdForWorkspace.map((task) => ({
+              taskId: task.id,
+              actorId: req.user.id,
+              actionType: 'created',
+              message: 'Tâche créée via import commandes client',
+            }))
+          );
+          createdTasks.push(...createdForWorkspace);
+        }
+      }
+
+      await notifyTaskCreation(createdTasks, req.user);
+      return res.status(201).json({
+        imported: createdTasks.length,
+        skipped,
+        skippedExisting,
+        workspacesCreatedOrUsed: groupedByWorkspace.size,
+        workspaces: workspacesTouched,
+      });
+    } catch (err) {
+      console.error('Order import failed:', err);
+      return res.status(500).json({ error: `Erreur import commandes: ${err.message}` });
     }
   },
 

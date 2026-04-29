@@ -333,7 +333,6 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
       <nav className="header-nav" aria-label="Navigation principale">
         {navItem('/kanban', 'Tableau', '▤')}
         {navItem('/dashboard', 'Tableau de bord', '◱')}
-        {(isSuperAdmin || isPlanner) && navItem('/reports', 'Rapports', '▤')}
         {isSuperAdmin && navItem('/users', 'Utilisateurs', '👤')}
       </nav>
     </header>

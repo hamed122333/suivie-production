@@ -17,7 +17,7 @@ const KanbanPage = () => {
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const { isPlanner } = useAuth();
-  const { workspaceId, loadingWorkspaces } = useWorkspace();
+  const { workspaceId, loadingWorkspaces, refreshWorkspaces, selectWorkspace } = useWorkspace();
 
   const fetchTasks = useCallback(
     async (wsId) => {
@@ -27,13 +27,15 @@ const KanbanPage = () => {
         if (wsId && wsId !== 'all' && wsId !== null) {
           params.workspaceId = wsId;
         }
+        const status = searchParams.get('status');
+        if (status) params.status = status;
         const res = await taskAPI.getAll(params);
         setTasks(res.data);
       } catch (err) {
         console.error('Failed to fetch tasks', err);
       }
     },
-    [setTasks]
+    [setTasks, searchParams]
   );
 
   const fetchStats = useCallback(async () => {
@@ -66,6 +68,25 @@ const KanbanPage = () => {
       link.parentNode.removeChild(link);
     } catch (err) {
       console.error('Failed to export tasks', err);
+    }
+  };
+
+  const handleImportOrders = async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await taskAPI.importOrders(formData);
+      const importedWorkspaces = response?.data?.workspaces || [];
+      await refreshWorkspaces();
+      if (importedWorkspaces.length > 0) {
+        selectWorkspace(importedWorkspaces[0].id);
+        await Promise.all([fetchTasks(importedWorkspaces[0].id), fetchStats()]);
+      } else {
+        await Promise.all([fetchTasks(workspaceId), fetchStats()]);
+      }
+      window.alert('Import commandes client terminé avec succès.');
+    } catch (err) {
+      window.alert(err?.response?.data?.error || 'Echec import commandes client.');
     }
   };
 
@@ -128,6 +149,7 @@ const KanbanPage = () => {
         stats={stats}
         onRefresh={() => Promise.all([fetchTasks(workspaceId), fetchStats()])}
         onExport={() => setExportModalOpen(true)}
+        onImportOrders={handleImportOrders}
       />
       <KanbanBoard
         tasks={tasks}

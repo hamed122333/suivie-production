@@ -17,13 +17,6 @@ const EMPTY_FORM = {
 };
 
 const EMPTY_LINE = '';
-const EMPTY_MANUAL_ITEM = {
-  itemReference: '',
-  designation: '',
-  clientCode: '',
-  clientName: '',
-  quantity: '1',
-};
 const STOCK_PREVIEW_LIMIT = 120;
 
 const CREATE_PRIORITY_OPTIONS = [
@@ -55,8 +48,6 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
   const [selectedArticleIds, setSelectedArticleIds] = useState(new Set());
   const [requestedQuantities, setRequestedQuantities] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [manualItems, setManualItems] = useState([EMPTY_MANUAL_ITEM]);
-  const [entryMode, setEntryMode] = useState('existing_product');
   const [showAllStockRows, setShowAllStockRows] = useState(false);
 
   const isEditing = Boolean(task);
@@ -80,8 +71,6 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
     }
 
     setLines([EMPTY_LINE]);
-    setManualItems([EMPTY_MANUAL_ITEM]);
-    setEntryMode('existing_product');
     setShowAllStockRows(false);
     setError('');
   }, [task]);
@@ -130,14 +119,6 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
   const removeLine = (index) => {
     setLines((current) => current.filter((_, currentIndex) => currentIndex !== index));
   };
-
-  const updateManualItem = (index, field, value) => {
-    const normalizedValue = field === 'itemReference' ? normalizeArticleCode(value) : value;
-    setManualItems((current) => current.map((item, i) => (i === index ? { ...item, [field]: normalizedValue } : item)));
-  };
-
-  const addManualItem = () => setManualItems((current) => [...current, EMPTY_MANUAL_ITEM]);
-  const removeManualItem = (index) => setManualItems((current) => current.filter((_, i) => i !== index));
 
   const toggleArticle = (article) => {
     const isAdding = !selectedArticleIds.has(article.id);
@@ -240,7 +221,7 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
           throw new Error('Le nom du client est obligatoire.');
         }
 
-        if (entryMode === 'existing_product' && selectedArticleIds.size === 0) {
+        if (selectedArticleIds.size === 0) {
           throw new Error('Sélectionnez au moins un article existant.');
         }
 
@@ -261,39 +242,9 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
           };
         });
 
-        const fromManualTasks = manualItems
-          .map((item) => ({
-            itemReference: normalizeArticleCode(item.itemReference),
-            designation: `${item.designation || ''}`.trim(),
-            clientCode: `${item.clientCode || ''}`.trim(),
-            clientName: `${item.clientName || ''}`.trim(),
-            quantity: Number(item.quantity || 0),
-          }))
-          .filter((item) => item.itemReference && isValidArticleCode(item.itemReference) && Number.isFinite(item.quantity) && item.quantity > 0)
-          .map((item) => ({
-            title: `${clientName} • ${item.itemReference}`,
-            description: `${item.quantity} pcs commandés (article hors liste stock)${
-              item.designation ? ` • ${item.designation}` : ''
-            }${item.clientCode ? ` • Code client: ${item.clientCode}` : ''}`,
-            priority: form.priority,
-            plannedDate: form.plannedDate || null,
-            expectedAction: 'NEW_PRODUCT',
-            clientName: item.clientName || clientName,
-            itemReference: item.itemReference,
-            quantity: item.quantity,
-            quantityUnit: 'pcs',
-          }));
-
-        const preparedTasks = [
-          ...(entryMode === 'existing_product' ? fromStockTasks : []),
-          ...(entryMode === 'new_product' ? fromManualTasks : []),
-        ];
+        const preparedTasks = fromStockTasks;
         if (preparedTasks.length === 0) {
-          throw new Error(
-            entryMode === 'existing_product'
-              ? 'Sélectionnez au moins un article existant.'
-              : `Ajoutez au moins un nouveau produit valide (préfixes: ${ALLOWED_ARTICLE_PREFIXES.join(', ')}) avec quantité.`
-          );
+          throw new Error('Sélectionnez au moins un article existant.');
         }
 
         await onSave({
@@ -330,7 +281,6 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
         err.message &&
         err.message !== 'Le nom du client est obligatoire.' &&
         err.message !== 'Sélectionnez au moins un article existant.' &&
-        err.message !== 'Ajoutez au moins un nouveau produit avec code article et quantité.' &&
         err.message !== 'Ajoute au moins une ligne d article.'
       ) {
         setError(err.message);
@@ -393,27 +343,6 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
               <input type="date" value={form.plannedDate || ''} onChange={updateForm('plannedDate')} required />
             </div>
 
-            <div className="form-group task-modal-classic__group">
-              <label>Mode de saisie</label>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className={`btn ${entryMode === 'existing_product' ? 'btn-primary' : 'btn-secondary'}`}
-                  onClick={() => setEntryMode('existing_product')}
-                >
-                  Produit existant (stock auto)
-                </button>
-                <button
-                  type="button"
-                  className={`btn ${entryMode === 'new_product' ? 'btn-primary' : 'btn-secondary'}`}
-                  onClick={() => setEntryMode('new_product')}
-                >
-                  Nouveau produit (non existant)
-                </button>
-              </div>
-            </div>
-
-            {entryMode === 'existing_product' && (
             <div className="form-group task-modal-classic__group">
               <label>
                 Articles produits finis (existants)
@@ -539,58 +468,6 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
                 </div>
               )}
             </div>
-            )}
-
-            {entryMode === 'new_product' && (
-            <div className="form-group task-modal-classic__group">
-              <label>Nouveau produit (meme structure PF)</label>
-              <div className="task-modal-classic__lines">
-                {manualItems.map((item, index) => (
-                  <div key={`manual-${index}`} className="task-modal-classic__line" style={{ display: 'grid', gap: '0.5rem' }}>
-                    <input
-                      type="text"
-                      placeholder="Code article (ex: CI2682)"
-                      value={item.itemReference}
-                      onChange={(event) => updateManualItem(index, 'itemReference', event.target.value)}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Designation article"
-                      value={item.designation}
-                      onChange={(event) => updateManualItem(index, 'designation', event.target.value)}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Code client"
-                      value={item.clientCode}
-                      onChange={(event) => updateManualItem(index, 'clientCode', event.target.value)}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Nom client (optionnel)"
-                      value={item.clientName}
-                      onChange={(event) => updateManualItem(index, 'clientName', event.target.value)}
-                    />
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="Quantité"
-                      value={item.quantity}
-                      onChange={(event) => updateManualItem(index, 'quantity', event.target.value)}
-                    />
-                    {manualItems.length > 1 && (
-                      <button type="button" className="btn btn-secondary task-modal-classic__remove" onClick={() => removeManualItem(index)}>
-                        Supprimer
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <button type="button" className="btn btn-secondary task-modal-classic__add" onClick={addManualItem}>
-                + Ajouter un nouveau produit
-              </button>
-            </div>
-            )}
 
             <div className="task-modal-classic__footer">
               <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>

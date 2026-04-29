@@ -108,16 +108,7 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/reports"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <DashboardPage />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/reports" element={<Navigate to="/dashboard" replace />} />
       <Route
         path="/kanban"
         element={

@@ -52,6 +52,10 @@ export const taskAPI = {
   getDetail: (id) => api.get(`/tasks/${id}/details`),
   create: (data) => api.post('/tasks', data),
   createBatch: ({ tasks, workspaceId, status = null }) => api.post('/tasks/bulk', { tasks, workspaceId, status }),
+  importOrders: (formData) =>
+    api.post('/tasks/import-orders', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   update: (id, data) => api.put(`/tasks/${id}`, data),
   updateStatus: (id, status, reasonBlocked) => api.put(`/tasks/${id}/status`, { status, reasonBlocked }),
   dateNegotiation: (id, payload) => api.put(`/tasks/${id}/date-negotiation`, payload),

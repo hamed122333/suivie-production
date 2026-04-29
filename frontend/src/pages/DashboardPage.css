@@ -53,6 +53,39 @@
   gap: 0.25rem;
 }
 
+.dashboard__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  justify-content: flex-end;
+}
+
+.dashboard__action-btn {
+  border: 1px solid #dbe4ef;
+  background: #1d4ed8;
+  color: #fff;
+  padding: 0.45rem 0.75rem;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.dashboard__action-btn:hover {
+  filter: brightness(0.97);
+}
+
+.dashboard__action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dashboard__action-btn--secondary {
+  background: #fff;
+  color: #1d4ed8;
+}
+
 .dashboard__date,
 .dashboard__user {
   color: #64748b;
@@ -412,6 +445,10 @@
 
   .dashboard__meta {
     align-items: flex-start;
+  }
+
+  .dashboard__actions {
+    justify-content: flex-start;
   }
 
   .dashboard__metrics,

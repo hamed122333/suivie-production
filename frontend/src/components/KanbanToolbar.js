@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import './KanbanToolbar.css';
 
 const PRIORITIES = [
@@ -19,8 +19,10 @@ const KanbanToolbar = ({
   stats,
   onRefresh,
   onExport,
+  onImportOrders,
 }) => {
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const importInputRef = useRef(null);
   const counts = stats?.counts || {};
 
   return (
@@ -84,6 +86,26 @@ const KanbanToolbar = ({
       </div>
 
       <div className="kanban-toolbar__stats">
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".xlsx,.xls"
+          style={{ display: 'none' }}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file && onImportOrders) onImportOrders(file);
+            event.target.value = '';
+          }}
+        />
+        <button
+          type="button"
+          className="kanban-toolbar__refresh kanban-toolbar__export"
+          title="Importer commandes client"
+          onClick={() => importInputRef.current?.click()}
+          style={{ marginRight: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          ⤴
+        </button>
         <button type="button" className="kanban-toolbar__refresh kanban-toolbar__export" title="Exporter Excel" onClick={onExport} style={{ marginRight: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>

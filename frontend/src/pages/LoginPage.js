@@ -244,7 +244,7 @@ const LoginPage = () => {
         </div>
 
         <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.75rem', color: '#334155' }}>
-          Suivi Production © {new Date().getFullYear()} - Développé par Hamed. Tous droits réservés.
+          Suivi Production © {new Date().getFullYear()} NEW BOX KAIROUAN.
         </p>
       </div>
     </div>

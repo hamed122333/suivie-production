@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useWorkspace } from '../context/WorkspaceContext';
+import { useWorkspace } from '../context/WorkspaceContext'; 
 import { getInitials } from '../utils/formatters';
 import './Sidebar.css';
 
@@ -18,15 +18,17 @@ const getRoleLabel = (role) => {
 };
 
 const Sidebar = ({ closeSidebar }) => {
-  const { isSuperAdmin, user } = useAuth();
-  const { workspaces, workspaceId, selectWorkspace, loadingWorkspaces } = useWorkspace();
+  const { isSuperAdmin, isPlanner, isCommercial, user } = useAuth();
+  const { workspaces, workspaceId, selectWorkspace, loadingWorkspaces, refreshWorkspaces } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
+  
 
   const activeId = workspaceId ? String(workspaceId) : '';
   const roleInfo = getRoleLabel(user?.role);
 
   const options = workspaces || [];
+  
 
   return (
     <aside className="sidebar" aria-label="Espaces de travail">
@@ -97,6 +99,7 @@ const Sidebar = ({ closeSidebar }) => {
 
       {/* Séparateur */}
       <div className="sidebar__divider" />
+
 
       {/* Navigation */}
       <nav className="sidebar__nav" aria-label="Navigation">

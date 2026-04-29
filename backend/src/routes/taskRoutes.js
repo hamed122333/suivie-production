@@ -1,7 +1,12 @@
 const express = require('express');
+const multer = require('multer');
 const router = express.Router();
 const taskController = require('../controllers/taskController');
 const { authenticate, requireRoles, requireCommercial, requirePlanner } = require('../middleware/auth');
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 // Réordonner le tableau : planificateur uniquement
 router.patch('/board', authenticate, requirePlanner, taskController.reorderBoard);
@@ -12,6 +17,7 @@ router.get('/export', authenticate, taskController.exportExcel);
 // Lire toutes les tches (tous les utilisateurs authentifis)
 router.get('/', authenticate, taskController.getAll);
 router.post('/bulk', authenticate, requireCommercial, taskController.createBulk);
+router.post('/import-orders', authenticate, requireRoles(['commercial', 'planner', 'super_admin']), upload.single('file'), taskController.importOrders);
 router.get('/:id/details', authenticate, taskController.getDetail);
 router.post('/:id/comments', authenticate, taskController.addComment);
 router.get('/:id', authenticate, taskController.getById);

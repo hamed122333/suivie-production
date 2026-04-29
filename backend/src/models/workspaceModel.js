@@ -16,7 +16,16 @@ const WorkspaceModel = {
     const result = await pool.query(
       `SELECT id, name, created_at
        FROM workspaces
-       ORDER BY created_at DESC, id DESC`
+       ORDER BY
+         CASE
+           WHEN name ~ '^CMD [0-9]{2}-[0-9]{2}-[0-9]{4}$'
+             THEN TO_DATE(SUBSTRING(name FROM 5), 'DD-MM-YYYY')
+           WHEN name ~ '^Commandes [0-9]{4}-[0-9]{2}-[0-9]{2}$'
+             THEN TO_DATE(SUBSTRING(name FROM 11), 'YYYY-MM-DD')
+           ELSE NULL
+         END DESC NULLS LAST,
+         created_at DESC,
+         id DESC`
     );
     return result.rows;
   },
@@ -29,6 +38,14 @@ const WorkspaceModel = {
       [name]
     );
     return result.rows[0];
+  },
+
+  async findOrCreateByName(name) {
+    const trimmed = `${name || ''}`.trim();
+    if (!trimmed) throw new Error('Workspace name is required');
+    const existing = await this.findByName(trimmed);
+    if (existing) return existing;
+    return this.create({ name: trimmed });
   },
 };
 

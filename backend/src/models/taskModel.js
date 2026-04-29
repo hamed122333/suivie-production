@@ -163,6 +163,22 @@ function normalizeFieldValue(value) {
 const TaskModel = {
   STATUSES: TASK_BOARD_STATUSES,
 
+  async listExistingOrderLines({ workspaceId, orderCodes }) {
+    const wid = Number(workspaceId);
+    if (!Number.isInteger(wid) || wid < 1) return [];
+    const codes = Array.isArray(orderCodes) ? orderCodes.map((c) => `${c || ''}`.trim()).filter(Boolean) : [];
+    if (codes.length === 0) return [];
+    const result = await pool.query(
+      `SELECT order_code, item_reference
+       FROM tasks
+       WHERE workspace_id = $1
+         AND order_code = ANY($2::text[])
+         AND item_reference IS NOT NULL`,
+      [wid, codes]
+    );
+    return result.rows || [];
+  },
+
   async getAll(filters = {}) {
     const params = [];
     const conditions = appendFilters(filters, params);
