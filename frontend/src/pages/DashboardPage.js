@@ -26,7 +26,7 @@ const DashboardPage = () => {
   const [importing, setImporting] = useState(false);
 
   const { workspaceId, loadingWorkspaces, workspaces, refreshWorkspaces, selectWorkspace } = useWorkspace();
-  const { user, isCommercial, isPlanner, isSuperAdmin } = useAuth();
+  const { user, isCommercial } = useAuth();
 
   const importInputRef = useRef(null);
 
@@ -96,7 +96,7 @@ const DashboardPage = () => {
 
     const overdue = tasks.filter(
       (t) => t.status !== 'DONE' && t.planned_date && String(t.planned_date).slice(0, 10) < todayISO
-    );
+    ).sort((a, b) => String(a.planned_date || '').localeCompare(String(b.planned_date || '')));
     const upcoming = tasks
       .filter(
         (t) =>
@@ -120,7 +120,30 @@ const DashboardPage = () => {
     };
   }, [allTasks, todayISO, dayPlus7]);
 
-  const canImportOrders = Boolean(isCommercial || isPlanner || isSuperAdmin);
+  const canImportOrders = Boolean(isCommercial);
+  const attentionItems = [
+    {
+      label: 'Retards livraison',
+      value: derived.overdueCount,
+      helper: 'Fiches non clôturées avec date dépassée',
+      tone: 'red',
+      onClick: () => navigate('/kanban'),
+    },
+    {
+      label: 'Hors stock PF',
+      value: derived.waitingCount,
+      helper: 'Commandes à traiter côté stock/date',
+      tone: 'amber',
+      onClick: () => navigate('/kanban?status=WAITING_STOCK'),
+    },
+    {
+      label: 'Dates non confirmées',
+      value: derived.waitingUnconfirmedCount,
+      helper: 'Validation commercial/planner attendue',
+      tone: 'blue',
+      onClick: () => navigate('/kanban?status=WAITING_STOCK'),
+    },
+  ];
 
   // ─── 3. RETURN ANTICIPÉ — APRÈS TOUS LES HOOKS ───────────────────────────
   if (loading) {
@@ -134,7 +157,7 @@ const DashboardPage = () => {
 
   // ─── 4. HANDLERS ─────────────────────────────────────────────────────────
   const handleImportOrders = async (file) => {
-    if (!file) return;
+    if (!file || !canImportOrders) return;
     try {
       setImporting(true);
       const formData = new FormData();
@@ -158,11 +181,10 @@ const DashboardPage = () => {
     <div className="dashboard">
       <header className="dashboard__header">
         <div>
-          <div className="dashboard__eyebrow">Pilotage production</div>
           <h1 className="dashboard__title">Tableau de bord operationnel</h1>
           <p className="dashboard__subtitle">
             {workspaceName ? <span className="dashboard__workspace-badge">{workspaceName}</span> : null}
-            Import commandes client, suivi Hors stock et dates, relance production.
+            Priorités de production, stock PF et suivi des dates.
           </p>
         </div>
         <div className="dashboard__meta">
@@ -191,7 +213,7 @@ const DashboardPage = () => {
                 />
                 <button
                   type="button"
-                  className="dashboard__action-btn"
+                  className="dashboard__action-btn dashboard__action-btn--primary"
                   onClick={() => importInputRef.current?.click()}
                   disabled={importing}
                 >
@@ -204,22 +226,38 @@ const DashboardPage = () => {
               className="dashboard__action-btn dashboard__action-btn--secondary"
               onClick={() => navigate('/kanban')}
             >
-              Ouvrir Kanban
+              Kanban
             </button>
             <button
               type="button"
               className="dashboard__action-btn dashboard__action-btn--secondary"
               onClick={() => navigate('/stock')}
             >
-              Stock PF
+              Stock
             </button>
           </div>
         </div>
       </header>
 
+      <section className="dashboard__attention" aria-label="Points d attention">
+        {attentionItems.map((item) => (
+          <button
+            type="button"
+            key={item.label}
+            className={`dashboard-alert dashboard-alert--${item.tone}`}
+            onClick={item.onClick}
+          >
+            <strong>{item.value}</strong>
+            <span>{item.label}</span>
+            <small>{item.helper}</small>
+          </button>
+        ))}
+      </section>
+
       <section className="dashboard__overview">
         <div className="dashboard__metrics">
           <div
+            className="dashboard-tile-action"
             role="button"
             tabIndex={0}
             onClick={() => navigate('/kanban')}
@@ -229,6 +267,7 @@ const DashboardPage = () => {
           </div>
           <MetricTile label="Commandes (Pièce no)" value={derived.totalOrders} tone="sky" helper="Distinct par ordre" />
           <div
+            className="dashboard-tile-action"
             role="button"
             tabIndex={0}
             onClick={() => navigate('/kanban?status=WAITING_STOCK')}
@@ -236,9 +275,8 @@ const DashboardPage = () => {
           >
             <MetricTile label="Hors stock PF" value={derived.waitingCount} tone="amber" helper="En attente stock / date" />
           </div>
-          <MetricTile label="Dates non confirmées" value={derived.waitingUnconfirmedCount} tone="red" helper="À valider commercial/planner" />
-          <MetricTile label="Dates modifiées (planner)" value={derived.waitingModifiedCount} tone="slate" helper="Attente OK commercial" />
-          <MetricTile label="Retards livraison" value={derived.overdueCount} tone="green" helper={`${completionRate}% clôturé`} />
+          <MetricTile label="Dates modifiées" value={derived.waitingModifiedCount} tone="slate" helper="Attente OK commercial" />
+          <MetricTile label="Taux clôturé" value={`${completionRate}%`} tone="green" helper={`${counts.totalDone || 0} fiches terminées`} />
         </div>
 
         <div className="dashboard__workflow">

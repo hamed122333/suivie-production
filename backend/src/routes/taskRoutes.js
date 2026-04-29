@@ -17,7 +17,7 @@ router.get('/export', authenticate, taskController.exportExcel);
 // Lire toutes les tches (tous les utilisateurs authentifis)
 router.get('/', authenticate, taskController.getAll);
 router.post('/bulk', authenticate, requireCommercial, taskController.createBulk);
-router.post('/import-orders', authenticate, requireRoles(['commercial', 'planner', 'super_admin']), upload.single('file'), taskController.importOrders);
+router.post('/import-orders', authenticate, requireCommercial, upload.single('file'), taskController.importOrders);
 router.get('/:id/details', authenticate, taskController.getDetail);
 router.post('/:id/comments', authenticate, taskController.addComment);
 router.get('/:id', authenticate, taskController.getById);

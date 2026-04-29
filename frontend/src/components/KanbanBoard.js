@@ -136,6 +136,7 @@ const KanbanBoard = ({
 
   const isAllWorkspaces = workspaceId === 'all';
   const deferredQuery = useDeferredValue(filterQuery);
+  const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority);
 
   const visibleTaskIds = useMemo(() => {
     const ids = new Set();
@@ -153,6 +154,8 @@ const KanbanBoard = ({
   );
 
   const getColumnCount = useCallback((status) => tasks.filter((task) => task.status === status).length, [tasks]);
+  const visibleCount = visibleTaskIds.size;
+  const totalCount = tasks.length;
 
   const setErrorShort = (message) => {
     setError(message);
@@ -329,6 +332,18 @@ const KanbanBoard = ({
           <h2 className="kanban-board__title">Tableau de suivi</h2>
           <p className="kanban-board__hint">{roleHint}</p>
         </div>
+        <div className="kanban-board__summary" aria-label="Synthèse du tableau">
+          <span>
+            <strong>{totalCount}</strong>
+            fiches
+          </span>
+          {hasActiveFilters && (
+            <span>
+              <strong>{visibleCount}</strong>
+              visibles
+            </span>
+          )}
+        </div>
         {canCreateTask && !isAllWorkspaces && (
           <button
             type="button"
@@ -351,7 +366,8 @@ const KanbanBoard = ({
           const columnTasks = getTasksByStatus(column.id);
           const totalInColumn = getColumnCount(column.id);
           const isDragTarget = dragOverColumn === column.id;
-          const filteredEmpty = totalInColumn > 0 && columnTasks.length === 0 && (deferredQuery.trim() || filterPriority);
+          const filteredEmpty = totalInColumn > 0 && columnTasks.length === 0 && hasActiveFilters;
+          const priorityCount = columnTasks.filter((task) => task.priority === 'URGENT' || task.priority === 'HIGH').length;
 
           return (
             <section
@@ -368,11 +384,17 @@ const KanbanBoard = ({
                   setDragOverColumn(null);
                 }
               }}
-              style={{ background: isDragTarget ? column.headerBg : column.bg, borderColor: `${column.color}22` }}
+              style={{
+                '--column-color': column.color,
+                '--column-bg': column.bg,
+                '--column-header-bg': column.headerBg,
+                background: isDragTarget ? column.headerBg : column.bg,
+                borderColor: `${column.color}22`,
+              }}
             >
-              <div className="kanban-column__head" style={{ background: column.headerBg, borderBottomColor: `${column.color}33` }}>
+              <div className="kanban-column__head">
                 <div>
-                  <span className="kanban-column__title" style={{ color: column.color }}>
+                  <span className="kanban-column__title">
                     {column.label}
                   </span>
                   <div className="kanban-column__subtitle">
@@ -385,21 +407,30 @@ const KanbanBoard = ({
                       : 'File active'}
                   </div>
                 </div>
-                <span className="kanban-column__count" style={{ background: column.color }}>
-                  {deferredQuery.trim() || filterPriority ? `${columnTasks.length}/${totalInColumn}` : totalInColumn}
-                </span>
+                <div className="kanban-column__metrics">
+                  {priorityCount > 0 && <span className="kanban-column__priority-count">{priorityCount} prio.</span>}
+                  <span className="kanban-column__count">
+                    {hasActiveFilters ? `${columnTasks.length}/${totalInColumn}` : totalInColumn}
+                  </span>
+                </div>
               </div>
 
               <div className="kanban-column__body">
                 {filteredEmpty ? (
-                  <div className="kanban-column__empty kanban-column__empty--filter">Aucune fiche ne correspond aux filtres.</div>
+                  <div className="kanban-column__empty kanban-column__empty--filter">
+                    <strong>Aucun résultat</strong>
+                    <span>Cette colonne contient {totalInColumn} fiche{totalInColumn > 1 ? 's' : ''}, mais aucune ne correspond aux filtres.</span>
+                  </div>
                 ) : columnTasks.length === 0 ? (
-                  <div className="kanban-column__empty">{canChangeStatus ? 'Deposez une fiche ici.' : 'Aucune fiche.'}</div>
+                  <div className="kanban-column__empty">
+                    <strong>Colonne vide</strong>
+                    <span>{canChangeStatus && column.id !== 'WAITING_STOCK' ? 'Déposez une fiche ici pour changer son statut.' : 'Aucune fiche pour le moment.'}</span>
+                  </div>
                 ) : (
                   columnTasks.map((task) => (
                     <div
                       key={task.id}
-                      className="kanban-card-slot"
+                      className={`kanban-card-slot ${selectedTaskId === task.id ? 'kanban-card-slot--selected' : ''}`}
                       draggable={canChangeStatus && task.status !== 'WAITING_STOCK'}
                       onDragStart={(event) => handleDragStart(event, task)}
                       onDragEnd={clearDragHighlights}

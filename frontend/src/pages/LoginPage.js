@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import logo from '../assets/logo.png';
 
 const LoginPage = () => {
   const [form, setForm] = useState({ email: '', password: '' });
@@ -69,24 +70,17 @@ const LoginPage = () => {
         }}>
           {/* Logo & Title */}
           <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 64,
-              height: 64,
-              borderRadius: 16,
-              background: 'linear-gradient(135deg, #0052cc, #2684ff)',
-              marginBottom: '1rem',
-              boxShadow: '0 8px 24px rgba(0,82,204,0.4)',
-            }}>
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
-                <rect x="3" y="3" width="8" height="8" rx="2" fill="white" fillOpacity="0.9" />
-                <rect x="13" y="3" width="8" height="8" rx="2" fill="white" fillOpacity="0.6" />
-                <rect x="3" y="13" width="8" height="8" rx="2" fill="white" fillOpacity="0.6" />
-                <rect x="13" y="13" width="8" height="8" rx="2" fill="white" fillOpacity="0.3" />
-              </svg>
-            </div>
+            <img
+              src={logo}
+              alt="Suivi Production"
+              style={{
+                width: 96,
+                maxWidth: '70%',
+                height: 'auto',
+                marginBottom: '1rem',
+                objectFit: 'contain',
+              }}
+            />
             <h1 className="login-title" style={{ fontSize: '1.5rem', fontWeight: '800', color: '#f1f5f9', margin: '0 0 0.3rem', letterSpacing: '-0.02em' }}>
               Suivi Production
             </h1>

@@ -27,7 +27,12 @@ const requireRoles = (roles, errorMessage = 'Acces refuse') => (req, res, next) 
 const requireSuperAdmin = requireRoles(['super_admin'], 'Acces super administrateur requis');
 const requirePlanner = requireRoles(['planner'], 'Acces planificateur requis');
 const requireSuperAdminOrPlanner = requireRoles(['super_admin', 'planner'], 'Acces planificateur ou super administrateur requis');
-const requireCommercial = requireRoles(['commercial'], 'Acces commercial requis');
+const requireCommercial = (req, res, next) => {
+  if (req.user?.role !== 'commercial') {
+    return res.status(403).json({ error: 'Acces commercial requis' });
+  }
+  next();
+};
 const requireAnyRole = requireRoles(['super_admin', 'planner', 'commercial', 'user'], 'Authentification requise');
 
 module.exports = { authenticate, requireRoles, requireSuperAdmin, requirePlanner, requireSuperAdminOrPlanner, requireCommercial, requireAnyRole };

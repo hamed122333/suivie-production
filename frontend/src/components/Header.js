@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { notificationAPI } from '../services/api';
 import { getInitials } from '../utils/formatters';
+import logo from '../assets/logo.png';
 import './Header.css';
 
 const ROLE_CONFIG = {
@@ -14,12 +15,30 @@ const ROLE_CONFIG = {
 };
 const NOTIFICATION_POLL_INTERVAL_MS = 30000;
 
+function formatNotificationTime(value) {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const diffMs = date.getTime() - Date.now();
+  const diffMinutes = Math.round(diffMs / 60000);
+  const diffHours = Math.round(diffMinutes / 60);
+  const diffDays = Math.round(diffHours / 24);
+  const formatter = new Intl.RelativeTimeFormat('fr-FR', { numeric: 'auto' });
+
+  if (Math.abs(diffMinutes) < 60) return formatter.format(diffMinutes, 'minute');
+  if (Math.abs(diffHours) < 24) return formatter.format(diffHours, 'hour');
+  if (Math.abs(diffDays) < 7) return formatter.format(diffDays, 'day');
+
+  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+}
+
 const Header = ({ toggleSidebar, isSidebarOpen }) => {
   const { user, logout, isSuperAdmin, isPlanner } = useAuth();
   const { workspaceId, workspaces, selectWorkspace } = useWorkspace();
   const location = useLocation();
   const navigate = useNavigate();
-  const [search, setSearch] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -107,23 +126,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
     setNotifOpen(false);
   };
 
-  useEffect(() => {
-    if (location.pathname !== '/kanban') {
-      setSearch('');
-      return;
-    }
-
-    const params = new URLSearchParams(location.search);
-    setSearch(params.get('q') || '');
-  }, [location.pathname, location.search]);
-
   const initials = getInitials(user?.name);
-
-  const submitSearch = (e) => {
-    e.preventDefault();
-    const q = search.trim();
-    navigate(q ? `/kanban?q=${encodeURIComponent(q)}` : '/kanban');
-  };
 
   const navItem = (to, label, icon) => {
     const active =
@@ -168,12 +171,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
         <div className="app-header__brand">
           <Link to="/kanban" className="app-header__logo" title="Suivi Production">
             <span className="app-header__logo-icon" aria-hidden>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <rect x="3" y="3" width="8" height="8" rx="2" fill="#0052CC" />
-                <rect x="13" y="3" width="8" height="8" rx="2" fill="#2684FF" />
-                <rect x="3" y="13" width="8" height="8" rx="2" fill="#2684FF" />
-                <rect x="13" y="13" width="8" height="8" rx="2" fill="#B3D4FF" />
-              </svg>
+              <img src={logo} alt="" />
             </span>
             <div className="app-header__brand-text">
               <span className="app-header__title">Suivi Production</span>
@@ -184,46 +182,15 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
           </Link>
         </div>
 
-        {/* Search */}
-        <form className="app-header__search" onSubmit={submitSearch} role="search">
-          <span className="app-header__search-icon" aria-hidden>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
-          </span>
-          <input
-            type="search"
-            placeholder="Rechercher une tâche…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Recherche"
-          />
-          {search && (
-            <button
-              type="button"
-              className="app-header__search-clear"
-              onClick={() => {
-                setSearch('');
-                if (location.pathname === '/kanban') {
-                  navigate('/kanban');
-                }
-              }}
-              aria-label="Effacer"
-            >
-              ✕
-            </button>
-          )}
-        </form>
-
         {/* Actions */}
         <div className="app-header__actions">
           {canViewNotifications && (
             <div className="app-header__notif-wrap" ref={notifRef}>
               <button
                 type="button"
-                className="app-header__icon-btn"
+                className={`app-header__icon-btn app-header__notif-btn ${notifOpen ? 'app-header__icon-btn--active' : ''}`}
                 title="Notifications"
-                aria-label="Notifications"
+                aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} non lues` : ''}`}
                 onClick={() => {
                   const nextState = !notifOpen;
                   setNotifOpen(nextState);
@@ -240,7 +207,10 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
               {notifOpen && (
                 <div className="app-header__notif-dropdown">
                   <div className="app-header__notif-head">
-                    <strong>Notifications</strong>
+                    <div>
+                      <strong>Notifications</strong>
+                      <span>{unreadCount > 0 ? `${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : 'Tout est à jour'}</span>
+                    </div>
                     {unreadCount > 0 && (
                       <button type="button" className="app-header__notif-mark-all" onClick={handleMarkAllRead}>
                         Tout lire
@@ -250,9 +220,17 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
 
                   <div className="app-header__notif-list">
                     {notifLoading ? (
-                      <div className="app-header__notif-empty">Chargement...</div>
+                      <div className="app-header__notif-loading" aria-label="Chargement des notifications">
+                        <span />
+                        <span />
+                        <span />
+                      </div>
                     ) : notifications.length === 0 ? (
-                      <div className="app-header__notif-empty">Aucune notification.</div>
+                      <div className="app-header__notif-empty">
+                        <span aria-hidden>✓</span>
+                        <strong>Aucune notification</strong>
+                        <p>Les alertes de production apparaitront ici.</p>
+                      </div>
                     ) : (
                       notifications.map((notification) => (
                         <button
@@ -261,11 +239,17 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
                           className={`app-header__notif-item ${notification.is_read ? '' : 'app-header__notif-item--unread'}`}
                           onClick={() => handleOpenNotification(notification)}
                         >
-                          <div className="app-header__notif-title">{notification.title}</div>
-                          <div className="app-header__notif-body">{notification.body}</div>
-                          <div className="app-header__notif-meta">
-                            {notification.workspace_name ? `${notification.workspace_name} • ` : ''}
-                            {new Date(notification.created_at).toLocaleString('fr-FR')}
+                          <span className="app-header__notif-status" aria-hidden />
+                          <div className="app-header__notif-content">
+                            <div className="app-header__notif-row">
+                              <span className="app-header__notif-title">{notification.title}</span>
+                              {!notification.is_read && <span className="app-header__notif-pill">Nouveau</span>}
+                            </div>
+                            <div className="app-header__notif-body">{notification.body}</div>
+                            <div className="app-header__notif-meta">
+                              {notification.workspace_name && <span>{notification.workspace_name}</span>}
+                              <time dateTime={notification.created_at}>{formatNotificationTime(notification.created_at)}</time>
+                            </div>
                           </div>
                         </button>
                       ))
@@ -275,13 +259,6 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
               )}
             </div>
           )}
-
-          <button type="button" className="app-header__icon-btn" title="Actualiser la page" onClick={() => window.location.reload()}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M1 4v6h6" /><path d="M23 20v-6h-6" />
-              <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15" />
-            </svg>
-          </button>
 
           {/* User menu */}
           <div className="app-header__user-wrap" ref={menuRef}>
@@ -331,8 +308,9 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
 
       {/* Navigation */}
       <nav className="header-nav" aria-label="Navigation principale">
-        {navItem('/kanban', 'Tableau', '▤')}
-        {navItem('/dashboard', 'Tableau de bord', '◱')}
+        {navItem('/kanban', 'Production', '▤')}
+        {navItem('/dashboard', 'Dashboard', '◱')}
+        {navItem('/stock', 'Stock', '▦')}
         {isSuperAdmin && navItem('/users', 'Utilisateurs', '👤')}
       </nav>
     </header>

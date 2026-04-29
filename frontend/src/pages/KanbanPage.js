@@ -16,7 +16,7 @@ const KanbanPage = () => {
   const [priorityFilter, setPriorityFilter] = useState('');
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isPlanner } = useAuth();
+  const { isCommercial } = useAuth();
   const { workspaceId, loadingWorkspaces, refreshWorkspaces, selectWorkspace } = useWorkspace();
 
   const fetchTasks = useCallback(
@@ -72,6 +72,7 @@ const KanbanPage = () => {
   };
 
   const handleImportOrders = async (file) => {
+    if (!file || !isCommercial) return;
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -145,11 +146,10 @@ const KanbanPage = () => {
         priority={priorityFilter}
         onPriorityChange={setPriorityFilter}
         users={users}
-        isAdmin={isPlanner}
         stats={stats}
         onRefresh={() => Promise.all([fetchTasks(workspaceId), fetchStats()])}
         onExport={() => setExportModalOpen(true)}
-        onImportOrders={handleImportOrders}
+        onImportOrders={isCommercial ? handleImportOrders : null}
       />
       <KanbanBoard
         tasks={tasks}

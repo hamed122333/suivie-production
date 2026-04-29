@@ -1,12 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
+import { TASK_PRIORITY_OPTIONS } from '../constants/task';
 import './KanbanToolbar.css';
 
 const PRIORITIES = [
-  { id: '', label: 'Toutes priorités' },
-  { id: 'LOW', label: 'Basse' },
-  { id: 'MEDIUM', label: 'Moyenne' },
-  { id: 'HIGH', label: 'Haute' },
-  { id: 'URGENT', label: 'Urgente' },
+  { value: '', label: 'Toutes les priorites' },
+  ...TASK_PRIORITY_OPTIONS,
 ];
 
 const KanbanToolbar = ({
@@ -14,124 +12,103 @@ const KanbanToolbar = ({
   onSearchChange,
   priority,
   onPriorityChange,
-  users,
-  isAdmin,
   stats,
   onRefresh,
   onExport,
   onImportOrders,
 }) => {
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const importInputRef = useRef(null);
   const counts = stats?.counts || {};
+  const activeFilters = [search.trim(), priority].filter(Boolean).length;
 
   return (
     <div className="kanban-toolbar">
-      <div className="kanban-toolbar__left">
-        <div className="kanban-toolbar__search">
-          <span className="kanban-toolbar__search-icon" aria-hidden>⌕</span>
-          <input
-            type="search"
-            placeholder="Rechercher dans le tableau…"
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            aria-label="Rechercher des tâches"
-          />
-        </div>
-
-        <div className="kanban-toolbar__avatars" title="Équipe">
-          {users.slice(0, 6).map((u) => (
-            <span key={u.id} className="kanban-toolbar__avatar" title={u.name}>
-              {u.name
-                ?.split(/\s+/)
-                .map((w) => w[0])
-                .join('')
-                .slice(0, 2)
-                .toUpperCase() || '?'}
-            </span>
-          ))}
-          {users.length > 6 && (
-            <span className="kanban-toolbar__avatar kanban-toolbar__avatar--more">+{users.length - 6}</span>
-          )}
-        </div>
-
-        <div className="kanban-toolbar__filters">
-          <button
-            type="button"
-            className={`kanban-toolbar__filter-btn ${filtersOpen ? 'kanban-toolbar__filter-btn--open' : ''}`}
-            onClick={() => setFiltersOpen((o) => !o)}
-          >
-            <span aria-hidden>⚙</span> Filtres
-          </button>
-          {filtersOpen && (
-            <div className="kanban-toolbar__filter-panel" role="dialog" aria-label="Filtres">
-              <label>
-                <span>Priorité</span>
-                <select value={priority} onChange={(e) => onPriorityChange(e.target.value)}>
-                  {PRIORITIES.map((p) => (
-                    <option key={p.id || 'all'} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {isAdmin && (
-                <div style={{ fontSize: '0.75rem', color: '#5e6c84', fontWeight: 600 }}>
-                  Seul le planificateur peut déplacer les cartes.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="kanban-toolbar__stats">
+      {onImportOrders ? (
         <input
           ref={importInputRef}
           type="file"
           accept=".xlsx,.xls"
-          style={{ display: 'none' }}
+          className="kanban-toolbar__file-input"
           onChange={(event) => {
             const file = event.target.files?.[0];
-            if (file && onImportOrders) onImportOrders(file);
+            if (file) onImportOrders(file);
             event.target.value = '';
           }}
         />
-        <button
-          type="button"
-          className="kanban-toolbar__refresh kanban-toolbar__export"
-          title="Importer commandes client"
-          onClick={() => importInputRef.current?.click()}
-          style={{ marginRight: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          ⤴
-        </button>
-        <button type="button" className="kanban-toolbar__refresh kanban-toolbar__export" title="Exporter Excel" onClick={onExport} style={{ marginRight: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-        </button>
-        <button type="button" className="kanban-toolbar__refresh" title="Rafraîchir" onClick={onRefresh}>
-          ↻
-        </button>
-        <div className="kanban-stat kanban-stat--blue">
+      ) : null}
+
+      <div className="kanban-toolbar__main">
+        <div className="kanban-toolbar__search">
+          <span className="kanban-toolbar__search-icon" aria-hidden>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.8-3.8" />
+            </svg>
+          </span>
+          <input
+            type="search"
+            placeholder="Rechercher commande, client, article, atelier..."
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            aria-label="Rechercher des tâches"
+          />
+          {search && (
+            <button type="button" className="kanban-toolbar__clear-search" onClick={() => onSearchChange('')} aria-label="Effacer la recherche">
+              ×
+            </button>
+          )}
+        </div>
+
+        <label className="kanban-toolbar__filter">
+          <span>Priorite</span>
+          <select value={priority} onChange={(e) => onPriorityChange(e.target.value)}>
+            {PRIORITIES.map((item) => (
+              <option key={item.value || 'all'} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {activeFilters > 0 && (
+          <button type="button" className="kanban-toolbar__reset" onClick={() => { onSearchChange(''); onPriorityChange(''); }}>
+            Effacer
+          </button>
+        )}
+      </div>
+
+      <div className="kanban-toolbar__signals" aria-label="Indicateurs de suivi">
+        <div className="kanban-toolbar__signal kanban-toolbar__signal--blue">
           <strong>{counts.dueToday ?? '—'}</strong>
-          <span>Echéances du jour</span>
+          <span>Aujourd'hui</span>
         </div>
-        <div className="kanban-stat kanban-stat--amber">
+        <div className="kanban-toolbar__signal kanban-toolbar__signal--amber">
           <strong>{counts.overdue ?? '—'}</strong>
-          <span>En retard</span>
+          <span>Retard</span>
         </div>
-        <div className="kanban-stat kanban-stat--red">
+        <div className="kanban-toolbar__signal kanban-toolbar__signal--red">
           <strong>{counts.totalBlocked ?? '—'}</strong>
-          <span>Bloquées</span>
+          <span>Bloquees</span>
         </div>
-        <div className="kanban-stat kanban-stat--green">
-          <strong>{counts.completedToday ?? '—'}</strong>
-          <span>Terminees aujourd&apos;hui</span>
-        </div>
+      </div>
+
+      <div className="kanban-toolbar__actions">
+        {onImportOrders ? (
+          <button
+            type="button"
+            className="kanban-toolbar__action"
+            title="Importer commandes client"
+            onClick={() => importInputRef.current?.click()}
+          >
+            Import
+          </button>
+        ) : null}
+        <button type="button" className="kanban-toolbar__action" title="Exporter Excel" onClick={onExport}>
+          Export
+        </button>
+        <button type="button" className="kanban-toolbar__action kanban-toolbar__action--primary" title="Rafraichir" onClick={onRefresh}>
+          Actualiser
+        </button>
       </div>
     </div>
   );
