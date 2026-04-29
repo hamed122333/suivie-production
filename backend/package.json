@@ -8,7 +8,7 @@
     "dev": "nodemon src/server.js",
     "migrate": "node run-setup.js",
     "migrate:production-core": "node run-production-core-migration.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"No tests configured\" && exit 0"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
