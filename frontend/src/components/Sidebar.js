@@ -57,7 +57,7 @@ const Sidebar = ({ closeSidebar }) => {
               >
                 <span className="sidebar__item-icon" aria-hidden />
                 <span className="sidebar__item-name">{ws.name}</span>
-                {active && <span className="sidebar__item-check">Actif</span>}
+                {active && <span className="sidebar__item-check">✔</span>}
               </button>
             );
           })

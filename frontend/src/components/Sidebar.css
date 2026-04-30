@@ -85,9 +85,9 @@
 }
 
 .sidebar__item--active {
-  background: rgba(96, 165, 250, 0.12);
-  border-color: rgba(96, 165, 250, 0.18);
-  color: #f8fafc;
+  background: #12305d;
+  border-color: #12305d;
+  color: #bfdbfe;
 }
 
 .sidebar__item--all {
@@ -206,7 +206,7 @@
 }
 
 .sidebar__nav-link--active {
-  background: rgba(96, 165, 250, 0.12);
+  background: #12305d;
   color: #bfdbfe;
 }
 
