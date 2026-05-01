@@ -89,6 +89,19 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS finished_product_stock (
+    id SERIAL PRIMARY KEY,
+    entry_date DATE NOT NULL,
+    item_code VARCHAR(100) NOT NULL,
+    designation TEXT,
+    client_code VARCHAR(100) NOT NULL,
+    client_name TEXT,
+    quantity NUMERIC(12,2) NOT NULL DEFAULT 0,
+    age INTEGER,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(item_code, entry_date, client_code)
+);
+
 -- Default workspace
 INSERT INTO workspaces (name)
 SELECT 'Default'
