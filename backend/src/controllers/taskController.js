@@ -5,6 +5,7 @@ const StockImportModel = require('../models/stockImportModel');
 const WorkspaceModel = require('../models/workspaceModel');
 const UserModel = require('../models/userModel');
 const NotificationModel = require('../models/notificationModel');
+const { recalculateStockAllocation } = require('../services/stockAllocationService');
 const { TASK_STATUSES, TASK_STATUS_LABELS, TRACKED_TASK_FIELDS, URGENT_DATE_THRESHOLD_DAYS } = require('../constants/task');
 const { createHttpError, isHttpError } = require('../utils/httpErrors');
 const { applyTaskVisibility, buildTaskFilters, canAccessTask, parseWorkspaceId } = require('../utils/taskScope');
@@ -482,6 +483,7 @@ const taskController = {
       await notifyTaskCreation([task], req.user);
       if (task.item_reference) {
         await recalculateStockConflictsForArticle(task.item_reference);
+        await recalculateStockAllocation(task.item_reference, workspaceId);
       }
       res.status(201).json({
         task,
@@ -821,6 +823,15 @@ const taskController = {
         await TaskHistoryModel.logMany(historyEntries);
       }
 
+      // Recalculate stock allocation if article, quantity or date changed
+      const articleChanged = payload.itemReference && payload.itemReference !== previousTask.item_reference;
+      const quantityChanged = payload.quantity && payload.quantity !== previousTask.quantity;
+      const dateChanged = (payload.plannedDate && payload.plannedDate !== previousTask.planned_date) ||
+                         (payload.dueDate && payload.dueDate !== previousTask.due_date);
+
+      if (task.item_reference && (articleChanged || quantityChanged || dateChanged)) {
+        await recalculateStockAllocation(task.item_reference, task.workspace_id);
+      }
 
       res.json(task);
     } catch (err) {
