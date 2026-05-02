@@ -293,24 +293,6 @@
 }
 
 
-/* ── Conflit de stock ── */
-.task-card__conflict {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.69rem;
-  font-weight: 700;
-  color: #9a3412;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  border-radius: 8px;
-  padding: 0.22rem 0.5rem;
-  margin-bottom: 0.5rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* ── Badge date urgente ── */
 .task-card__date-check--warn {
   background: #fffbeb;

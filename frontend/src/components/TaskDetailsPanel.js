@@ -3,7 +3,6 @@ import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from '../constants/task';
 import { taskAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { formatDate, formatDateTime, formatNumber, formatRelativeDate } from '../utils/formatters';
-import ConflictResolutionModal from './ConflictResolutionModal';
 import TaskTypeToggle from './TaskTypeToggle';
 import './TaskDetailsPanel.css';
 
@@ -112,7 +111,6 @@ const TaskDetailsPanel = ({
   const [error, setError] = useState('');
   const [savingAction, setSavingAction] = useState(false);
   const [dateProposal, setDateProposal] = useState('');
-  const [showConflictModal, setShowConflictModal] = useState(false);
 
   const fetchDetail = useCallback(async () => {
     if (!taskId || !open) return;
@@ -317,27 +315,6 @@ const TaskDetailsPanel = ({
                     </div>
                   )}
                 </div>
-                {task.has_stock_conflict && task.competing_clients && (
-                  <>
-                    <div className="task-detail__conflict-alert">
-                      <span aria-hidden>⚡</span>
-                      <div>
-                        <strong>Conflit de stock détecté</strong>
-                        <p>Même article commandé par: {task.competing_clients}</p>
-                      </div>
-                    </div>
-                    {isPlanner && (
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        style={{ width: '100%', marginTop: '0.75rem' }}
-                        onClick={() => setShowConflictModal(true)}
-                      >
-                        🚨 Résoudre ce conflit
-                      </button>
-                    )}
-                  </>
-                )}
                 {isPlanner && task && (
                   <TaskTypeToggle
                     task={task}
@@ -456,19 +433,6 @@ const TaskDetailsPanel = ({
           </>
         ) : null}
       </aside>
-      {showConflictModal && detail && (
-        <ConflictResolutionModal
-          task={detail}
-          onClose={() => setShowConflictModal(false)}
-          onResolved={(result) => {
-            setShowConflictModal(false);
-            if (onTaskUpdated) {
-              onTaskUpdated();
-            }
-            fetchDetail();
-          }}
-        />
-      )}
     </div>
   );
 };

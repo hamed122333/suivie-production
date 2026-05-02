@@ -158,14 +158,6 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
         </div>
       )}
 
-      {/* Stock conflict badge (compact) */}
-      {task.has_stock_conflict && task.competing_clients && (
-        <div className="task-card__conflict" title={`Conflit: ${task.competing_clients}`}>
-          <span aria-hidden>⚡</span>
-          <span>Conflit stock</span>
-        </div>
-      )}
-
       {/* Stock allocation badge (compact) */}
       {task.status === 'WAITING_STOCK' && <StockAllocationBadge task={task} />}
 

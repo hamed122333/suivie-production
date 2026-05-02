@@ -194,37 +194,6 @@ function isUrgentDate(dateString) {
   return diffDays >= 0 && diffDays <= URGENT_DATE_THRESHOLD_DAYS;
 }
 
-async function recalculateStockConflictsForArticle(itemReference) {
-  if (!itemReference) return;
-  const activeTasks = await TaskModel.findActiveTasksForArticle(itemReference);
-
-  // Un conflit nécessite au minimum 2 tâches actives pour le même article
-  if (activeTasks.length < 2) {
-    for (const task of activeTasks) {
-      await TaskModel.updateConflictFlags(task.id, false, null);
-    }
-    return;
-  }
-
-  const stockQty = await StockImportModel.getStockQuantity(itemReference);
-  const totalDemand = activeTasks.reduce((sum, t) => sum + Number(t.quantity || 1), 0);
-
-  // Conflit uniquement si la demande totale dépasse le stock disponible
-  const hasConflict = totalDemand > stockQty;
-
-  for (const task of activeTasks) {
-    if (hasConflict) {
-      const otherLabels = activeTasks
-        .filter((t) => t.id !== task.id)
-        .map((t) => t.client_name || t.order_code || `SP-${t.id}`)
-        .filter(Boolean);
-      const uniqueLabels = [...new Set(otherLabels)];
-      await TaskModel.updateConflictFlags(task.id, true, uniqueLabels.join(', ') || null);
-    } else {
-      await TaskModel.updateConflictFlags(task.id, false, null);
-    }
-  }
-}
 
 async function resolveCreationTarget(taskInput) {
   const quantity = Number(taskInput.quantity || 1);
@@ -482,7 +451,6 @@ const taskController = {
       });
       await notifyTaskCreation([task], req.user);
       if (task.item_reference) {
-        await recalculateStockConflictsForArticle(task.item_reference);
         await recalculateStockAllocation(task.item_reference, workspaceId);
       }
       res.status(201).json({
@@ -569,7 +537,6 @@ const taskController = {
       );
       await notifyTaskCreation(createdTasks, req.user);
       const uniqueRefs = [...new Set(createdTasks.map((t) => t.item_reference).filter(Boolean))];
-      await Promise.all(uniqueRefs.map((ref) => recalculateStockConflictsForArticle(ref)));
 
       const createdTodoCount = createdTasks.filter((task) => task.status === 'TODO').length;
       const createdWaitingCount = createdTasks.filter((task) => task.status === 'WAITING_STOCK').length;
@@ -768,7 +735,7 @@ const taskController = {
 
       await notifyTaskCreation(createdTasks, req.user);
       const importUniqueRefs = [...new Set(createdTasks.map((t) => t.item_reference).filter(Boolean))];
-      await Promise.all(importUniqueRefs.map((ref) => recalculateStockConflictsForArticle(ref)));
+      await Promise.all(importUniqueRefs.map((ref) => recalculateStockAllocation(ref, workspaceId)));
       return res.status(201).json({
         imported: createdTasks.length,
         skipped,
@@ -868,10 +835,10 @@ const taskController = {
       // Handle stock quantities based on status changes
       if (previousTask.status !== 'DONE' && task.status === 'DONE') {
         await deductStockForTask(task);
-        if (task.item_reference) await recalculateStockConflictsForArticle(task.item_reference);
+        if (task.item_reference) await recalculateStockAllocation(task.item_reference, workspaceId);
       } else if (previousTask.status === 'DONE' && task.status !== 'DONE') {
         await addStockForTask(task);
-        if (task.item_reference) await recalculateStockConflictsForArticle(task.item_reference);
+        if (task.item_reference) await recalculateStockAllocation(task.item_reference, workspaceId);
       }
 
       await TaskHistoryModel.log({
@@ -1030,7 +997,7 @@ const taskController = {
         await addStockForTask(taskToDelete);
       }
       if (taskToDelete?.item_reference) {
-        await recalculateStockConflictsForArticle(taskToDelete.item_reference);
+        await recalculateStockAllocation(taskToDelete.item_reference, workspaceId);
       }
 
       res.json({ message: 'Task deleted' });
@@ -1086,7 +1053,7 @@ const taskController = {
       });
 
       if (task.item_reference) {
-        await recalculateStockConflictsForArticle(task.item_reference);
+        await recalculateStockAllocation(task.item_reference, workspaceId);
       }
 
       const updated = await TaskModel.getById(task.id);
@@ -1327,7 +1294,7 @@ const taskController = {
       });
 
       if (newStatus !== task.status && task.item_reference) {
-        await recalculateStockConflictsForArticle(task.item_reference);
+        await recalculateStockAllocation(task.item_reference, workspaceId);
       }
 
       const updatedTask = await TaskModel.getById(taskId);
