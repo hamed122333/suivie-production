@@ -1,249 +1,97 @@
-# 🚀 Production Deployment Guide
+# Production Deployment Guide
 
-## ✅ Pre-Production Checklist
+## System Architecture
 
-### Frontend Build Status
-- ✅ Build compiles successfully without errors
-- ✅ All warnings fixed (unused variables removed)
-- ✅ Production build size: ~90.99 KB (gzipped)
-- ✅ React optimized build created
+**Suivi Production** is a factory task tracking system with:
+- **Frontend**: React 18, Vanilla CSS (port 3000)
+- **Backend**: Node.js/Express (port 5000)
+- **Database**: PostgreSQL 15+
+- **Auth**: JWT (24h tokens)
 
-### Backend Status
-- ✅ All dependencies secure (No CVEs found)
-- ✅ Database connection configured with IPv4 fallback
-- ✅ Rate limiting enabled (API: 200 req/15min, Auth: 20 req/15min)
-- ✅ CORS enabled
-- ✅ Trust proxy configured for reverse proxy (Render)
+## Pre-Deployment Checklist
 
-### Dependencies Verified
-**Backend (npm):**
-- express@4.22.1
-- pg@8.20.0 (PostgreSQL driver)
-- jsonwebtoken@9.0.3
-- bcryptjs@2.4.3
-- dotenv@16.6.1
-- cors@2.8.6
-- exceljs@4.4.0
-- multer@2.1.1
-- express-rate-limit@7.5.1
-- xlsx@0.18.5
-- nodemon@3.1.14
+### Security
+- [ ] Update `JWT_SECRET` in `.env` (use strong random string: 32+ chars)
+- [ ] Set `NODE_ENV=production`
+- [ ] Use HTTPS in production (enable SSL/TLS)
+- [ ] Configure CORS origins for frontend URL
+- [ ] Verify rate limiting is active (200 req/15min general, 20 req/15min auth)
+- [ ] Review and restrict file upload sizes (10MB limit)
 
-**Frontend (npm):**
-- react@18.3.1
-- react-router-dom@6.22.3
-- axios@1.7.7
+### Database
+- [ ] PostgreSQL 15+ installed and running
+- [ ] Run migrations: `npm run migrate`
+- [ ] Verify database connection with production credentials
+- [ ] Set up database backups (daily recommended)
 
----
-
-## 📋 Environment Variables Setup
-
-### Backend `.env` (Required for Production)
-```env
-# Database Configuration (Supabase or PostgreSQL)
-DB_HOST=your-db.supabase.co
-DB_PORT=5432
-DB_NAME=postgres
-DB_USER=postgres
-DB_PASSWORD=your_secure_password
-
-# JWT Secret (Generate a strong random string)
-JWT_SECRET=your_super_secret_jwt_key_min_32_chars
-
-# Node Environment
+### Environment Variables
+Create `.env` file from `.env.example` with production values:
+```
+JWT_SECRET=<use-strong-random-32-char-string>
 NODE_ENV=production
-
-# Server Port
-PORT=5000
+DB_HOST=<your-production-host>
+DB_PASSWORD=<strong-password>
+FRONTEND_APP_URL=https://yourdomain.com
+SMTP_*=<email-provider-credentials>
 ```
 
-### Frontend `.env.production` (Optional)
-```env
-REACT_APP_API_BASE_URL=https://your-backend-domain.com/api
-REACT_APP_ENV=production
-```
+### Frontend Build
+- [ ] `npm run build` compiles without errors
+- [ ] Build folder ready for deployment (98 KB main.js gzipped)
 
----
+## Stock Allocation Logic (Core Feature)
 
-## 🌐 Database Setup (Supabase or PostgreSQL)
+The system uses **automatic FIFO allocation by delivery date**:
 
-### Option 1: Supabase (Recommended)
-1. Create account at https://supabase.com
-2. Create new project
-3. Run migrations:
-   ```bash
-   psql -h your-db.supabase.co -U postgres -d postgres -f backend/schema.sql
-   ```
+1. When a task is created/updated, `recalculateStockAllocation()` runs automatically
+2. All tasks for the same article are sorted by `planned_date` (earliest first)
+3. Stock is allocated sequentially - earlier dates get stock first
+4. If a task has a deficit → automatically moves to WAITING_STOCK
+5. Only the compact **StockAllocationBadge** shows allocation details (no conflict badges)
+6. Auto-promotion job runs daily at midnight to move WAITING_STOCK → TODO if stock is now available
 
-### Option 2: Self-hosted PostgreSQL
-1. Install PostgreSQL 12+
-2. Create database:
-   ```sql
-   CREATE DATABASE suivi_production;
-   ```
-3. Run schema:
-   ```bash
-   psql -U postgres -d suivi_production -f backend/schema.sql
-   ```
+## Deployment Steps
 
----
-
-## 🚀 Deployment Options
-
-### Option 1: Render.com (Recommended - Free Tier)
-#### Backend Deployment
-1. Push code to GitHub
-2. Connect repo to Render
-3. Create Web Service:
-   - Name: `suivi-production-backend`
-   - Environment: Node
-   - Build command: `npm install`
-   - Start command: `node src/server.js`
-   - Region: Choose closest
-4. Add Environment Variables in Render dashboard
-5. Set up PostgreSQL database on Supabase
-
-#### Frontend Deployment
-1. Create Static Site on Render
-2. Connect your GitHub repo
-3. Build command: `cd frontend && npm run build`
-4. Publish directory: `frontend/build`
-
-### Option 2: Vercel + Railway
-#### Frontend (Vercel)
+### Docker (Recommended)
 ```bash
-npm install -g vercel
-vercel --prod
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-#### Backend (Railway.app)
-1. Create account at railway.app
-2. Deploy from GitHub
-3. Set environment variables
-4. Add PostgreSQL addon
-
-### Option 3: Docker + Your Server
+### Manual
 ```bash
-# Backend
-docker build -f backend/Dockerfile.prod -t suivi-backend:latest .
-docker run -e DB_HOST=... -e JWT_SECRET=... -p 5000:5000 suivi-backend
-
-# Frontend (with Nginx)
-docker build -f frontend/Dockerfile.prod -t suivi-frontend:latest .
-docker run -p 80:80 suivi-frontend
+cd backend && npm install && npm run migrate && npm start
+cd frontend && npm install && npm run build && serve -s build
 ```
 
----
+## Post-Deployment Verification
 
-## 🔒 Security Checklist
+### Critical Tests
+1. **Stock Allocation**: Create 2 tasks for same article, different dates → earlier date gets stock
+2. **FIFO Allocation**: Later date task shows deficit in compact badge (NO conflict badges)
+3. **Auto-Status Transition**: Task with deficit automatically becomes WAITING_STOCK
+4. **JWT Auth**: Login returns valid 24h token
+5. **API Endpoints**: GET/POST/PUT/DELETE tasks work with proper role checks
 
-- ✅ JWT_SECRET is strong and unique
-- ✅ Database password is encrypted
-- ✅ HTTPS is enabled on production domain
-- ✅ Rate limiting configured
-- ✅ CORS restricted to frontend domain only
-- ✅ SQL injection prevention (parameterized queries)
-- ✅ Password hashing with bcryptjs
-
-### Update CORS for Production
-**File:** `backend/src/app.js`
-```javascript
-app.use(cors({
-  origin: 'https://your-frontend-domain.com',
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+### Health Checks
+```bash
+curl http://localhost:5000/  # Should return 404 or API info
+npm run migrate             # Should succeed with no changes
 ```
 
----
+## Monitoring
 
-## 📊 Production Server Configuration
+### Daily
+- Check logs for errors
+- Verify auto-promotion job runs (console shows "Auto promotion moved X tasks")
 
-### Recommended Specs
-- **CPU:** 1-2 vCPU
-- **RAM:** 1-2 GB
-- **Database:** Managed PostgreSQL (AWS RDS, Supabase, etc.)
-- **Storage:** 10+ GB SSD
+### Features Disabled in Production
+- Manual conflict resolution (resolveConflict endpoint removed)
+- Conflict detection (has_stock_conflict no longer computed)
+- Conflict filter in Kanban UI (removed)
 
-### Health Check Endpoint
-```
-GET /api/health
-Response: { "status": "OK", "message": "Suivi Production API running" }
-```
+All stock management is now automatic FIFO by date.
 
 ---
 
-## 📈 Monitoring & Logs
-
-### Backend Logs
-- Check `backend.log` for application errors
-- Monitor database connection errors
-- Watch for rate limit warnings
-
-### Frontend Errors
-- Browser console for client-side errors
-- Network tab for API failures
-- Use Sentry.io for error tracking (optional)
-
----
-
-## ✨ Final Deployment Steps
-
-1. **Test Build Locally**
-   ```bash
-   cd frontend && npm run build
-   cd ../backend && NODE_ENV=production npm start
-   ```
-
-2. **Verify All Endpoints**
-   ```bash
-   curl https://your-backend/api/health
-   ```
-
-3. **Database Connection Test**
-   ```bash
-   psql -h your-db.host -U your-user -d your-db -c "SELECT 1"
-   ```
-
-4. **Deploy**
-   - Push to production branch
-   - Monitor deployment logs
-   - Verify frontend loads
-   - Test login functionality
-   - Test core features
-
-5. **Post-Deployment**
-   - Set up SSL/TLS certificate (Let's Encrypt)
-   - Configure backup strategy
-   - Set up monitoring alerts
-   - Document admin credentials securely
-
----
-
-## 🆘 Troubleshooting
-
-### Issue: `ENETUNREACH` Database Connection Error
-**Solution:** Already handled in code with IPv4 fallback in `db.js`
-
-### Issue: Rate Limit Errors in Production
-**Solution:** Ensure `trust proxy` is set correctly in `app.js`
-
-### Issue: CORS Errors
-**Solution:** Update CORS configuration in `app.js` with correct frontend domain
-
-### Issue: Build Size Too Large
-**Solution:** Already optimized with gzip compression (~91KB)
-
----
-
-## 📞 Support Resources
-- Database: [Supabase Docs](https://supabase.com/docs)
-- Deployment: [Render Docs](https://render.com/docs)
-- Node.js: [Node.js Production Best Practices](https://nodejs.org/en/docs/guides/nodejs-performance-best-practices/)
-
----
-
-**Last Updated:** April 11, 2026
-**Status:** ✅ Ready for Production
-
+**Last Updated**: 2026-05-02
+**Version**: 1.0 (Production Ready)

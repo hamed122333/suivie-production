@@ -77,3 +77,33 @@ Copy `backend/.env.example` to `backend/.env`. Key vars:
 - `DATABASE_URL` — PostgreSQL connection string
 - `SMTP_*` — Email service for password reset
 - `REACT_APP_API_URL` — Frontend points to backend (default: `http://localhost:5000`)
+
+## Stock Allocation System (Production Ready)
+
+The system uses **automatic FIFO (First In First Out) allocation by delivery date**:
+
+1. **How it works**: When a task is created/updated with an article reference, `recalculateStockAllocation()` runs automatically
+2. **Sorting**: Tasks are sorted by `planned_date`, then `due_date` (earliest first)
+3. **Allocation**: Stock is allocated sequentially to each task in order
+4. **Deficit handling**: Tasks with deficit > 0 automatically transition to WAITING_STOCK status
+5. **Display**: Only the compact **StockAllocationBadge** shows `requested / ⚠️ deficit` (for WAITING_STOCK only)
+6. **No conflicts**: Old manual conflict resolution removed - all allocation is automatic and silent
+7. **Auto-promotion**: Daily job at midnight promotes WAITING_STOCK → TODO if stock is now available
+
+Key files:
+- `backend/src/services/stockAllocationService.js` — Core allocation algorithm
+- `frontend/src/components/StockAllocationBadge.js` — Displays allocation details
+- `backend/src/controllers/taskController.js` — Calls allocation on create/update
+
+## Production Checklist
+
+See `PRODUCTION_DEPLOYMENT.md` for complete production deployment guide.
+
+Critical items:
+- [ ] Update JWT_SECRET (32+ chars, random)
+- [ ] Set NODE_ENV=production
+- [ ] Run database migrations
+- [ ] Use HTTPS with valid SSL certificate
+- [ ] Test stock allocation: multiple tasks same article, different dates
+- [ ] Verify NO conflict badges appear anywhere
+- [ ] Test auto-promotion job runs daily
