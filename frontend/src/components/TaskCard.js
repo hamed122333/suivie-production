@@ -1,6 +1,7 @@
 import React from 'react';
 import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, TASK_TYPE_CONFIG, WAITING_STOCK_ALERT_DAYS, getTaskKey } from '../constants/task';
 import { formatDate, formatRelativeDate, getInitials } from '../utils/formatters';
+import StockAllocationBadge from './StockAllocationBadge';
 import './TaskCard.css';
 
 function getDaysUntilPlannedDate(task) {
@@ -165,33 +166,8 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
         </div>
       )}
 
-      {/* Stock allocation info */}
-      {task.status === 'WAITING_STOCK' && (
-        <div className="task-card__stock-info">
-          <div className="task-card__stock-row">
-            <span className="task-card__stock-label">Demandé:</span>
-            <span className="task-card__stock-value">{task.quantity} {task.quantity_unit || 'pcs'}</span>
-          </div>
-          {task.stock_allocated != null && (
-            <div className="task-card__stock-row">
-              <span className="task-card__stock-label">Alloué:</span>
-              <span className="task-card__stock-value task-card__stock-allocated">{task.stock_allocated} {task.quantity_unit || 'pcs'}</span>
-            </div>
-          )}
-          {task.stock_deficit != null && task.stock_deficit > 0 && (
-            <div className="task-card__stock-row">
-              <span className="task-card__stock-label">Manquant:</span>
-              <span className="task-card__stock-value task-card__stock-deficit">⚠️ {task.stock_deficit} {task.quantity_unit || 'pcs'}</span>
-            </div>
-          )}
-          {task.priority_order && (
-            <div className="task-card__stock-row">
-              <span className="task-card__stock-label">Priorité:</span>
-              <span className="task-card__stock-value task-card__stock-priority">{task.priority_order}{task.priority_order === 1 ? 'ère' : 'ème'}</span>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Stock allocation badge (compact) */}
+      {task.status === 'WAITING_STOCK' && <StockAllocationBadge task={task} />}
 
       <div className="task-card__facts">
         {showReference && <span className="task-card__fact-ref">Réf {task.item_reference}</span>}
