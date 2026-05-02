@@ -14,7 +14,6 @@ function getDaysUntilPlannedDate(task) {
 function buildShortOpsMessage(task) {
   const qty = Number(task?.quantity || 0);
   const status = task?.status;
-  const hasPlannedDate = Boolean(task?.planned_date);
   const expectedAction = `${task?.expected_action || ''}`.toUpperCase();
 
   if (status === 'WAITING_STOCK') {

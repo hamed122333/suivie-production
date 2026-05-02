@@ -98,7 +98,6 @@ const KanbanToolbar = ({
           <button type="button" className="kanban-toolbar__reset" onClick={() => {
             onSearchChange('');
             onPriorityChange('');
-            onHasConflictChange(false);
             onCriticalDeficitChange(false);
             onPredictiveOnlyChange(false);
           }}>
