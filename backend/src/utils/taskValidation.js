@@ -1,4 +1,4 @@
-const { TASK_CREATION_STATUSES, TASK_PRIORITIES, TASK_STATUSES } = require('../constants/task');
+const { TASK_CREATION_STATUSES, TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES } = require('../constants/task');
 const { createHttpError } = require('./httpErrors');
 const { isValidArticleCode, normalizeArticleCode } = require('./articleCode');
 
@@ -102,11 +102,18 @@ function normalizeCreationStatus(status) {
   return status;
 }
 
+function normalizeTaskType(value) {
+  if (!value) return 'PRODUCTION_ORDER';
+  if (!TASK_TYPES.includes(value)) throw createHttpError(400, 'Type de tache invalide');
+  return value;
+}
+
 function normalizeTaskDraft(data = {}) {
   return {
     title: normalizeTitle(data.title),
     description: normalizeDescription(data.description),
     priority: normalizePriority(data.priority),
+    taskType: normalizeTaskType(data.taskType),
     ...normalizeTaskMetadata(data),
   };
 }

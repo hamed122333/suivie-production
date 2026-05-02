@@ -57,6 +57,12 @@ const createFieldMap = {
   dateNegotiationStatus: 'date_negotiation_status',
   dateNegotiationComment: 'date_negotiation_comment',
   dateNegotiationUpdatedAt: 'date_negotiation_updated_at',
+  isKnownProduct: 'is_known_product',
+  stockAvailableAtCreation: 'stock_available_at_creation',
+  stockDeficit: 'stock_deficit',
+  hasStockConflict: 'has_stock_conflict',
+  competingClients: 'competing_clients',
+  urgentDatePending: 'urgent_date_pending',
 };
 
 const updateFieldMap = {
@@ -82,6 +88,12 @@ const updateFieldMap = {
   dateNegotiationStatus: 'date_negotiation_status',
   dateNegotiationComment: 'date_negotiation_comment',
   dateNegotiationUpdatedAt: 'date_negotiation_updated_at',
+  isKnownProduct: 'is_known_product',
+  stockAvailableAtCreation: 'stock_available_at_creation',
+  stockDeficit: 'stock_deficit',
+  hasStockConflict: 'has_stock_conflict',
+  competingClients: 'competing_clients',
+  urgentDatePending: 'urgent_date_pending',
 };
 
 function appendFilters(filters, params) {
@@ -406,7 +418,7 @@ const TaskModel = {
         return null;
       }
 
-      const isPrivileged = userRole === 'planner';
+      const isPrivileged = userRole === 'planner' || options.systemAutoPromotion;
       if (!isPrivileged && currentTask.assigned_to !== userId) {
         await client.query('ROLLBACK');
         throw new Error('Not authorized to update this task');
@@ -505,6 +517,37 @@ const TaskModel = {
     );
     if (result.rows.length === 0) return null;
     return this.getById(id);
+  },
+
+  async findActiveTasksForArticle(itemReference) {
+    if (!itemReference) return [];
+    const result = await pool.query(
+      `SELECT t.id, t.quantity, t.client_name, t.order_code
+       FROM tasks t
+       WHERE UPPER(t.item_reference) = UPPER($1)
+         AND t.status NOT IN ('DONE')
+         AND (t.task_type IS NULL OR t.task_type != 'PREDICTIVE')`,
+      [itemReference]
+    );
+    return result.rows;
+  },
+
+  async updateConflictFlags(id, hasStockConflict, competingClients) {
+    await pool.query(
+      `UPDATE tasks
+       SET has_stock_conflict = $1, competing_clients = $2, updated_at = NOW()
+       WHERE id = $3`,
+      [hasStockConflict, competingClients || null, id]
+    );
+  },
+
+  async updateConflictFlag(id, hasConflict) {
+    await pool.query(
+      `UPDATE tasks
+       SET has_stock_conflict = $1, competing_clients = NULL, updated_at = NOW()
+       WHERE id = $2`,
+      [hasConflict, id]
+    );
   },
 
   async getDashboardStats(filters = {}) {

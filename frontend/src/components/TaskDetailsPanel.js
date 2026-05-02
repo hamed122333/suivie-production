@@ -3,6 +3,8 @@ import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from '../constants/task';
 import { taskAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { formatDate, formatDateTime, formatNumber, formatRelativeDate } from '../utils/formatters';
+import ConflictResolutionModal from './ConflictResolutionModal';
+import TaskTypeToggle from './TaskTypeToggle';
 import './TaskDetailsPanel.css';
 
 const DETAIL_FIELDS = [
@@ -97,10 +99,12 @@ const TaskDetailsPanel = ({
   refreshSignal = 0,
   canManage = false,
   canEdit = false,
+  canConfirmPredictive = false,
   onClose,
   onEditTask,
   onDeleteTask,
   onTaskUpdated,
+  onConfirmPredictive,
 }) => {
   const { isPlanner, isCommercial } = useAuth();
   const [detail, setDetail] = useState(null);
@@ -108,6 +112,7 @@ const TaskDetailsPanel = ({
   const [error, setError] = useState('');
   const [savingAction, setSavingAction] = useState(false);
   const [dateProposal, setDateProposal] = useState('');
+  const [showConflictModal, setShowConflictModal] = useState(false);
 
   const fetchDetail = useCallback(async () => {
     if (!taskId || !open) return;
@@ -159,7 +164,6 @@ const TaskDetailsPanel = ({
   const history = detail?.history || [];
   const statusConfig = task ? TASK_STATUS_CONFIG[task.status] || TASK_STATUS_CONFIG.TODO : TASK_STATUS_CONFIG.TODO;
   const priorityConfig = task ? TASK_PRIORITY_CONFIG[task.priority] || TASK_PRIORITY_CONFIG.MEDIUM : TASK_PRIORITY_CONFIG.MEDIUM;
-  const qtyDisplay = task?.quantity != null ? `${task.quantity} ${task.quantity_unit || 'pcs'}` : '—';
   const operationalSummary = buildOperationalSummary(task, history);
   const dateNegotiationSteps = buildDateNegotiationSteps(task, history);
   const dateNegotiationLabelMap = {
@@ -236,9 +240,21 @@ const TaskDetailsPanel = ({
               </div>
             )}
           </div>
-          <button type="button" className="modal-close" onClick={onClose}>
-            ✕
-          </button>
+          <div className="task-detail__header-actions">
+            {canEdit && (
+              <>
+                <button type="button" className="btn btn-secondary" onClick={() => onEditTask?.(task)}>
+                  Modifier
+                </button>
+                <button type="button" className="btn btn-secondary task-detail__danger-btn" onClick={() => onDeleteTask?.(task.id)}>
+                  Supprimer
+                </button>
+              </>
+            )}
+            <button type="button" className="modal-close" onClick={onClose}>
+              ✕
+            </button>
+          </div>
         </div>
 
         {loading && !task ? (
@@ -275,12 +291,83 @@ const TaskDetailsPanel = ({
                   <span>Dernière maj</span>
                   <strong>{formatRelativeDate(task.updated_at || task.created_at)}</strong>
                 </div>
-                <div className="task-detail__meta-pill">
-                  <span>Quantité</span>
-                  <strong>{qtyDisplay}</strong>
-                </div>
               </div>
             </section>
+
+            {(task.stock_available_at_creation != null || task.stock_deficit != null || task.has_stock_conflict) && (
+              <section className="task-detail__section">
+                <h4 className="task-panel-subtitle">Stock & Approvisionnement</h4>
+                <div className="task-details-grid">
+                  {task.stock_available_at_creation != null && (
+                    <div className="task-detail-item">
+                      <span className="task-detail-label" aria-hidden>📦 Stock initial</span>
+                      <strong className="task-detail-value">{formatNumber(task.stock_available_at_creation)} {task.quantity_unit || 'pcs'}</strong>
+                    </div>
+                  )}
+                  {task.quantity != null && (
+                    <div className="task-detail-item">
+                      <span className="task-detail-label" aria-hidden>🛒 Commandé</span>
+                      <strong className="task-detail-value">{formatNumber(task.quantity)} {task.quantity_unit || 'pcs'}</strong>
+                    </div>
+                  )}
+                  {task.stock_deficit != null && task.stock_deficit > 0 && (
+                    <div className="task-detail-item">
+                      <span className="task-detail-label task-detail-label--danger" aria-hidden>⚠ Manquant</span>
+                      <strong className="task-detail-value task-detail-value--danger">{formatNumber(task.stock_deficit)} {task.quantity_unit || 'pcs'}</strong>
+                    </div>
+                  )}
+                </div>
+                {task.has_stock_conflict && task.competing_clients && (
+                  <>
+                    <div className="task-detail__conflict-alert">
+                      <span aria-hidden>⚡</span>
+                      <div>
+                        <strong>Conflit de stock détecté</strong>
+                        <p>Même article commandé par: {task.competing_clients}</p>
+                      </div>
+                    </div>
+                    {isPlanner && (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ width: '100%', marginTop: '0.75rem' }}
+                        onClick={() => setShowConflictModal(true)}
+                      >
+                        🚨 Résoudre ce conflit
+                      </button>
+                    )}
+                  </>
+                )}
+                {isPlanner && task && (
+                  <TaskTypeToggle
+                    task={task}
+                    isPlanner={isPlanner}
+                    onTypeChanged={() => fetchDetail()}
+                  />
+                )}
+                {task?.task_type === 'PREDICTIVE' && canConfirmPredictive && onConfirmPredictive && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ width: '100%', marginTop: '0.75rem' }}
+                    disabled={savingAction}
+                    onClick={async () => {
+                      setSavingAction(true);
+                      try {
+                        await onConfirmPredictive(task.id);
+                        await fetchDetail();
+                      } catch (err) {
+                        setError(err?.response?.data?.error || 'Impossible de confirmer la commande.');
+                      } finally {
+                        setSavingAction(false);
+                      }
+                    }}
+                  >
+                    {savingAction ? 'Confirmation…' : 'Confirmer la commande prévisionnelle'}
+                  </button>
+                )}
+              </section>
+            )}
 
             <section className="task-detail__section">
               <div className="task-detail__section-head">
@@ -366,27 +453,22 @@ const TaskDetailsPanel = ({
                 <div className="task-detail__description">{task.description || 'Aucune consigne ou ligne specifique.'}</div>
               </section>
             )}
-
-            <section className="task-detail__section">
-              <div className="task-detail__section-head">
-                <h4>Actions fiche</h4>
-              </div>
-              <div className="task-detail__button-row">
-                {canEdit && (
-                  <>
-                    <button type="button" className="btn btn-secondary" onClick={() => onEditTask?.(task)}>
-                      Modifier la fiche
-                    </button>
-                    <button type="button" className="btn btn-secondary task-detail__danger-btn" onClick={() => onDeleteTask?.(task.id)}>
-                      Supprimer la commande
-                    </button>
-                  </>
-                )}
-              </div>
-            </section>
           </>
         ) : null}
       </aside>
+      {showConflictModal && detail && (
+        <ConflictResolutionModal
+          task={detail}
+          onClose={() => setShowConflictModal(false)}
+          onResolved={(result) => {
+            setShowConflictModal(false);
+            if (onTaskUpdated) {
+              onTaskUpdated();
+            }
+            fetchDetail();
+          }}
+        />
+      )}
     </div>
   );
 };

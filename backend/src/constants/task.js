@@ -6,6 +6,11 @@ const TASK_STATUSES = [
   'DONE',
 ];
 
+const TASK_TYPES = ['PRODUCTION_ORDER', 'PREDICTIVE'];
+
+// Nombre de jours à partir duquel une date est considérée urgente (approbation planner requise)
+const URGENT_DATE_THRESHOLD_DAYS = 3;
+
 const TASK_BOARD_STATUSES = [...TASK_STATUSES];
 const TASK_CREATION_STATUSES = ['TODO', 'WAITING_STOCK'];
 const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
@@ -44,4 +49,6 @@ module.exports = {
   TASK_PRIORITIES,
   TASK_STATUS_LABELS,
   TRACKED_TASK_FIELDS,
+  TASK_TYPES,
+  URGENT_DATE_THRESHOLD_DAYS,
 };

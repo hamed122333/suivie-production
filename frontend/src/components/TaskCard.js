@@ -1,7 +1,14 @@
 import React from 'react';
-import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, getTaskKey } from '../constants/task';
+import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, TASK_TYPE_CONFIG, WAITING_STOCK_ALERT_DAYS, getTaskKey } from '../constants/task';
 import { formatDate, formatRelativeDate, getInitials } from '../utils/formatters';
 import './TaskCard.css';
+
+function getDaysUntilPlannedDate(task) {
+  if (!task?.planned_date) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((new Date(task.planned_date) - today) / 86400000);
+}
 
 function buildShortOpsMessage(task) {
   const qty = Number(task?.quantity || 0);
@@ -10,49 +17,69 @@ function buildShortOpsMessage(task) {
   const expectedAction = `${task?.expected_action || ''}`.toUpperCase();
 
   if (status === 'WAITING_STOCK') {
-    if (expectedAction.includes('NEW_PRODUCT')) {
-      return hasPlannedDate
-        ? `Nouveau produit en attente stock • Liv. prévue ${formatDate(task.planned_date)}`
-        : 'Nouveau produit en attente stock';
+    const deficit = task?.stock_deficit != null ? Number(task.stock_deficit) : null;
+
+    if (!task?.is_known_product || expectedAction.includes('NEW_PRODUCT') || expectedAction.includes('STOCK_MISSING')) {
+      return 'Nouveau produit — sans référence stock';
     }
-    return hasPlannedDate
-      ? `Stock insuffisant • ${qty || '—'} pcs demandés • Liv. prévue ${formatDate(task.planned_date)}`
-      : `Stock insuffisant • ${qty || '—'} pcs demandés`;
+
+    // Concise message: just show the key shortage number
+    if (deficit !== null && deficit > 0) {
+      return `Stock insuffisant — ${deficit} pcs manquants`;
+    }
+
+    return `Stock insuffisant — ${qty || '—'} pcs demandés`;
   }
 
   if (status === 'TODO') {
-    return hasPlannedDate
-      ? `Stock validé • Prêt à lancer • Date confirmée ${formatDate(task.planned_date)}`
-      : 'Stock validé • Prêt à lancer';
+    if (task?.task_type === 'PREDICTIVE') {
+      return 'Commande prévisionnelle';
+    }
+    return `Stock validé${qty > 0 ? ` — ${qty} pcs commandés` : ''}`;
   }
 
-  if (status === 'BLOCKED') return 'Bloquée • Action planner requise';
-  if (status === 'DONE') return 'Terminé • Sortie stock appliquée';
+  if (status === 'BLOCKED') return 'Bloquée — action requise';
+  if (status === 'DONE') return 'Terminé';
   if (status === 'IN_PROGRESS') return 'En production';
   return null;
 }
 
 function getDateConfirmationBadge(task) {
-  if (task?.status !== 'WAITING_STOCK') return null;
-
   const negotiationStatus = task?.date_negotiation_status;
   const proposedByRole = `${task?.proposed_by_role || ''}`.toLowerCase();
+  const proposedDate = task?.proposed_delivery_date;
+  const dateSuffix = proposedDate ? ` (${formatDate(proposedDate)})` : '';
 
-  // Cas 1: dès que la négociation est ACCEPTED, la date est confirmée.
+  // Badge date urgente pour les tâches TODO/IN_PROGRESS/BLOCKED
+  if (task?.urgent_date_pending && task?.status !== 'WAITING_STOCK') {
+    return {
+      className: 'task-card__date-check--warn',
+      icon: '!',
+      text: `Date urgente — approbation planner requise${task.due_date ? ` (${formatDate(task.due_date)})` : ''}`,
+    };
+  }
+
+  if (task?.status !== 'WAITING_STOCK') return null;
+
   if (negotiationStatus === 'ACCEPTED') {
     return {
       className: 'task-card__date-check--ok',
       icon: '✓',
-      text: proposedByRole === 'planner' ? 'Date modifiée confirmée' : 'Date confirmée',
+      text: proposedByRole === 'planner' ? `Date modifiée confirmée${dateSuffix}` : `Date confirmée${dateSuffix}`,
     };
   }
 
-  // Cas 2: le planner a modifié la date, attente de validation commercial.
   if (negotiationStatus === 'PENDING_COMMERCIAL_REVIEW' && proposedByRole === 'planner') {
-    return { className: 'task-card__date-check--info', icon: '●', text: 'Date modifiée (attente commercial)' };
+    const dateLabel = proposedDate ? formatDate(proposedDate) : '—';
+    return { className: 'task-card__date-check--info', icon: '●', text: `Planner → ${dateLabel}` };
   }
 
-  return { className: 'task-card__date-check--ko', icon: '✕', text: 'Date non confirmée' };
+  if (negotiationStatus === 'PENDING_PLANNER_REVIEW' && proposedByRole === 'commercial') {
+    const dateLabel = proposedDate ? formatDate(proposedDate) : '—';
+    return { className: 'task-card__date-check--ko', icon: '✕', text: `Commercial → ${dateLabel}` };
+  }
+
+  return { className: 'task-card__date-check--ko', icon: '✕', text: `Date non confirmée${dateSuffix}` };
 }
 
 const TaskCard = ({ task, onOpen, isDragging }) => {
@@ -60,34 +87,60 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
   const priority = TASK_PRIORITY_CONFIG[task.priority] || TASK_PRIORITY_CONFIG.MEDIUM;
   const status = TASK_STATUS_CONFIG[task.status] || TASK_STATUS_CONFIG.TODO;
   const when = formatRelativeDate(task.updated_at || task.created_at);
-  // Éviter la duplication si le titre contient déjà le nom du client (ex: "PLASTICUM • CI0251")
   const titleIncludesClient = task.client_name && typeof task.title === 'string' && task.title.includes(task.client_name);
   const subtitleClientName = titleIncludesClient ? null : task.client_name;
   const subtitle = [subtitleClientName, task.order_code].filter(Boolean).join(' • ');
 
-  // Eviter la duplication de la quantité (si elle est détaillée dans la description "pcs commandés")
   const hideFooterQuantity = task.description && typeof task.description === 'string' && task.description.includes('commandés');
-
   const showReference = task.item_reference && task.item_reference !== task.title;
   const shortOpsMessage = buildShortOpsMessage(task);
   const dateCheck = getDateConfirmationBadge(task);
 
+  const isPredictive = task.task_type === 'PREDICTIVE';
+  const typeConfig = isPredictive ? TASK_TYPE_CONFIG.PREDICTIVE : null;
+
+  // Calcul urgence J-2 / J-1 (uniquement WAITING_STOCK)
+  const daysLeft = task.status === 'WAITING_STOCK' ? getDaysUntilPlannedDate(task) : null;
+  const isDeadlineAlert = daysLeft !== null && daysLeft <= WAITING_STOCK_ALERT_DAYS;
+  const isOverdue = daysLeft !== null && daysLeft < 0;
+
+  const urgencyClass = isOverdue
+    ? 'task-card--overdue'
+    : isDeadlineAlert
+    ? daysLeft <= 1
+      ? 'task-card--alert-j1'
+      : 'task-card--alert-j2'
+    : '';
+
   return (
     <article
-      className={`task-card ${isDragging ? 'task-card--dragging' : ''} ${onOpen ? 'task-card--interactive' : ''}`}
-      style={{ borderLeftColor: priority.color }}
+      className={`task-card ${isDragging ? 'task-card--dragging' : ''} ${onOpen ? 'task-card--interactive' : ''} ${urgencyClass}`}
+      style={{ borderLeftColor: isOverdue ? '#dc2626' : isDeadlineAlert ? (daysLeft <= 1 ? '#ea580c' : '#d97706') : priority.color }}
       onClick={() => onOpen?.(task)}
     >
       <div className="task-card__top">
         <div className="task-card__meta">
           <span className="task-card__key">{getTaskKey(task)}</span>
-          <span className={`task-card__priority task-card__priority--${(task.priority || 'MEDIUM').toLowerCase()}`}>
-            <span aria-hidden>{priority.icon}</span> {priority.label}
+          {typeConfig ? (
+            <span className="task-card__type-badge" style={{ background: typeConfig.bg, color: typeConfig.color }}>
+              {typeConfig.badge}
+            </span>
+          ) : (
+            <span className={`task-card__priority task-card__priority--${(task.priority || 'MEDIUM').toLowerCase()}`}>
+              <span aria-hidden>{priority.icon}</span> {priority.label}
+            </span>
+          )}
+        </div>
+        <div className="task-card__top-right">
+          {isDeadlineAlert && (
+            <span className={`task-card__urgency-chip ${isOverdue ? 'task-card__urgency-chip--overdue' : daysLeft <= 1 ? 'task-card__urgency-chip--j1' : 'task-card__urgency-chip--j2'}`}>
+              {isOverdue ? `+${Math.abs(daysLeft)}j` : daysLeft === 0 ? 'Auj.' : `J-${daysLeft}`}
+            </span>
+          )}
+          <span className="task-card__status" style={{ background: status.bg, color: status.color }}>
+            {status.shortLabel}
           </span>
         </div>
-        <span className="task-card__status" style={{ background: status.bg, color: status.color }}>
-          {status.shortLabel}
-        </span>
       </div>
 
       <h4 className="task-card__title">{task.title}</h4>
@@ -104,10 +157,18 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
         </div>
       )}
 
+      {/* Stock conflict badge (compact) */}
+      {task.has_stock_conflict && task.competing_clients && (
+        <div className="task-card__conflict" title={`Conflit: ${task.competing_clients}`}>
+          <span aria-hidden>⚡</span>
+          <span>Conflit stock</span>
+        </div>
+      )}
+
       <div className="task-card__facts">
         {showReference && <span className="task-card__fact-ref">Réf {task.item_reference}</span>}
         {task.production_line && <span className="task-card__fact-line">{task.production_line}</span>}
-        {task.due_date && <span className="task-card__fact-date">Echéance {formatDate(task.due_date)}</span>}
+        {task.due_date && <span className="task-card__fact-date">Échéance {formatDate(task.due_date)}</span>}
       </div>
 
       {task.blocked_reason && (

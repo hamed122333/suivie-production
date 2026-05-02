@@ -122,6 +122,47 @@
   background: #dbeafe;
 }
 
+.kanban-toolbar__checkboxes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  height: 38px;
+}
+
+.kanban-toolbar__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #dbe4ee;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  user-select: none;
+}
+
+.kanban-toolbar__checkbox:hover {
+  border-color: #bfdbfe;
+  background: #f0f9ff;
+  color: #1d4ed8;
+}
+
+.kanban-toolbar__checkbox input {
+  margin: 0;
+  cursor: pointer;
+  accent-color: #1d4ed8;
+}
+
+.kanban-toolbar__checkbox input:checked + span {
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
 .kanban-toolbar__signals,
 .kanban-toolbar__actions {
   display: inline-flex;

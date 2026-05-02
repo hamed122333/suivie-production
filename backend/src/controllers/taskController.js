@@ -5,7 +5,7 @@ const StockImportModel = require('../models/stockImportModel');
 const WorkspaceModel = require('../models/workspaceModel');
 const UserModel = require('../models/userModel');
 const NotificationModel = require('../models/notificationModel');
-const { TASK_STATUSES, TASK_STATUS_LABELS, TRACKED_TASK_FIELDS } = require('../constants/task');
+const { TASK_STATUSES, TASK_STATUS_LABELS, TRACKED_TASK_FIELDS, URGENT_DATE_THRESHOLD_DAYS } = require('../constants/task');
 const { createHttpError, isHttpError } = require('../utils/httpErrors');
 const { applyTaskVisibility, buildTaskFilters, canAccessTask, parseWorkspaceId } = require('../utils/taskScope');
 const { normalizeCommentBody, normalizeTaskBatch, normalizeTaskDraft, normalizeTaskUpdatePayload } = require('../utils/taskValidation');
@@ -183,10 +183,64 @@ function buildWorkspaceNameFromOrderDate(orderDate) {
   return `CMD ${day}-${month}-${year}`;
 }
 
+function isUrgentDate(dateString) {
+  if (!dateString) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateString);
+  if (Number.isNaN(target.getTime())) return false;
+  const diffDays = Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+  return diffDays >= 0 && diffDays <= URGENT_DATE_THRESHOLD_DAYS;
+}
+
+async function recalculateStockConflictsForArticle(itemReference) {
+  if (!itemReference) return;
+  const activeTasks = await TaskModel.findActiveTasksForArticle(itemReference);
+
+  // Un conflit nécessite au minimum 2 tâches actives pour le même article
+  if (activeTasks.length < 2) {
+    for (const task of activeTasks) {
+      await TaskModel.updateConflictFlags(task.id, false, null);
+    }
+    return;
+  }
+
+  const stockQty = await StockImportModel.getStockQuantity(itemReference);
+  const totalDemand = activeTasks.reduce((sum, t) => sum + Number(t.quantity || 1), 0);
+
+  // Conflit uniquement si la demande totale dépasse le stock disponible
+  const hasConflict = totalDemand > stockQty;
+
+  for (const task of activeTasks) {
+    if (hasConflict) {
+      const otherLabels = activeTasks
+        .filter((t) => t.id !== task.id)
+        .map((t) => t.client_name || t.order_code || `SP-${t.id}`)
+        .filter(Boolean);
+      const uniqueLabels = [...new Set(otherLabels)];
+      await TaskModel.updateConflictFlags(task.id, true, uniqueLabels.join(', ') || null);
+    } else {
+      await TaskModel.updateConflictFlags(task.id, false, null);
+    }
+  }
+}
+
 async function resolveCreationTarget(taskInput) {
   const quantity = Number(taskInput.quantity || 1);
   if (!Number.isFinite(quantity) || quantity <= 0) {
     throw createHttpError(400, 'Quantite invalide pour la commande');
+  }
+
+  // Les tâches prédictives court-circuitent la vérification de stock
+  if (taskInput.taskType === 'PREDICTIVE') {
+    return {
+      ...taskInput,
+      status: 'TODO',
+      autoReason: 'predictive',
+      isKnownProduct: true,
+      stockAvailableAtCreation: null,
+      stockDeficit: null,
+    };
   }
 
   const stockProbe = await StockImportModel.findAvailableForTask({
@@ -195,12 +249,17 @@ async function resolveCreationTarget(taskInput) {
     requiredQuantity: quantity,
   });
 
+  const stockQty = stockProbe ? Number(stockProbe.quantity || 0) : 0;
+
   if (stockProbe?.available) {
     return {
       ...taskInput,
       status: 'TODO',
       stockImportId: taskInput.stockImportId || stockProbe.stockImportId,
       autoReason: 'stock_available',
+      isKnownProduct: true,
+      stockAvailableAtCreation: stockQty,
+      stockDeficit: 0,
     };
   }
 
@@ -209,6 +268,9 @@ async function resolveCreationTarget(taskInput) {
     status: 'WAITING_STOCK',
     stockImportId: taskInput.stockImportId || stockProbe?.stockImportId || null,
     autoReason: stockProbe ? 'stock_insufficient' : 'stock_missing',
+    isKnownProduct: Boolean(stockProbe),
+    stockAvailableAtCreation: stockQty,
+    stockDeficit: Math.max(quantity - stockQty, 0),
   };
 }
 
@@ -394,11 +456,17 @@ const taskController = {
         workspaceId = workspace.id;
       }
 
+      const urgentDatePending = isUrgentDate(resolved.dueDate) || isUrgentDate(resolved.plannedDate);
+
       const task = await TaskModel.create({
         ...resolved,
         createdBy: req.user.id,
         workspaceId,
         status: resolved.status,
+        isKnownProduct: resolved.isKnownProduct,
+        stockAvailableAtCreation: resolved.stockAvailableAtCreation,
+        stockDeficit: resolved.stockDeficit,
+        urgentDatePending,
         proposedDeliveryDate: resolved.plannedDate || null,
         proposedByRole: 'commercial',
         dateNegotiationStatus: resolved.plannedDate ? 'PENDING_PLANNER_REVIEW' : null,
@@ -412,6 +480,9 @@ const taskController = {
         message: 'Tâche créée par le commercial',
       });
       await notifyTaskCreation([task], req.user);
+      if (task.item_reference) {
+        await recalculateStockConflictsForArticle(task.item_reference);
+      }
       res.status(201).json({
         task,
         autoStatus: resolved.status,
@@ -443,6 +514,10 @@ const taskController = {
         if (!grouped.has(workspaceKey)) grouped.set(workspaceKey, []);
         grouped.get(workspaceKey).push({
           ...resolved,
+          isKnownProduct: resolved.isKnownProduct,
+          stockAvailableAtCreation: resolved.stockAvailableAtCreation,
+          stockDeficit: resolved.stockDeficit,
+          urgentDatePending: isUrgentDate(resolved.dueDate) || isUrgentDate(resolved.plannedDate),
           proposedDeliveryDate: resolved.plannedDate || null,
           proposedByRole: 'commercial',
           dateNegotiationStatus: resolved.plannedDate ? 'PENDING_PLANNER_REVIEW' : null,
@@ -491,14 +566,8 @@ const taskController = {
         }))
       );
       await notifyTaskCreation(createdTasks, req.user);
-
-      // Do not mark as used immediately, let the deduction handle it when DONE
-      // const stockImportIds = createdTasks
-      //   .map((task) => task.stock_import_id)
-      //   .filter(Boolean);
-      // if (stockImportIds.length > 0) {
-      //   await StockImportModel.markManyAsUsed(stockImportIds);
-      // }
+      const uniqueRefs = [...new Set(createdTasks.map((t) => t.item_reference).filter(Boolean))];
+      await Promise.all(uniqueRefs.map((ref) => recalculateStockConflictsForArticle(ref)));
 
       const createdTodoCount = createdTasks.filter((task) => task.status === 'TODO').length;
       const createdWaitingCount = createdTasks.filter((task) => task.status === 'WAITING_STOCK').length;
@@ -647,6 +716,10 @@ const taskController = {
           ensurePlannedDateForWaitingStock(resolved);
           resolvedTasks.push({
             ...resolved,
+            isKnownProduct: resolved.isKnownProduct,
+            stockAvailableAtCreation: resolved.stockAvailableAtCreation,
+            stockDeficit: resolved.stockDeficit,
+            urgentDatePending: isUrgentDate(resolved.dueDate) || isUrgentDate(resolved.plannedDate),
             proposedDeliveryDate: resolved.plannedDate || null,
             proposedByRole: 'commercial',
             dateNegotiationStatus: resolved.plannedDate ? 'PENDING_PLANNER_REVIEW' : null,
@@ -692,6 +765,8 @@ const taskController = {
       }
 
       await notifyTaskCreation(createdTasks, req.user);
+      const importUniqueRefs = [...new Set(createdTasks.map((t) => t.item_reference).filter(Boolean))];
+      await Promise.all(importUniqueRefs.map((ref) => recalculateStockConflictsForArticle(ref)));
       return res.status(201).json({
         imported: createdTasks.length,
         skipped,
@@ -782,8 +857,10 @@ const taskController = {
       // Handle stock quantities based on status changes
       if (previousTask.status !== 'DONE' && task.status === 'DONE') {
         await deductStockForTask(task);
+        if (task.item_reference) await recalculateStockConflictsForArticle(task.item_reference);
       } else if (previousTask.status === 'DONE' && task.status !== 'DONE') {
         await addStockForTask(task);
+        if (task.item_reference) await recalculateStockConflictsForArticle(task.item_reference);
       }
 
       await TaskHistoryModel.log({
@@ -934,18 +1011,79 @@ const taskController = {
   async delete(req, res) {
     try {
       const taskToDelete = await TaskModel.getById(req.params.id);
-      
+
       const task = await TaskModel.delete(req.params.id);
       if (!task) return res.status(404).json({ error: 'Task not found' });
 
-      // If we delete a task that was DONE, restore the stock
       if (taskToDelete && taskToDelete.status === 'DONE') {
         await addStockForTask(taskToDelete);
+      }
+      if (taskToDelete?.item_reference) {
+        await recalculateStockConflictsForArticle(taskToDelete.item_reference);
       }
 
       res.json({ message: 'Task deleted' });
     } catch (err) {
       res.status(500).json({ error: 'Server error' });
+    }
+  },
+
+  async confirmPredictive(req, res) {
+    try {
+      const task = await TaskModel.getById(req.params.id);
+      if (!task) return res.status(404).json({ error: 'Tache introuvable' });
+      if (task.task_type !== 'PREDICTIVE') {
+        return res.status(400).json({ error: 'Cette tache n est pas de type previsionnel' });
+      }
+
+      const resolved = await resolveCreationTarget({
+        taskType: 'PRODUCTION_ORDER',
+        itemReference: task.item_reference,
+        quantity: task.quantity,
+        stockImportId: task.stock_import_id,
+        plannedDate: task.planned_date,
+        dueDate: task.due_date,
+      });
+
+      const urgentDatePending = isUrgentDate(task.due_date) || isUrgentDate(task.planned_date);
+
+      await TaskModel.update(task.id, {
+        taskType: 'PRODUCTION_ORDER',
+        isKnownProduct: resolved.isKnownProduct,
+        stockAvailableAtCreation: resolved.stockAvailableAtCreation,
+        stockDeficit: resolved.stockDeficit,
+        urgentDatePending,
+      });
+
+      // Si le stock est insuffisant, basculer en WAITING_STOCK via la promotion système
+      if (resolved.status === 'WAITING_STOCK') {
+        await TaskModel.updateStatus(
+          task.id,
+          'WAITING_STOCK',
+          null,
+          req.user.id,
+          req.user.role,
+          { systemAutoPromotion: true }
+        );
+      }
+
+      await TaskHistoryModel.log({
+        taskId: task.id,
+        actorId: req.user.id,
+        actionType: 'predictive_confirmed',
+        message: 'Tache previsionnelle confirmee en commande de production',
+      });
+
+      if (task.item_reference) {
+        await recalculateStockConflictsForArticle(task.item_reference);
+      }
+
+      const updated = await TaskModel.getById(task.id);
+      return res.json(updated);
+    } catch (err) {
+      if (isHttpError(err)) return res.status(err.status).json({ error: err.message });
+      console.error(err);
+      return res.status(500).json({ error: 'Server error' });
     }
   },
 
@@ -978,6 +1116,220 @@ const taskController = {
       }
       console.error(err);
       res.status(500).json({ error: 'Server error' });
+    }
+  },
+
+  async resolveConflict(req, res) {
+    try {
+      const taskId = parseInt(req.params.id, 10);
+      if (!Number.isInteger(taskId) || taskId < 1) {
+        return res.status(400).json({ error: 'ID tâche invalide' });
+      }
+
+      const { strategy, negotiatedDate, splitQuantity, deferredTasks } = req.body;
+
+      if (!strategy || !['priority', 'date', 'negotiate', 'split'].includes(strategy)) {
+        return res.status(400).json({ error: 'Stratégie invalide (priority|date|negotiate|split)' });
+      }
+
+      const task = await TaskModel.getById(taskId);
+      if (!task) {
+        return res.status(404).json({ error: 'Tâche non trouvée' });
+      }
+
+      if (!task.has_stock_conflict) {
+        return res.status(400).json({ error: 'Cette tâche n\'a pas de conflit stock' });
+      }
+
+      const workspaceId = task.workspace_id;
+      if (!canAccessTask(req.user, { workspace_id: workspaceId })) {
+        return res.status(403).json({ error: 'Accès refusé' });
+      }
+
+      let affectedTasks = [];
+      let resolutionMessage = '';
+
+      if (strategy === 'priority') {
+        // Order conflicting tasks by priority, mark lower priority as BLOCKED
+        const allConflicted = await TaskModel.getAll({
+          status: 'WAITING_STOCK,TODO,IN_PROGRESS',
+          workspaceId
+        });
+        const conflicted = allConflicted.filter(
+          t => t.item_reference && t.item_reference.toUpperCase() === task.item_reference.toUpperCase() &&
+               t.id !== taskId && t.status !== 'DONE'
+        );
+
+        const priorityOrder = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+        conflicted.sort((a, b) => (priorityOrder[a.priority] || 999) - (priorityOrder[b.priority] || 999));
+
+        // Block lower priority tasks
+        for (const t of conflicted) {
+          if ((priorityOrder[t.priority] || 999) > (priorityOrder[task.priority] || 999)) {
+            await TaskModel.updateStatus(t.id, 'BLOCKED', 'Conflit stock: priorité inférieure', req.user.id, req.user.role);
+            affectedTasks.push(t.id);
+          }
+        }
+        resolutionMessage = `Conflit résolu par priorité. ${affectedTasks.length} tâche(s) inférieure(s) bloquée(s)`;
+      }
+
+      else if (strategy === 'date') {
+        // Defer later tasks based on due_date
+        const allConflicted = await TaskModel.getAll({
+          status: 'WAITING_STOCK,TODO,IN_PROGRESS',
+          workspaceId
+        });
+        const conflicted = allConflicted.filter(
+          t => t.item_reference && t.item_reference.toUpperCase() === task.item_reference.toUpperCase() &&
+               t.id !== taskId && t.status !== 'DONE'
+        );
+
+        conflicted.sort((a, b) => {
+          const dateA = a.due_date || a.planned_date || '9999-12-31';
+          const dateB = b.due_date || b.planned_date || '9999-12-31';
+          return dateA.localeCompare(dateB);
+        });
+
+        const currentDueDate = task.due_date || task.planned_date;
+        for (const t of conflicted) {
+          const tDueDate = t.due_date || t.planned_date;
+          if (tDueDate && currentDueDate && tDueDate > currentDueDate) {
+            await TaskModel.updateStatus(t.id, 'WAITING_STOCK', 'Conflit stock: date reportée', req.user.id, req.user.role);
+            affectedTasks.push(t.id);
+          }
+        }
+        resolutionMessage = `Conflit résolu par date. ${affectedTasks.length} tâche(s) reportée(s)`;
+      }
+
+      else if (strategy === 'negotiate') {
+        if (!negotiatedDate) {
+          return res.status(400).json({ error: 'negotiatedDate requis pour stratégie negotiate' });
+        }
+        // Propose new delivery date
+        await TaskModel.update(taskId, {
+          proposedDeliveryDate: negotiatedDate,
+          proposedByRole: req.user.role,
+          dateNegotiationStatus: 'pending',
+          dateNegotiationComment: 'Nouvelle date proposée suite conflit stock',
+          dateNegotiationUpdatedAt: new Date().toISOString(),
+        });
+        resolutionMessage = `Nouvelle date proposée: ${negotiatedDate}. En attente confirmation client`;
+      }
+
+      else if (strategy === 'split') {
+        if (!splitQuantity || splitQuantity <= 0 || splitQuantity >= task.quantity) {
+          return res.status(400).json({ error: 'splitQuantity invalide' });
+        }
+        // Reduce quantity on current task, log as split
+        const oldQuantity = task.quantity;
+        await TaskModel.update(taskId, { quantity: splitQuantity });
+        resolutionMessage = `Quantité réduite: ${oldQuantity} → ${splitQuantity}. Résidu à traiter séparément`;
+      }
+
+      // Mark conflict as resolved
+      await TaskModel.updateConflictFlag(taskId, false);
+
+      // Log to history
+      await TaskHistoryModel.log({
+        taskId,
+        actorId: req.user.id,
+        actionType: 'conflict_resolved',
+        fieldName: 'stock_conflict',
+        message: resolutionMessage,
+      });
+
+      // Return updated task
+      const updatedTask = await TaskModel.getById(taskId);
+      res.json({
+        task: updatedTask,
+        strategy,
+        affectedTasks,
+        message: resolutionMessage,
+      });
+    } catch (err) {
+      if (isHttpError(err)) {
+        return res.status(err.status).json({ error: err.message });
+      }
+      console.error('Conflict resolution error:', err);
+      res.status(500).json({ error: 'Erreur lors de la résolution du conflit' });
+    }
+  },
+
+  async convertTaskType(req, res) {
+    try {
+      const taskId = parseInt(req.params.id, 10);
+      if (!Number.isInteger(taskId) || taskId < 1) {
+        return res.status(400).json({ error: 'ID tâche invalide' });
+      }
+
+      const { newType } = req.body;
+      if (!newType || !['PREDICTIVE', 'STANDARD'].includes(newType)) {
+        return res.status(400).json({ error: 'Type invalide (PREDICTIVE|STANDARD)' });
+      }
+
+      const task = await TaskModel.getById(taskId);
+      if (!task) {
+        return res.status(404).json({ error: 'Tâche non trouvée' });
+      }
+
+      if (task.task_type === newType) {
+        return res.status(400).json({ error: `Tâche est déjà du type ${newType}` });
+      }
+
+      const workspaceId = task.workspace_id;
+      if (!canAccessTask(req.user, { workspace_id: workspaceId })) {
+        return res.status(403).json({ error: 'Accès refusé' });
+      }
+
+      const oldType = task.task_type;
+      let newStatus = task.status;
+      let conversionMessage = '';
+
+      if (newType === 'STANDARD' && oldType === 'PREDICTIVE') {
+        conversionMessage = `Tâche convertie de PREDICTIVE à STANDARD`;
+
+        if (task.item_reference) {
+          const hasStock = await StockImportModel.hasAvailableQuantity({
+            itemReference: task.item_reference,
+            requiredQuantity: task.quantity || 1,
+          });
+
+          if (!hasStock && task.status === 'TODO') {
+            newStatus = 'WAITING_STOCK';
+            conversionMessage += ` - Statut changé à WAITING_STOCK (stock insuffisant)`;
+          }
+        }
+      } else if (newType === 'PREDICTIVE' && oldType === 'STANDARD') {
+        conversionMessage = `Tâche convertie de STANDARD à PREDICTIVE`;
+      }
+
+      await TaskModel.update(taskId, { task_type: newType, status: newStatus });
+
+      await TaskHistoryModel.log({
+        taskId,
+        actorId: req.user.id,
+        actionType: 'type_converted',
+        fieldName: 'task_type',
+        oldValue: oldType,
+        newValue: newType,
+        message: conversionMessage,
+      });
+
+      if (newStatus !== task.status && task.item_reference) {
+        await recalculateStockConflictsForArticle(task.item_reference);
+      }
+
+      const updatedTask = await TaskModel.getById(taskId);
+      res.json({
+        task: updatedTask,
+        message: conversionMessage,
+      });
+    } catch (err) {
+      if (isHttpError(err)) {
+        return res.status(err.status).json({ error: err.message });
+      }
+      console.error('Type conversion error:', err);
+      res.status(500).json({ error: 'Erreur lors de la conversion de type' });
     }
   }
 };

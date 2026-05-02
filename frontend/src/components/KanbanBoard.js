@@ -16,7 +16,24 @@ const COLUMNS = TASK_STATUS_ORDER.map((status) => ({
 
 const DRAG_MIME = 'application/x-suivi-task';
 
+function getDaysUntilDate(dateString) {
+  if (!dateString) return 9999;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((new Date(dateString) - today) / 86400000);
+}
+
 function sortInColumn(a, b) {
+  // Dans la colonne WAITING_STOCK, les tâches à J-2 ou J-1 remontent en tête
+  if (a.status === 'WAITING_STOCK' && b.status === 'WAITING_STOCK') {
+    const da = getDaysUntilDate(a.planned_date);
+    const db = getDaysUntilDate(b.planned_date);
+    const aAlert = da <= 2;
+    const bAlert = db <= 2;
+    if (aAlert !== bAlert) return aAlert ? -1 : 1;
+    if (da !== db) return da - db;
+  }
+
   const rank = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
   const ra = rank[a.priority] ?? 9;
   const rb = rank[b.priority] ?? 9;
@@ -64,8 +81,11 @@ function applyMove(taskList, draggedId, targetStatus, insertBeforeId) {
   return TASK_STATUS_ORDER.flatMap((status) => byColumn[status] || []);
 }
 
-function taskMatchesFilters(task, filterQuery, filterPriority) {
+function taskMatchesFilters(task, filterQuery, filterPriority, filterHasConflict, filterCriticalDeficit, filterPredictiveOnly) {
   if (filterPriority && task.priority !== filterPriority) return false;
+  if (filterHasConflict && !task.has_stock_conflict) return false;
+  if (filterCriticalDeficit && (!task.stock_deficit || task.stock_deficit <= 0)) return false;
+  if (filterPredictiveOnly && task.task_type !== 'PREDICTIVE') return false;
 
   const query = (filterQuery || '').trim().toLowerCase();
   if (!query) return true;
@@ -93,6 +113,9 @@ const KanbanBoard = ({
   workspaceId,
   filterQuery = '',
   filterPriority = '',
+  filterHasConflict = false,
+  filterCriticalDeficit = false,
+  filterPredictiveOnly = false,
   onStatsRefresh,
 }) => {
   const { canChangeStatus, canCreateTask, isCommercial, isSuperAdmin } = useAuth();
@@ -136,17 +159,17 @@ const KanbanBoard = ({
 
   const isAllWorkspaces = workspaceId === 'all';
   const deferredQuery = useDeferredValue(filterQuery);
-  const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority);
+  const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filterHasConflict || filterCriticalDeficit || filterPredictiveOnly);
 
   const visibleTaskIds = useMemo(() => {
     const ids = new Set();
     for (const task of tasks) {
-      if (taskMatchesFilters(task, deferredQuery, filterPriority)) {
+      if (taskMatchesFilters(task, deferredQuery, filterPriority, filterHasConflict, filterCriticalDeficit, filterPredictiveOnly)) {
         ids.add(task.id);
       }
     }
     return ids;
-  }, [tasks, deferredQuery, filterPriority]);
+  }, [tasks, deferredQuery, filterPriority, filterHasConflict, filterCriticalDeficit, filterPredictiveOnly]);
 
   const getTasksByStatus = useCallback(
     (status) => tasks.filter((task) => task.status === status).sort(sortInColumn).filter((task) => visibleTaskIds.has(task.id)),
@@ -299,6 +322,15 @@ const KanbanBoard = ({
     }
   };
 
+  const handleConfirmPredictive = async (taskId) => {
+    try {
+      await taskAPI.confirmPredictive(taskId);
+      await refreshBoardAndPanels();
+    } catch (err) {
+      setErrorShort(err.response?.data?.error || 'Impossible de confirmer la commande prévisionnelle.');
+    }
+  };
+
   const handleDeleteTask = async (taskId) => {
     if (!window.confirm('Voulez-vous vraiment supprimer cette commande ?')) return;
     try {
@@ -443,7 +475,11 @@ const KanbanBoard = ({
                       onDrop={(event) => handleDropOnTask(event, task)}
                       style={{ outline: dragOverTaskId === task.id ? `2px solid ${column.color}` : 'none' }}
                     >
-                      <TaskCard task={task} onOpen={(currentTask) => handleSelectTask(currentTask.id)} isDragging={false} />
+                      <TaskCard
+                        task={task}
+                        onOpen={(currentTask) => handleSelectTask(currentTask.id)}
+                        isDragging={false}
+                      />
                     </div>
                   ))
                 )}
@@ -496,12 +532,15 @@ const KanbanBoard = ({
         refreshSignal={detailRefreshSignal}
         canManage={canChangeStatus}
         canEdit={canChangeStatus || canCreateTask || isSuperAdmin}
+        canConfirmPredictive={canCreateTask || canChangeStatus}
         onClose={() => handleSelectTask(null)}
         onEditTask={(task) => {
+          handleSelectTask(null);
           setEditingTask(task);
           setShowTaskModal(true);
         }}
         onDeleteTask={handleDeleteTask}
+        onConfirmPredictive={handleConfirmPredictive}
         onTaskUpdated={refreshBoardAndPanels}
       />
     </div>

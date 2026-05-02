@@ -30,6 +30,12 @@
   margin-bottom: 0.55rem;
 }
 
+.task-card__top-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .task-card__meta {
   display: flex;
   flex-wrap: wrap;
@@ -251,3 +257,77 @@
   border: 2px solid #fff;
   box-shadow: 0 0 0 1px #dbe4ef;
 }
+
+/* ── Urgence J-2 / J-1 / Dépassé ── */
+.task-card--alert-j2 {
+  box-shadow: 0 0 0 2px #fde68a, 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+.task-card--alert-j1 {
+  box-shadow: 0 0 0 2px #fb923c, 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+.task-card--overdue {
+  box-shadow: 0 0 0 2px #ef4444, 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+.task-card__urgency-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.63rem;
+  font-weight: 700;
+  padding: 0.22rem 0.4rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.task-card__urgency-chip--j2 {
+  background: #fef3c7;
+  color: #92400e;
+}
+.task-card__urgency-chip--j1 {
+  background: #fed7aa;
+  color: #9a3412;
+}
+.task-card__urgency-chip--overdue {
+  background: #fecaca;
+  color: #b91c1c;
+}
+
+
+/* ── Conflit de stock ── */
+.task-card__conflict {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.69rem;
+  font-weight: 700;
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  padding: 0.22rem 0.5rem;
+  margin-bottom: 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Badge date urgente ── */
+.task-card__date-check--warn {
+  background: #fffbeb;
+  color: #92400e;
+}
+.task-card__date-check--warn .task-card__date-check-icon {
+  background: #f59e0b;
+  color: #fff;
+}
+
+/* ── Badge type prévisionnel ── */
+.task-card__type-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.16rem 0.45rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+

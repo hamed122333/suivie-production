@@ -47,3 +47,11 @@ export function getTaskKey(task) {
   }
   return `SP-${task.id}`;
 }
+
+export const TASK_TYPE_CONFIG = {
+  PRODUCTION_ORDER: { label: 'Commande', badge: null },
+  PREDICTIVE: { label: 'Prévisionnel', badge: 'Prévisionnel', color: '#0369a1', bg: '#e0f2fe' },
+};
+
+// Seuil (jours) à partir duquel une date de livraison est considérée urgente dans la colonne Hors stock
+export const WAITING_STOCK_ALERT_DAYS = 2;

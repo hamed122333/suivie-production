@@ -29,6 +29,15 @@ router.post('/', authenticate, requireCommercial, taskController.create);
 router.put('/:id', authenticate, requireRoles(['planner', 'commercial']), taskController.update);
 router.put('/:id/date-negotiation', authenticate, requireRoles(['planner', 'commercial']), taskController.applyDateNegotiation);
 
+// Confirmer une tâche prédictive : commercial et planner
+router.put('/:id/confirm-predictive', authenticate, requireRoles(['planner', 'commercial']), taskController.confirmPredictive);
+
+// Résoudre conflit stock : planificateur uniquement
+router.post('/:id/resolve-conflict', authenticate, requirePlanner, taskController.resolveConflict);
+
+// Convertir type de tâche (PREDICTIVE <-> STANDARD) : planificateur uniquement
+router.post('/:id/convert-type', authenticate, requirePlanner, taskController.convertTaskType);
+
 // Changer le statut : planificateur uniquement
 router.put('/:id/status', authenticate, requirePlanner, taskController.updateStatus);
 

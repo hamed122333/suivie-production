@@ -371,6 +371,94 @@ const stockImportController = {
       console.error('Manual import error:', err);
       res.status(500).json({ error: "Erreur lors de l'ajout manuel: " + err.message });
     }
+  },
+
+  async getActiveTasks(req, res) {
+    try {
+      const stockId = parseInt(req.params.id, 10);
+      if (!Number.isInteger(stockId) || stockId < 1) {
+        return res.status(400).json({ error: 'ID stock invalide' });
+      }
+
+      const stock = await StockImportModel.findById?.(stockId);
+      if (!stock) {
+        return res.status(404).json({ error: 'Article non trouvé' });
+      }
+
+      const tasks = await TaskModel.getAll({});
+      const activeTasks = tasks.filter(
+        t => t.item_reference && t.item_reference.toUpperCase() === stock.article.toUpperCase() &&
+             !['DONE'].includes(t.status)
+      );
+
+      res.json({
+        stock,
+        activeTasks: activeTasks.map(t => ({
+          id: t.id,
+          title: t.title,
+          client_name: t.client_name,
+          status: t.status,
+          priority: t.priority,
+          quantity: t.quantity,
+          quantity_unit: t.quantity_unit,
+          has_stock_conflict: t.has_stock_conflict,
+          assigned_to_name: t.assigned_to_name,
+        })),
+      });
+    } catch (err) {
+      console.error('Get active tasks error:', err);
+      res.status(500).json({ error: 'Erreur lors de la récupération des tâches' });
+    }
+  },
+
+  async getConflictsSummary(req, res) {
+    try {
+      const tasks = await TaskModel.getAll({});
+      const stocks = await StockImportModel.getAll();
+
+      const conflictsByArticle = {};
+
+      for (const task of tasks) {
+        if (!task.item_reference || task.status === 'DONE' || task.task_type === 'PREDICTIVE') continue;
+
+        const article = task.item_reference.toUpperCase();
+        if (!conflictsByArticle[article]) {
+          conflictsByArticle[article] = {
+            article: task.item_reference,
+            totalDemand: 0,
+            availableStock: 0,
+            taskCount: 0,
+            tasks: [],
+            hasConflict: false,
+          };
+        }
+
+        conflictsByArticle[article].totalDemand += Number(task.quantity || 0);
+        conflictsByArticle[article].taskCount += 1;
+        conflictsByArticle[article].tasks.push({
+          id: task.id,
+          title: task.title,
+          client_name: task.client_name,
+          quantity: task.quantity,
+          priority: task.priority,
+          has_stock_conflict: task.has_stock_conflict,
+        });
+      }
+
+      for (const article of Object.keys(conflictsByArticle)) {
+        const stock = stocks.find(s => s.article.toUpperCase() === article);
+        conflictsByArticle[article].availableStock = stock ? Number(stock.quantity || 0) : 0;
+        conflictsByArticle[article].hasConflict =
+          conflictsByArticle[article].totalDemand > conflictsByArticle[article].availableStock &&
+          conflictsByArticle[article].taskCount >= 2;
+      }
+
+      const summary = Object.values(conflictsByArticle).filter(c => c.hasConflict);
+      res.json({ conflicts: summary, total: summary.length });
+    } catch (err) {
+      console.error('Get conflicts summary error:', err);
+      res.status(500).json({ error: 'Erreur lors de la récupération du résumé conflits' });
+    }
   }
 };
 

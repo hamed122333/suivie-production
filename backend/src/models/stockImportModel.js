@@ -2,6 +2,14 @@ const pool = require('../config/db');
 const { isValidArticleCode, normalizeArticleCode } = require('../utils/articleCode');
 
 const StockImportModel = {
+  async findById(id) {
+    const result = await pool.query(
+      `SELECT * FROM stock_import WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+    return result.rows[0] || null;
+  },
+
   async findByArticle(article) {
     const normalizedArticle = normalizeArticleCode(article);
     if (!normalizedArticle) return null;
@@ -74,6 +82,7 @@ const StockImportModel = {
       return {
         stockImportId: row.id,
         article: row.article,
+        quantity: Number(row.quantity || 0),
         available: Number(row.quantity || 0) >= qty,
       };
     }
@@ -94,8 +103,21 @@ const StockImportModel = {
     return {
       stockImportId: row.id,
       article: row.article,
+      quantity: Number(row.quantity || 0),
       available: Number(row.quantity || 0) >= qty,
     };
+  },
+
+  async getStockQuantity(itemReference) {
+    if (!itemReference) return 0;
+    const result = await pool.query(
+      `SELECT COALESCE(quantity, 0) AS quantity
+       FROM stock_import
+       WHERE UPPER(article) = UPPER($1)
+       ORDER BY id DESC LIMIT 1`,
+      [itemReference]
+    );
+    return Number(result.rows[0]?.quantity || 0);
   },
 
   async hasAvailableQuantity({ stockImportId, itemReference, requiredQuantity }) {

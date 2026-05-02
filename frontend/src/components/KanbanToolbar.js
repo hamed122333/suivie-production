@@ -12,6 +12,12 @@ const KanbanToolbar = ({
   onSearchChange,
   priority,
   onPriorityChange,
+  hasConflict,
+  onHasConflictChange,
+  criticalDeficit,
+  onCriticalDeficitChange,
+  predictiveOnly,
+  onPredictiveOnlyChange,
   stats,
   onRefresh,
   onExport,
@@ -19,7 +25,7 @@ const KanbanToolbar = ({
 }) => {
   const importInputRef = useRef(null);
   const counts = stats?.counts || {};
-  const activeFilters = [search.trim(), priority].filter(Boolean).length;
+  const activeFilters = [search.trim(), priority, hasConflict, criticalDeficit, predictiveOnly].filter(Boolean).length;
 
   return (
     <div className="kanban-toolbar">
@@ -70,8 +76,43 @@ const KanbanToolbar = ({
           </select>
         </label>
 
+        <div className="kanban-toolbar__checkboxes">
+          <label className="kanban-toolbar__checkbox">
+            <input
+              type="checkbox"
+              checked={hasConflict}
+              onChange={(e) => onHasConflictChange(e.target.checked)}
+            />
+            <span title="Afficher uniquement les tâches avec conflit de stock">⚡ Conflits</span>
+          </label>
+
+          <label className="kanban-toolbar__checkbox">
+            <input
+              type="checkbox"
+              checked={criticalDeficit}
+              onChange={(e) => onCriticalDeficitChange(e.target.checked)}
+            />
+            <span title="Afficher uniquement les tâches avec stock insuffisant">⚠ Déficit</span>
+          </label>
+
+          <label className="kanban-toolbar__checkbox">
+            <input
+              type="checkbox"
+              checked={predictiveOnly}
+              onChange={(e) => onPredictiveOnlyChange(e.target.checked)}
+            />
+            <span title="Afficher uniquement les tâches prévisionnelles">📊 Prévisionnelles</span>
+          </label>
+        </div>
+
         {activeFilters > 0 && (
-          <button type="button" className="kanban-toolbar__reset" onClick={() => { onSearchChange(''); onPriorityChange(''); }}>
+          <button type="button" className="kanban-toolbar__reset" onClick={() => {
+            onSearchChange('');
+            onPriorityChange('');
+            onHasConflictChange(false);
+            onCriticalDeficitChange(false);
+            onPredictiveOnlyChange(false);
+          }}>
             Effacer
           </button>
         )}
