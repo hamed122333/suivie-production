@@ -81,9 +81,8 @@ function applyMove(taskList, draggedId, targetStatus, insertBeforeId) {
   return TASK_STATUS_ORDER.flatMap((status) => byColumn[status] || []);
 }
 
-function taskMatchesFilters(task, filterQuery, filterPriority, filterHasConflict, filterCriticalDeficit, filterPredictiveOnly) {
+function taskMatchesFilters(task, filterQuery, filterPriority, filterCriticalDeficit, filterPredictiveOnly) {
   if (filterPriority && task.priority !== filterPriority) return false;
-  if (filterHasConflict && !task.has_stock_conflict) return false;
   if (filterCriticalDeficit && (!task.stock_deficit || task.stock_deficit <= 0)) return false;
   if (filterPredictiveOnly && task.task_type !== 'PREDICTIVE') return false;
 
@@ -113,7 +112,6 @@ const KanbanBoard = ({
   workspaceId,
   filterQuery = '',
   filterPriority = '',
-  filterHasConflict = false,
   filterCriticalDeficit = false,
   filterPredictiveOnly = false,
   onStatsRefresh,
@@ -159,17 +157,17 @@ const KanbanBoard = ({
 
   const isAllWorkspaces = workspaceId === 'all';
   const deferredQuery = useDeferredValue(filterQuery);
-  const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filterHasConflict || filterCriticalDeficit || filterPredictiveOnly);
+  const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filterCriticalDeficit || filterPredictiveOnly);
 
   const visibleTaskIds = useMemo(() => {
     const ids = new Set();
     for (const task of tasks) {
-      if (taskMatchesFilters(task, deferredQuery, filterPriority, filterHasConflict, filterCriticalDeficit, filterPredictiveOnly)) {
+      if (taskMatchesFilters(task, deferredQuery, filterPriority, filterCriticalDeficit, filterPredictiveOnly)) {
         ids.add(task.id);
       }
     }
     return ids;
-  }, [tasks, deferredQuery, filterPriority, filterHasConflict, filterCriticalDeficit, filterPredictiveOnly]);
+  }, [tasks, deferredQuery, filterPriority, filterCriticalDeficit, filterPredictiveOnly]);
 
   const getTasksByStatus = useCallback(
     (status) => tasks.filter((task) => task.status === status).sort(sortInColumn).filter((task) => visibleTaskIds.has(task.id)),

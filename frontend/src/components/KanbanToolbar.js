@@ -12,8 +12,6 @@ const KanbanToolbar = ({
   onSearchChange,
   priority,
   onPriorityChange,
-  hasConflict,
-  onHasConflictChange,
   criticalDeficit,
   onCriticalDeficitChange,
   predictiveOnly,
@@ -25,7 +23,7 @@ const KanbanToolbar = ({
 }) => {
   const importInputRef = useRef(null);
   const counts = stats?.counts || {};
-  const activeFilters = [search.trim(), priority, hasConflict, criticalDeficit, predictiveOnly].filter(Boolean).length;
+  const activeFilters = [search.trim(), priority, criticalDeficit, predictiveOnly].filter(Boolean).length;
 
   return (
     <div className="kanban-toolbar">
@@ -77,15 +75,6 @@ const KanbanToolbar = ({
         </label>
 
         <div className="kanban-toolbar__checkboxes">
-          <label className="kanban-toolbar__checkbox">
-            <input
-              type="checkbox"
-              checked={hasConflict}
-              onChange={(e) => onHasConflictChange(e.target.checked)}
-            />
-            <span title="Afficher uniquement les tâches avec conflit de stock">⚡ Conflits</span>
-          </label>
-
           <label className="kanban-toolbar__checkbox">
             <input
               type="checkbox"

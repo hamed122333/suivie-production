@@ -292,7 +292,7 @@ const TaskDetailsPanel = ({
               </div>
             </section>
 
-            {(task.stock_available_at_creation != null || task.stock_deficit != null || task.has_stock_conflict) && (
+            {(task.stock_available_at_creation != null || task.stock_deficit != null) && (
               <section className="task-detail__section">
                 <h4 className="task-panel-subtitle">Stock & Approvisionnement</h4>
                 <div className="task-details-grid">

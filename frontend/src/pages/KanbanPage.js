@@ -14,7 +14,6 @@ const KanbanPage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
-  const [hasConflictFilter, setHasConflictFilter] = useState(false);
   const [criticalDeficitFilter, setCriticalDeficitFilter] = useState(false);
   const [predictiveOnlyFilter, setPredictiveOnlyFilter] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -148,8 +147,6 @@ const KanbanPage = () => {
         onSearchChange={handleSearchChange}
         priority={priorityFilter}
         onPriorityChange={setPriorityFilter}
-        hasConflict={hasConflictFilter}
-        onHasConflictChange={setHasConflictFilter}
         criticalDeficit={criticalDeficitFilter}
         onCriticalDeficitChange={setCriticalDeficitFilter}
         predictiveOnly={predictiveOnlyFilter}
@@ -167,7 +164,6 @@ const KanbanPage = () => {
         workspaceId={workspaceId}
         filterQuery={search}
         filterPriority={priorityFilter}
-        filterHasConflict={hasConflictFilter}
         filterCriticalDeficit={criticalDeficitFilter}
         filterPredictiveOnly={predictiveOnlyFilter}
         onTasksChange={() => fetchTasks(workspaceId)}
