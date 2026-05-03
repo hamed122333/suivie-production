@@ -1,5 +1,5 @@
-const ALLOWED_PREFIXES = ['CI', 'CV', 'DI', 'DV', 'PL'];
-const ARTICLE_CODE_REGEX = /^(CI|CV|DI|DV|PL)[A-Z0-9-]+$/;
+const ALLOWED_PREFIXES = ['CI', 'CV', 'DI', 'DV', 'FC', 'FD', 'PL'];
+const ARTICLE_CODE_REGEX = /^(CI|CV|DI|DV|FC|FD|PL)[A-Z0-9-]+$/;
 
 function normalizeArticleCode(value) {
   return `${value || ''}`.trim().toUpperCase();

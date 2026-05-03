@@ -185,9 +185,19 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
             </span>
           )}
         </div>
-        <span className="task-card__avatar" title={task.created_by_name || 'Non assigné'}>
-          {getInitials(task.created_by_name)}
-        </span>
+        <div className="task-card__avatars">
+          {task.planned_by_name && task.planned_by_name !== task.created_by_name && (
+            <span
+              className="task-card__avatar task-card__avatar--planner"
+              title={`Planifié par ${task.planned_by_name}`}
+            >
+              {getInitials(task.planned_by_name)}
+            </span>
+          )}
+          <span className="task-card__avatar" title={`Créé par ${task.created_by_name || 'inconnu'}`}>
+            {getInitials(task.created_by_name)}
+          </span>
+        </div>
       </div>
     </article>
   );

@@ -283,11 +283,28 @@ const taskController = {
 
       if (statusChanges.length > 0) {
         if (TaskHistoryModel.logMany) {
-            await TaskHistoryModel.logMany(statusChanges);
+          await TaskHistoryModel.logMany(statusChanges);
         } else {
-            for (const change of statusChanges) {
-                await TaskHistoryModel.log(change);
-            }
+          for (const change of statusChanges) {
+            await TaskHistoryModel.log(change);
+          }
+        }
+
+        // Notify all commercials of status changes caused by drag & drop
+        const commercialsForReorder = await UserModel.findByRoles(['commercial']);
+        for (const beforeTask of currentTasks) {
+          const afterStatus = nextTasksMap.get(beforeTask.id);
+          if (!afterStatus || beforeTask.status === afterStatus) continue;
+          for (const commercial of commercialsForReorder) {
+            if (commercial.id === req.user.id) continue;
+            await NotificationModel.createStatusChangedNotification({
+              taskId: beforeTask.id,
+              recipientUserId: commercial.id,
+              changedByName: req.user.name,
+              oldStatusLabel: TASK_STATUS_LABELS[beforeTask.status] || beforeTask.status,
+              newStatusLabel: TASK_STATUS_LABELS[afterStatus] || afterStatus,
+            });
+          }
         }
       }
 
@@ -595,31 +612,41 @@ const taskController = {
       const groupedByWorkspace = new Map();
       let skipped = 0;
 
-      // Forward-fill context for "header" fields (Date / Piece no / Nom)
-      // to support Excel layouts where repeated order lines leave these cells empty.
+      // Forward-fill context for "header" fields (Date / Piece no / Nom / Délai demandé).
+      // Excel layout: first line of each order group fills all columns; subsequent lines
+      // for the same order (same Pièce no) leave those columns empty — only Référence
+      // and Quantité change per line.  requestedDate resets when a new Pièce no appears.
       const currentOrderContext = {
         orderDate: null,
         orderCode: null,
         clientName: null,
+        requestedDate: null,
       };
 
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
 
-        const parsedOrderDate = parseExcelDate(row.getCell(dateCol).value);
-        const parsedClientName = `${row.getCell(clientCol).value || ''}`.trim();
-        const parsedOrderCode = orderCol ? `${row.getCell(orderCol).value || ''}`.trim() : '';
+        const parsedOrderDate   = parseExcelDate(row.getCell(dateCol).value);
+        const parsedClientName  = `${row.getCell(clientCol).value || ''}`.trim();
+        const parsedOrderCode   = orderCol ? `${row.getCell(orderCol).value || ''}`.trim() : '';
+        const parsedRequestedDate = requestedDateCol ? parseExcelDate(row.getCell(requestedDateCol).value) : null;
 
-        if (parsedOrderDate) currentOrderContext.orderDate = parsedOrderDate;
-        if (parsedClientName) currentOrderContext.clientName = parsedClientName;
-        if (parsedOrderCode) currentOrderContext.orderCode = parsedOrderCode;
+        // A non-empty Pièce no signals the start of a new order group → reset delivery date.
+        if (parsedOrderCode && parsedOrderCode !== currentOrderContext.orderCode) {
+          currentOrderContext.requestedDate = null;
+        }
 
-        const orderDate = currentOrderContext.orderDate;
-        const clientName = currentOrderContext.clientName;
-        const orderCode = currentOrderContext.orderCode || null;
+        if (parsedOrderDate)     currentOrderContext.orderDate     = parsedOrderDate;
+        if (parsedClientName)    currentOrderContext.clientName    = parsedClientName;
+        if (parsedOrderCode)     currentOrderContext.orderCode     = parsedOrderCode;
+        if (parsedRequestedDate) currentOrderContext.requestedDate = parsedRequestedDate;
+
+        const orderDate     = currentOrderContext.orderDate;
+        const clientName    = currentOrderContext.clientName;
+        const orderCode     = currentOrderContext.orderCode || null;
+        const requestedDate = currentOrderContext.requestedDate;
         const itemReference = normalizeArticleCode(row.getCell(refCol).value);
-        const quantity = parseExcelQuantity(row.getCell(qtyCol).value);
-        const requestedDate = requestedDateCol ? parseExcelDate(row.getCell(requestedDateCol).value) : null;
+        const quantity      = parseExcelQuantity(row.getCell(qtyCol).value);
 
         if (!orderDate || !clientName || !itemReference || !isValidArticleCode(itemReference) || !Number.isFinite(quantity) || quantity <= 0) {
           skipped += 1;
@@ -734,8 +761,18 @@ const taskController = {
       }
 
       await notifyTaskCreation(createdTasks, req.user);
-      const importUniqueRefs = [...new Set(createdTasks.map((t) => t.item_reference).filter(Boolean))];
-      await Promise.all(importUniqueRefs.map((ref) => recalculateStockAllocation(ref, workspaceId)));
+      const seenRefWs = new Set();
+      const allocationPairs = createdTasks
+        .filter((t) => t.item_reference && t.workspace_id)
+        .reduce((acc, t) => {
+          const key = `${t.item_reference}||${t.workspace_id}`;
+          if (!seenRefWs.has(key)) {
+            seenRefWs.add(key);
+            acc.push({ ref: t.item_reference, wsId: t.workspace_id });
+          }
+          return acc;
+        }, []);
+      await Promise.all(allocationPairs.map(({ ref, wsId }) => recalculateStockAllocation(ref, wsId)));
       return res.status(201).json({
         imported: createdTasks.length,
         skipped,
@@ -800,6 +837,38 @@ const taskController = {
         await recalculateStockAllocation(task.item_reference, task.workspace_id);
       }
 
+      // Notify all commercials when a privileged user changes dates
+      if (dateChanged) {
+        const plannedChanged = payload.plannedDate && `${payload.plannedDate}`.slice(0, 10) !== `${previousTask.planned_date || ''}`.slice(0, 10);
+        const dueChanged     = payload.dueDate    && `${payload.dueDate}`.slice(0, 10)     !== `${previousTask.due_date    || ''}`.slice(0, 10);
+        if (plannedChanged || dueChanged) {
+          const commercials = await UserModel.findByRoles(['commercial']);
+          for (const commercial of commercials) {
+            if (commercial.id === req.user.id) continue;
+            if (plannedChanged) {
+              await NotificationModel.createDateChangedNotification({
+                taskId: task.id,
+                recipientUserId: commercial.id,
+                changedByName: req.user.name,
+                fieldLabel: 'date de livraison prévue',
+                oldDate: previousTask.planned_date,
+                newDate: payload.plannedDate,
+              });
+            }
+            if (dueChanged) {
+              await NotificationModel.createDateChangedNotification({
+                taskId: task.id,
+                recipientUserId: commercial.id,
+                changedByName: req.user.name,
+                fieldLabel: "date d'échéance",
+                oldDate: previousTask.due_date,
+                newDate: payload.dueDate,
+              });
+            }
+          }
+        }
+      }
+
       res.json(task);
     } catch (err) {
       if (isHttpError(err)) {
@@ -835,10 +904,10 @@ const taskController = {
       // Handle stock quantities based on status changes
       if (previousTask.status !== 'DONE' && task.status === 'DONE') {
         await deductStockForTask(task);
-        if (task.item_reference) await recalculateStockAllocation(task.item_reference, workspaceId);
+        if (task.item_reference) await recalculateStockAllocation(task.item_reference, task.workspace_id);
       } else if (previousTask.status === 'DONE' && task.status !== 'DONE') {
         await addStockForTask(task);
-        if (task.item_reference) await recalculateStockAllocation(task.item_reference, workspaceId);
+        if (task.item_reference) await recalculateStockAllocation(task.item_reference, task.workspace_id);
       }
 
       await TaskHistoryModel.log({
@@ -868,6 +937,21 @@ const taskController = {
           actionType: 'blocked',
           message: `Blocage declare: ${reasonBlocked}`,
         });
+      }
+
+      // Notify all commercials on any status transition
+      if (previousTask.status !== task.status) {
+        const commercials = await UserModel.findByRoles(['commercial']);
+        for (const commercial of commercials) {
+          if (commercial.id === req.user.id) continue;
+          await NotificationModel.createStatusChangedNotification({
+            taskId: task.id,
+            recipientUserId: commercial.id,
+            changedByName: req.user.name,
+            oldStatusLabel: TASK_STATUS_LABELS[previousTask.status] || previousTask.status,
+            newStatusLabel: TASK_STATUS_LABELS[task.status] || task.status,
+          });
+        }
       }
 
       res.json(task);
@@ -976,6 +1060,35 @@ const taskController = {
         newValue: historyNewValue,
         message: historyMessage,
       });
+
+      // Notify the other party of the negotiation
+      if (role === 'planner' || role === 'super_admin') {
+        // Planner acting → notify all commercials
+        const commercials = await UserModel.findByRoles(['commercial']);
+        for (const commercial of commercials) {
+          if (commercial.id === req.user.id) continue;
+          await NotificationModel.createDateNegotiationNotification({
+            taskId: task.id,
+            recipientUserId: commercial.id,
+            actorName: req.user.name,
+            action,
+            proposedDate: historyNewValue,
+          });
+        }
+      } else if (role === 'commercial') {
+        // Commercial acting → notify all planners
+        const planners = await UserModel.findByRoles(['planner', 'super_admin']);
+        for (const planner of planners) {
+          await NotificationModel.createDateNegotiationNotification({
+            taskId: task.id,
+            recipientUserId: planner.id,
+            actorName: req.user.name,
+            action,
+            proposedDate: historyNewValue,
+          });
+        }
+      }
+
       return res.json(updated);
     } catch (err) {
       if (isHttpError(err)) {
@@ -997,7 +1110,7 @@ const taskController = {
         await addStockForTask(taskToDelete);
       }
       if (taskToDelete?.item_reference) {
-        await recalculateStockAllocation(taskToDelete.item_reference, workspaceId);
+        await recalculateStockAllocation(taskToDelete.item_reference, taskToDelete.workspace_id);
       }
 
       res.json({ message: 'Task deleted' });
@@ -1053,7 +1166,7 @@ const taskController = {
       });
 
       if (task.item_reference) {
-        await recalculateStockAllocation(task.item_reference, workspaceId);
+        await recalculateStockAllocation(task.item_reference, task.workspace_id);
       }
 
       const updated = await TaskModel.getById(task.id);

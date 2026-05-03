@@ -24,14 +24,33 @@ const taskBaseSelect = `
   SELECT
     t.*,
     w.name AS workspace_name,
-    assigned.name AS assigned_to_name,
-    created.name AS created_by_name,
-    blocked.name AS blocked_by_name
+    assigned.name  AS assigned_to_name,
+    created.name   AS created_by_name,
+    created.role   AS created_by_role,
+    blocked.name   AS blocked_by_name,
+    (
+      SELECT u.name
+      FROM task_history th
+      JOIN users u ON u.id = th.actor_id
+      WHERE th.task_id = t.id
+        AND (th.field_name = 'plannedDate' OR th.field_name = 'dueDate')
+      ORDER BY th.created_at DESC
+      LIMIT 1
+    ) AS planned_by_name,
+    (
+      SELECT u.role
+      FROM task_history th
+      JOIN users u ON u.id = th.actor_id
+      WHERE th.task_id = t.id
+        AND (th.field_name = 'plannedDate' OR th.field_name = 'dueDate')
+      ORDER BY th.created_at DESC
+      LIMIT 1
+    ) AS planned_by_role
   FROM tasks t
   LEFT JOIN workspaces w ON w.id = t.workspace_id
   LEFT JOIN users assigned ON assigned.id = t.assigned_to
-  LEFT JOIN users created ON created.id = t.created_by
-  LEFT JOIN users blocked ON blocked.id = t.blocked_by
+  LEFT JOIN users created  ON created.id  = t.created_by
+  LEFT JOIN users blocked  ON blocked.id  = t.blocked_by
 `;
 
 const createFieldMap = {
@@ -60,8 +79,6 @@ const createFieldMap = {
   isKnownProduct: 'is_known_product',
   stockAvailableAtCreation: 'stock_available_at_creation',
   stockDeficit: 'stock_deficit',
-  hasStockConflict: 'has_stock_conflict',
-  competingClients: 'competing_clients',
   urgentDatePending: 'urgent_date_pending',
 };
 
@@ -91,8 +108,6 @@ const updateFieldMap = {
   isKnownProduct: 'is_known_product',
   stockAvailableAtCreation: 'stock_available_at_creation',
   stockDeficit: 'stock_deficit',
-  hasStockConflict: 'has_stock_conflict',
-  competingClients: 'competing_clients',
   urgentDatePending: 'urgent_date_pending',
 };
 
@@ -517,37 +532,6 @@ const TaskModel = {
     );
     if (result.rows.length === 0) return null;
     return this.getById(id);
-  },
-
-  async findActiveTasksForArticle(itemReference) {
-    if (!itemReference) return [];
-    const result = await pool.query(
-      `SELECT t.id, t.quantity, t.client_name, t.order_code
-       FROM tasks t
-       WHERE UPPER(t.item_reference) = UPPER($1)
-         AND t.status NOT IN ('DONE')
-         AND (t.task_type IS NULL OR t.task_type != 'PREDICTIVE')`,
-      [itemReference]
-    );
-    return result.rows;
-  },
-
-  async updateConflictFlags(id, hasStockConflict, competingClients) {
-    await pool.query(
-      `UPDATE tasks
-       SET has_stock_conflict = $1, competing_clients = $2, updated_at = NOW()
-       WHERE id = $3`,
-      [hasStockConflict, competingClients || null, id]
-    );
-  },
-
-  async updateConflictFlag(id, hasConflict) {
-    await pool.query(
-      `UPDATE tasks
-       SET has_stock_conflict = $1, competing_clients = NULL, updated_at = NOW()
-       WHERE id = $2`,
-      [hasConflict, id]
-    );
   },
 
   async getDashboardStats(filters = {}) {

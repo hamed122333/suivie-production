@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { TASK_PRIORITY_OPTIONS } from '../constants/task';
 import './KanbanToolbar.css';
 
@@ -17,13 +17,27 @@ const KanbanToolbar = ({
   predictiveOnly,
   onPredictiveOnlyChange,
   stats,
+  importing = false,
   onRefresh,
   onExport,
   onImportOrders,
 }) => {
   const importInputRef = useRef(null);
+  const [inputValue, setInputValue] = useState(search);
   const counts = stats?.counts || {};
   const activeFilters = [search.trim(), priority, criticalDeficit, predictiveOnly].filter(Boolean).length;
+
+  const applySearch = () => onSearchChange(inputValue.trim());
+
+  const clearSearch = () => {
+    setInputValue('');
+    onSearchChange('');
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') applySearch();
+    if (e.key === 'Escape') clearSearch();
+  };
 
   return (
     <div className="kanban-toolbar">
@@ -50,14 +64,15 @@ const KanbanToolbar = ({
             </svg>
           </span>
           <input
-            type="search"
-            placeholder="Rechercher commande, client, article, atelier..."
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
+            type="text"
+            placeholder="Rechercher commande, client, article, atelier… (Entrée)"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
             aria-label="Rechercher des tâches"
           />
-          {search && (
-            <button type="button" className="kanban-toolbar__clear-search" onClick={() => onSearchChange('')} aria-label="Effacer la recherche">
+          {inputValue && (
+            <button type="button" className="kanban-toolbar__clear-search" onClick={clearSearch} aria-label="Effacer la recherche">
               ×
             </button>
           )}
@@ -96,6 +111,7 @@ const KanbanToolbar = ({
 
         {activeFilters > 0 && (
           <button type="button" className="kanban-toolbar__reset" onClick={() => {
+            setInputValue('');
             onSearchChange('');
             onPriorityChange('');
             onCriticalDeficitChange(false);
@@ -127,9 +143,10 @@ const KanbanToolbar = ({
             type="button"
             className="kanban-toolbar__action"
             title="Importer commandes client"
+            disabled={importing}
             onClick={() => importInputRef.current?.click()}
           >
-            Import
+            {importing ? 'Import…' : 'Import'}
           </button>
         ) : null}
         <button type="button" className="kanban-toolbar__action" title="Exporter Excel" onClick={onExport}>

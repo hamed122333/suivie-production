@@ -129,6 +129,7 @@ const KanbanBoard = ({
   });
   const [error, setError] = useState('');
   const [detailRefreshSignal, setDetailRefreshSignal] = useState(0);
+  const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const errorTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -329,13 +330,19 @@ const KanbanBoard = ({
     }
   };
 
-  const handleDeleteTask = async (taskId) => {
-    if (!window.confirm('Voulez-vous vraiment supprimer cette commande ?')) return;
+  const handleDeleteTask = (taskId) => {
+    setPendingDeleteId(taskId);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!pendingDeleteId) return;
     try {
-      await taskAPI.delete(taskId);
-      await refreshBoardAndPanels();
+      await taskAPI.delete(pendingDeleteId);
+      setPendingDeleteId(null);
       setSelectedTaskId(null);
+      await refreshBoardAndPanels();
     } catch (err) {
+      setPendingDeleteId(null);
       setErrorShort(err.response?.data?.error || 'Impossible de supprimer cette fiche.');
     }
   };
@@ -522,6 +529,19 @@ const KanbanBoard = ({
           onConfirm={handleBlockConfirm}
           onCancel={() => setBlockModal({ open: false, task: null })}
         />
+      )}
+
+      {pendingDeleteId && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Confirmer la suppression">
+          <div className="modal-content" style={{ maxWidth: 380, textAlign: 'center' }}>
+            <p style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>Supprimer cette commande ?</p>
+            <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>Cette action est irréversible.</p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setPendingDeleteId(null)}>Annuler</button>
+              <button type="button" className="btn btn-danger" onClick={handleDeleteConfirm}>Supprimer</button>
+            </div>
+          </div>
+        </div>
       )}
 
       <TaskDetailsPanel

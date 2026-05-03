@@ -238,68 +238,67 @@ const stockImportController = {
         });
       }
 
-      const recordsMap = new Map();
+      // Phase 1: collapse exact duplicate rows (same article + client + date)
+      // keeping the row with the highest quantity (pivot-table exports often repeat rows).
+      const exactDedupMap = new Map();
+      let skipped = 0;
 
       worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber <= headerRowNumber) return; // skip headers and above
+        if (rowNumber <= headerRowNumber) return;
 
         const articleCell = row.getCell(articleColIdx);
         const quantityCell = row.getCell(quantityColIdx);
 
-        // Date might not be present
         let rawDate = null;
-        if (dateColIdx !== null) {
-           const dateCell = row.getCell(dateColIdx);
-           rawDate = dateCell.value;
+        if (dateColIdx !== null) rawDate = row.getCell(dateColIdx).value;
+
+        function readText(rawVal) {
+          if (rawVal === null || rawVal === undefined) return '';
+          if (typeof rawVal === 'object') return (rawVal.richText?.map(rt => rt.text).join('') || rawVal.result || '');
+          return `${rawVal}`;
         }
 
-        let designation = null;
-        if (designationColIdx !== null) {
-          const rawDesig = row.getCell(designationColIdx).value;
-          designation = `${typeof rawDesig === 'object' && rawDesig !== null ? (rawDesig.richText?.map(rt => rt.text).join('') || rawDesig.result || '') : (rawDesig ?? '')}`.trim() || null;
-        }
+        let designation = designationColIdx !== null ? readText(row.getCell(designationColIdx).value).trim() || null : null;
+        let clientCode  = clientCodeColIdx  !== null ? readText(row.getCell(clientCodeColIdx).value).trim()  || null : null;
+        let clientName  = clientNameColIdx  !== null ? readText(row.getCell(clientNameColIdx).value).trim()  || null : null;
 
-        let clientCode = null;
-        if (clientCodeColIdx !== null) {
-          const rawCc = row.getCell(clientCodeColIdx).value;
-          clientCode = `${typeof rawCc === 'object' && rawCc !== null ? (rawCc.richText?.map(rt => rt.text).join('') || rawCc.result || '') : (rawCc ?? '')}`.trim() || null;
-        }
-
-        let clientName = null;
-        if (clientNameColIdx !== null) {
-          const rawCn = row.getCell(clientNameColIdx).value;
-          clientName = `${typeof rawCn === 'object' && rawCn !== null ? (rawCn.richText?.map(rt => rt.text).join('') || rawCn.result || '') : (rawCn ?? '')}`.trim() || null;
-        }
-
-        const rawArticle = typeof articleCell.value === 'object' && articleCell.value !== null ? (articleCell.value.richText?.map(rt => rt.text).join('') || articleCell.value.result || '') : articleCell.value;
-        const article = normalizeArticleCode(rawArticle);
+        const article  = normalizeArticleCode(readText(articleCell.value));
         const quantity = extractCellNumber(quantityCell);
 
-        if (!article || !isValidArticleCode(article) || !Number.isFinite(quantity) || quantity <= 0) return;
+        if (!article || !isValidArticleCode(article) || !Number.isFinite(quantity) || quantity <= 0) {
+          skipped += 1;
+          return;
+        }
 
         const readyDate = calculateReadyDate(article, rawDate);
-        const normalizedArticle = article;
+        const exactKey  = `${article}||${clientCode || ''}||${readyDate}`;
+        const existing  = exactDedupMap.get(exactKey);
 
-        if (recordsMap.has(normalizedArticle)) {
-            // Duplicate in same file is considered a data-entry mistake:
-            // keep latest row values, do not sum quantities.
-            const existing = recordsMap.get(normalizedArticle);
-            existing.quantity = Number(quantity.toFixed(2));
-            existing.readyDate = readyDate;
-            if (designation) existing.designation = designation;
-            if (clientCode) existing.clientCode = clientCode;
-            if (clientName) existing.clientName = clientName;
+        if (existing) {
+          // Same row repeated: keep whichever has the higher quantity
+          if (quantity > existing.quantity) existing.quantity = quantity;
         } else {
-            recordsMap.set(normalizedArticle, {
-                article,
-                quantity: Number(quantity.toFixed(2)),
-                readyDate,
-                designation,
-                clientCode,
-                clientName
-            });
+          exactDedupMap.set(exactKey, { article, quantity, readyDate, designation, clientCode, clientName });
         }
       });
+
+      // Phase 2: aggregate by article — sum quantities across different clients/dates.
+      // Stock belongs to the article reference, not to a specific client.
+      const recordsMap = new Map();
+      for (const entry of exactDedupMap.values()) {
+        const existing = recordsMap.get(entry.article);
+        if (existing) {
+          existing.quantity    = Number((existing.quantity + entry.quantity).toFixed(2));
+          // Advance ready_date to the most recent entry
+          if (entry.readyDate > existing.readyDate) existing.readyDate = entry.readyDate;
+          // Fill in missing fields from later entries
+          if (!existing.designation && entry.designation) existing.designation = entry.designation;
+          if (!existing.clientCode  && entry.clientCode)  existing.clientCode  = entry.clientCode;
+          if (!existing.clientName  && entry.clientName)  existing.clientName  = entry.clientName;
+        } else {
+          recordsMap.set(entry.article, { ...entry });
+        }
+      }
 
       const records = Array.from(recordsMap.values());
 
@@ -315,7 +314,7 @@ const stockImportController = {
         created.map((row) => row.article),
         req.user?.id || null
       );
-      res.status(201).json({ imported: created.length, records: created, promotedTasks });
+      res.status(201).json({ imported: created.length, skipped, records: created, promotedTasks });
     } catch (err) {
       console.error('Excel import error:', err);
       res.status(500).json({ error: "Erreur lors de l'importation du fichier: " + err.message });
@@ -341,7 +340,7 @@ const stockImportController = {
         return res.status(400).json({ error: 'Article et quantité valides requis.' });
       }
       if (!isValidArticleCode(normalizedArticle)) {
-        return res.status(400).json({ error: 'Code article invalide. Prefixes autorises: CI, CV, DI, DV, PL' });
+        return res.status(400).json({ error: 'Code article invalide. Prefixes autorises: CI, CV, DI, DV, FC, FD, PL' });
       }
 
       const existing = await StockImportModel.findByArticle(normalizedArticle);
@@ -401,7 +400,6 @@ const stockImportController = {
           priority: t.priority,
           quantity: t.quantity,
           quantity_unit: t.quantity_unit,
-          has_stock_conflict: t.has_stock_conflict,
           assigned_to_name: t.assigned_to_name,
         })),
       });
@@ -411,55 +409,6 @@ const stockImportController = {
     }
   },
 
-  async getConflictsSummary(req, res) {
-    try {
-      const tasks = await TaskModel.getAll({});
-      const stocks = await StockImportModel.getAll();
-
-      const conflictsByArticle = {};
-
-      for (const task of tasks) {
-        if (!task.item_reference || task.status === 'DONE' || task.task_type === 'PREDICTIVE') continue;
-
-        const article = task.item_reference.toUpperCase();
-        if (!conflictsByArticle[article]) {
-          conflictsByArticle[article] = {
-            article: task.item_reference,
-            totalDemand: 0,
-            availableStock: 0,
-            taskCount: 0,
-            tasks: [],
-            hasConflict: false,
-          };
-        }
-
-        conflictsByArticle[article].totalDemand += Number(task.quantity || 0);
-        conflictsByArticle[article].taskCount += 1;
-        conflictsByArticle[article].tasks.push({
-          id: task.id,
-          title: task.title,
-          client_name: task.client_name,
-          quantity: task.quantity,
-          priority: task.priority,
-          has_stock_conflict: task.has_stock_conflict,
-        });
-      }
-
-      for (const article of Object.keys(conflictsByArticle)) {
-        const stock = stocks.find(s => s.article.toUpperCase() === article);
-        conflictsByArticle[article].availableStock = stock ? Number(stock.quantity || 0) : 0;
-        conflictsByArticle[article].hasConflict =
-          conflictsByArticle[article].totalDemand > conflictsByArticle[article].availableStock &&
-          conflictsByArticle[article].taskCount >= 2;
-      }
-
-      const summary = Object.values(conflictsByArticle).filter(c => c.hasConflict);
-      res.json({ conflicts: summary, total: summary.length });
-    } catch (err) {
-      console.error('Get conflicts summary error:', err);
-      res.status(500).json({ error: 'Erreur lors de la récupération du résumé conflits' });
-    }
-  }
 };
 
 module.exports = stockImportController;

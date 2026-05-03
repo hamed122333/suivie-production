@@ -243,6 +243,12 @@
   font-weight: 600;
 }
 
+.task-card__avatars {
+  display: flex;
+  align-items: center;
+  gap: -4px;
+}
+
 .task-card__avatar {
   width: 26px;
   height: 26px;
@@ -256,6 +262,13 @@
   justify-content: center;
   border: 2px solid #fff;
   box-shadow: 0 0 0 1px #dbe4ef;
+  flex-shrink: 0;
+}
+
+.task-card__avatar--planner {
+  background: linear-gradient(135deg, #6d28d9, #8b5cf6);
+  margin-right: -6px;
+  z-index: 1;
 }
 
 /* ── Urgence J-2 / J-1 / Dépassé ── */

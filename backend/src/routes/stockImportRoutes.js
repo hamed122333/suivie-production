@@ -44,7 +44,4 @@ router.get('/', authenticate, stockImportController.getAll);
 // Get active tasks for a specific article
 router.get('/:id/active-tasks', authenticate, stockImportController.getActiveTasks);
 
-// Get conflicts summary by article
-router.get('/conflicts/summary', authenticate, requireRoles(['planner', 'super_admin']), stockImportController.getConflictsSummary);
-
 module.exports = router;

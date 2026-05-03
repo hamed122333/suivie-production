@@ -323,6 +323,122 @@
   border-radius: 50%;
   background: #94a3b8;
   margin-top: 0.55rem;
+  flex-shrink: 0;
+}
+
+.task-detail__history-dot--commercial { background: #b45309; }
+.task-detail__history-dot--planner    { background: #6d28d9; }
+.task-detail__history-dot--system     { background: #94a3b8; }
+
+.task-detail__history-actor {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: #1e293b;
+}
+
+.task-detail__history-role {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+
+.task-detail__history-role--commercial {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.task-detail__history-role--planner {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.task-detail__history-time {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.task-detail__history-msg {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.task-detail__history-diff {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.task-detail__history-old {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+.task-detail__history-new {
+  color: #0f766e;
+  font-weight: 600;
+}
+
+/* ── Intervenants strip ── */
+.task-detail__actors-strip {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.task-detail__actor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.4rem 0.75rem 0.4rem 0.4rem;
+}
+
+.task-detail__actor--commercial { border-left: 3px solid #b45309; }
+.task-detail__actor--planner    { border-left: 3px solid #6d28d9; }
+
+.task-detail__actor-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.task-detail__actor--commercial .task-detail__actor-avatar { background: linear-gradient(135deg, #b45309, #d97706); }
+.task-detail__actor--planner    .task-detail__actor-avatar { background: linear-gradient(135deg, #6d28d9, #8b5cf6); }
+
+.task-detail__actor > div {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.task-detail__actor > div strong {
+  font-size: 0.8rem;
+  color: #1e293b;
+}
+
+.task-detail__actor > div span {
+  font-size: 0.68rem;
+  color: #64748b;
 }
 
 .task-detail__timeline-item--history {

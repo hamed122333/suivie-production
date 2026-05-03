@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { userAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Navigate } from 'react-router-dom';
-import { getInitials } from '../utils/formatters';
+import { formatDate, getInitials } from '../utils/formatters';
+import Spinner from '../components/Spinner';
+import EmptyState from '../components/EmptyState';
 import './UsersPage.css';
 
 const ROLE_CONFIG = {
@@ -64,6 +66,8 @@ const UsersPage = () => {
   const [formError, setFormError] = useState('');
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -103,16 +107,19 @@ const UsersPage = () => {
     }
   };
 
-  const handleDelete = async (id, name) => {
-    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur "${name}" ? Cette action est irréversible.`)) {
-      return;
-    }
+  const handleDelete = (id, name) => {
+    setPendingDelete({ id, name });
+    setDeleteError('');
+  };
 
+  const handleDeleteConfirm = async () => {
+    if (!pendingDelete) return;
     try {
-      await userAPI.delete(id);
+      await userAPI.delete(pendingDelete.id);
+      setPendingDelete(null);
       fetchUsers();
     } catch (err) {
-      alert(err?.response?.data?.error || 'Impossible de supprimer cet utilisateur.');
+      setDeleteError(err?.response?.data?.error || 'Impossible de supprimer cet utilisateur.');
     }
   };
 
@@ -180,15 +187,9 @@ const UsersPage = () => {
       </div>
 
       {loading ? (
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Chargement des utilisateurs...</p>
-        </div>
+        <Spinner message="Chargement des utilisateurs..." />
       ) : filtered.length === 0 ? (
-        <div className="empty-state">
-          <span className="empty-icon">⚲</span>
-          <p>Aucun utilisateur trouvé.</p>
-        </div>
+        <EmptyState icon="⚲" message="Aucun utilisateur trouvé." />
       ) : (
         <div className="users-page__table-wrap">
           <table className="data-table">
@@ -204,9 +205,7 @@ const UsersPage = () => {
             <tbody>
               {filtered.map(u => {
                 const role = ROLE_CONFIG[u.role] || ROLE_CONFIG.user;
-                const date = u.created_at
-                  ? new Date(u.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
-                  : '—';
+                const date = formatDate(u.created_at);
                 return (
                   <tr key={u.id}>
                     <td>
@@ -298,6 +297,26 @@ const UsersPage = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {pendingDelete && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Confirmer la suppression">
+          <div className="modal-content" style={{ maxWidth: 400, textAlign: 'center' }}>
+            <p style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+              Supprimer «&nbsp;{pendingDelete.name}&nbsp;» ?
+            </p>
+            <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem', fontSize: '0.875rem' }}>
+              Cette action est irréversible.
+            </p>
+            {deleteError && (
+              <div className="users-page__form-error" style={{ marginBottom: '1rem' }}>{deleteError}</div>
+            )}
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setPendingDelete(null); setDeleteError(''); }}>Annuler</button>
+              <button type="button" className="btn btn-danger" onClick={handleDeleteConfirm}>Supprimer</button>
+            </div>
           </div>
         </div>
       )}

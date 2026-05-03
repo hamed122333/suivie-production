@@ -1,8 +1,9 @@
-import React, { startTransition, useCallback, useEffect, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import KanbanBoard from '../components/KanbanBoard';
 import KanbanToolbar from '../components/KanbanToolbar';
 import ExportModal from '../components/ExportModal';
+import Spinner from '../components/Spinner';
 import { taskAPI, userAPI, dashboardAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -12,6 +13,9 @@ const KanbanPage = () => {
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [importBanner, setImportBanner] = useState(null);
+  const skipNextLoadingRef = useRef(false);
   const [search, setSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [criticalDeficitFilter, setCriticalDeficitFilter] = useState(false);
@@ -75,21 +79,29 @@ const KanbanPage = () => {
 
   const handleImportOrders = async (file) => {
     if (!file || !isCommercial) return;
+    setImporting(true);
+    setImportBanner(null);
     try {
       const formData = new FormData();
       formData.append('file', file);
       const response = await taskAPI.importOrders(formData);
       const importedWorkspaces = response?.data?.workspaces || [];
+      const importedCount = response?.data?.imported ?? response?.data?.tasks?.length ?? '?';
+      const skippedCount = (response?.data?.skipped ?? 0) + (response?.data?.skippedExisting ?? 0);
       await refreshWorkspaces();
+      const targetWsId = importedWorkspaces.length > 0 ? importedWorkspaces[0].id : workspaceId;
       if (importedWorkspaces.length > 0) {
-        selectWorkspace(importedWorkspaces[0].id);
-        await Promise.all([fetchTasks(importedWorkspaces[0].id), fetchStats()]);
-      } else {
-        await Promise.all([fetchTasks(workspaceId), fetchStats()]);
+        skipNextLoadingRef.current = true;
+        selectWorkspace(targetWsId);
       }
-      window.alert('Import commandes client terminé avec succès.');
+      await Promise.all([fetchTasks(targetWsId), fetchStats()]);
+      const skippedNote = skippedCount > 0 ? ` • ${skippedCount} ligne(s) ignorée(s) (référence non reconnue ou doublon).` : '';
+      setImportBanner({ type: 'success', message: `${importedCount} ligne(s) importée(s) avec succès.${skippedNote}` });
+      setTimeout(() => setImportBanner(null), 5000);
     } catch (err) {
-      window.alert(err?.response?.data?.error || 'Echec import commandes client.');
+      setImportBanner({ type: 'error', message: err?.response?.data?.error || 'Echec import commandes client.' });
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -114,8 +126,11 @@ const KanbanPage = () => {
 
   useEffect(() => {
     if (loadingWorkspaces) return;
-    // Si workspaceId est null (non sélectionné), ne pas charger
     if (workspaceId === null) return;
+    if (skipNextLoadingRef.current) {
+      skipNextLoadingRef.current = false;
+      return;
+    }
     setLoading(true);
     Promise.all([fetchTasks(workspaceId), fetchStats()]).finally(() => setLoading(false));
   }, [workspaceId, loadingWorkspaces, fetchTasks, fetchStats]);
@@ -133,15 +148,27 @@ const KanbanPage = () => {
 
   if (loading) {
     return (
-      <div className="page-loading">
-        <div className="page-loading__spinner" aria-hidden />
-        <p>Chargement du tableau…</p>
-      </div>
+      <Spinner message="Chargement du tableau…" />
     );
   }
 
   return (
     <div className="kanban-page">
+      {importBanner && (
+        <div style={{
+          padding: '0.65rem 1.25rem',
+          background: importBanner.type === 'success' ? '#ecfdf5' : '#fef2f2',
+          color: importBanner.type === 'success' ? '#065f46' : '#991b1b',
+          borderBottom: `1px solid ${importBanner.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+        }}>
+          {importBanner.type === 'success' ? '✓' : '⚠'} {importBanner.message}
+        </div>
+      )}
       <KanbanToolbar
         search={search}
         onSearchChange={handleSearchChange}
@@ -153,6 +180,7 @@ const KanbanPage = () => {
         onPredictiveOnlyChange={setPredictiveOnlyFilter}
         users={users}
         stats={stats}
+        importing={importing}
         onRefresh={() => Promise.all([fetchTasks(workspaceId), fetchStats()])}
         onExport={() => setExportModalOpen(true)}
         onImportOrders={isCommercial ? handleImportOrders : null}

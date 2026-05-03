@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { TASK_PRIORITY_OPTIONS } from '../constants/task';
 import { stockImportAPI } from '../services/api';
 import { ALLOWED_ARTICLE_PREFIXES, isValidArticleCode, normalizeArticleCode } from '../utils/articleCode';
+import { formatDate } from '../utils/formatters';
 import './TaskModal.css';
 
 const EMPTY_FORM = {
@@ -182,7 +183,7 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.title.trim() && !isCommMode) {
-      alert('Le titre est requis');
+      setError('Le titre est requis');
       return;
     }
 
@@ -194,8 +195,7 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
       if (payload.quantity) {
         payload.quantity = Number(payload.quantity);
         if (isNaN(payload.quantity)) {
-          alert('La quantité doit être un nombre valide');
-          return;
+          throw new Error('La quantité doit être un nombre valide');
         }
       } else {
         payload.quantity = null;
@@ -277,16 +277,7 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
         });
       }
     } catch (err) {
-      if (
-        err.message &&
-        err.message !== 'Le nom du client est obligatoire.' &&
-        err.message !== 'Sélectionnez au moins un article existant.' &&
-        err.message !== 'Ajoute au moins une ligne d article.'
-      ) {
-        setError(err.message);
-      } else if (err.message) {
-        alert(err.message);
-      }
+      setError(err.message || 'Enregistrement impossible.');
     } finally {
       setSaving(false);
     }
@@ -445,7 +436,7 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
                             </span>
                           ) : (
                             <span className="stock-article-item__tag stock-article-item__tag--pending">
-                              Prêt le {readyDate.toLocaleDateString('fr-FR')}
+                              Prêt le {formatDate(readyDate)}
                             </span>
                           )}
                         </div>

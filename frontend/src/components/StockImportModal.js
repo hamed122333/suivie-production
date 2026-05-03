@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { stockImportAPI } from '../services/api';
+import { formatDate } from '../utils/formatters';
 import './StockImportModal.css';
 
 const StockImportModal = ({ onClose, onImported }) => {
@@ -80,13 +81,13 @@ const StockImportModal = ({ onClose, onImported }) => {
 
           {result ? (
             <div className="stock-import-modal__success">
-              <strong>✓ {result.imported} article(s) importé(s) avec succès.</strong>
+              <strong>✓ {result.imported} article(s) importé(s) avec succès.{result.skipped > 0 ? ` • ${result.skipped} ligne(s) ignorée(s).` : ''}{result.promotedTasks > 0 ? ` • ${result.promotedTasks} tâche(s) débloquée(s).` : ''}</strong>
               <ul className="stock-import-modal__imported-list">
                 {result.records.slice(0, 10).map((r) => (
                   <li key={r.id}>
                     {r.article} — {r.quantity} pcs
                     <span className="stock-import-modal__ready-date">
-                      (Prêt le {new Date(r.ready_date).toLocaleDateString('fr-FR')})
+                      (Prêt le {formatDate(r.ready_date)})
                     </span>
                   </li>
                 ))}

@@ -10,57 +10,68 @@ export function getInitials(name) {
     .toUpperCase();
 }
 
-export function formatRelativeDate(dateStr, { compact = false } = {}) {
-  if (!dateStr) return compact ? '—' : '';
+function pad(n) {
+  return String(n).padStart(2, '0');
+}
 
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return compact ? '—' : '';
+function toSafeDate(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function formatDate(dateStr) {
+  const d = toSafeDate(dateStr);
+  if (!d) return '—';
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+export function formatDateTime(dateStr) {
+  const d = toSafeDate(dateStr);
+  if (!d) return '—';
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function formatRelativeDate(dateStr, { compact = false } = {}) {
+  const date = toSafeDate(dateStr);
+  if (!date) return compact ? '—' : '';
 
   const now = new Date();
-  const diffMs = now - date;
+  const diffMs = Math.abs(now - date);
+  const future = date > now;
   const seconds = Math.floor(diffMs / 1000);
 
   if (seconds < 60) return "A l'instant";
 
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `Il y a ${minutes} min`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Il y a ${hours} h`;
-
-  const days = Math.floor(hours / 24);
-  if (days < 7) {
-    return compact ? `Il y a ${days}j` : `Il y a ${days} jour${days > 1 ? 's' : ''}`;
+  if (minutes < 60) {
+    return compact ? `${minutes}min` : `Il y a ${minutes} min`;
   }
 
-  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return compact ? `${hours}h` : `Il y a ${hours} h`;
+  }
+
+  const days = Math.floor(hours / 24);
+  if (days === 0) return compact ? "Auj." : "Aujourd'hui";
+  if (days === 1) return compact ? '1j' : (future ? 'Demain' : 'Hier');
+  if (days < 7) {
+    if (compact) return `${days}j`;
+    return future ? `Dans ${days} jours` : `Il y a ${days} jour${days > 1 ? 's' : ''}`;
+  }
+
+  return formatDate(dateStr);
 }
 
-export function formatDate(dateStr, { withYear = false } = {}) {
-  if (!dateStr) return '—';
-
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return '—';
-
-  return date.toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: 'short',
-    ...(withYear ? { year: 'numeric' } : {}),
-  });
-}
-
-export function formatDateTime(dateStr) {
-  if (!dateStr) return '—';
-
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return '—';
-
-  return date.toLocaleString('fr-FR', {
-    day: '2-digit',
-    month: 'short',
+export function formatLongDate(dateStr) {
+  const d = toSafeDate(dateStr || new Date());
+  if (!d) return '—';
+  return d.toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
     year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
   });
 }
 

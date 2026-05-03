@@ -1,6 +1,13 @@
 const pool = require('../config/db');
 const MAX_NOTIFICATIONS_PER_PAGE = 100;
 
+function formatDateFR(dateStr) {
+  if (!dateStr) return 'non définie';
+  const s = `${dateStr}`.slice(0, 10);
+  const [y, m, d] = s.split('-');
+  return `${d}/${m}/${y}`;
+}
+
 const NotificationModel = {
   async createTaskCreatedNotifications({ taskIds, recipientUserIds, createdByName }) {
     if (!Array.isArray(taskIds) || taskIds.length === 0) return;
@@ -16,7 +23,7 @@ const NotificationModel = {
           recipientUserId,
           taskId,
           'task_created',
-          'Nouvelle tâche créée',
+          `${createdByName || 'Un commercial'} — Nouvelle commande`,
           `${createdByName || 'Un commercial'} a créé la tâche SP-${taskId}`
         );
         placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
@@ -96,6 +103,64 @@ const NotificationModel = {
       [recipientUserId]
     );
     return result.rowCount;
+  },
+
+  async createDateChangedNotification({ taskId, recipientUserId, changedByName, fieldLabel, oldDate, newDate }) {
+    if (!taskId || !recipientUserId) return;
+    const oldFmt = formatDateFR(oldDate);
+    const newFmt = formatDateFR(newDate);
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        recipientUserId,
+        taskId,
+        'date_updated',
+        `${changedByName || 'Un planificateur'} — Date modifiée`,
+        `${changedByName || 'Un planificateur'} a modifié la ${fieldLabel} de SP-${taskId} : ${oldFmt} → ${newFmt}`,
+      ]
+    );
+  },
+
+  async createDateNegotiationNotification({ taskId, recipientUserId, actorName, action, proposedDate }) {
+    if (!taskId || !recipientUserId) return;
+    const dateFmt = formatDateFR(proposedDate);
+    const titleMap = {
+      PROPOSE: `${actorName || 'Un planificateur'} — Date proposée`,
+      ACCEPT:  `${actorName || 'Un planificateur'} — Date confirmée`,
+      REJECT:  `${actorName || 'Un planificateur'} — Date refusée`,
+    };
+    const bodyMap = {
+      PROPOSE: `${actorName || 'Un planificateur'} a proposé une date de livraison pour SP-${taskId} : ${dateFmt}`,
+      ACCEPT:  `${actorName || 'Un planificateur'} a confirmé la date de livraison de SP-${taskId} : ${dateFmt}`,
+      REJECT:  `${actorName || 'Un planificateur'} a refusé la date et contre-propose le ${dateFmt} pour SP-${taskId}`,
+    };
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        recipientUserId,
+        taskId,
+        'date_negotiation',
+        titleMap[action] || `${actorName} — Négociation date`,
+        bodyMap[action] || `Négociation de date sur SP-${taskId}`,
+      ]
+    );
+  },
+
+  async createStatusChangedNotification({ taskId, recipientUserId, changedByName, oldStatusLabel, newStatusLabel }) {
+    if (!taskId || !recipientUserId) return;
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        recipientUserId,
+        taskId,
+        'status_updated',
+        `${changedByName || 'Un planificateur'} — ${newStatusLabel}`,
+        `${changedByName || 'Un planificateur'} a fait passer SP-${taskId} de "${oldStatusLabel}" à "${newStatusLabel}"`,
+      ]
+    );
   },
 };
 

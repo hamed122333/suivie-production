@@ -2,14 +2,14 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from '../constants/task';
 import { taskAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { formatDate, formatDateTime, formatNumber, formatRelativeDate } from '../utils/formatters';
+import { formatDate, formatDateTime, formatNumber, formatRelativeDate, getInitials } from '../utils/formatters';
 import TaskTypeToggle from './TaskTypeToggle';
 import './TaskDetailsPanel.css';
 
 const DETAIL_FIELDS = [
   { key: 'client_name', label: 'Client', icon: '👤' },
   { key: 'item_reference', label: 'Article', icon: '📦' },
-  { key: 'planned_date', label: 'Date prévue', icon: '🗓️', format: (val) => formatDate(val, { withYear: true }) },
+  { key: 'planned_date', label: 'Date prévue', icon: '🗓️', format: (val) => formatDate(val) },
   {
     key: 'quantity',
     label: 'Quantité',
@@ -21,7 +21,7 @@ const DETAIL_FIELDS = [
 function buildOperationalSummary(task, history) {
   if (!task) return 'Aucune donnée.';
   const qty = Number(task.quantity || 0);
-  const planned = task.planned_date ? formatDate(task.planned_date, { withYear: true }) : null;
+  const planned = task.planned_date ? formatDate(task.planned_date) : null;
   const expectedAction = `${task.expected_action || ''}`.toUpperCase();
   const historyText = (history || []).map((entry) => `${entry.message || ''} ${entry.field_name || ''}`.toLowerCase()).join(' | ');
   const dateNegotiated = historyText.includes('date') || historyText.includes('planifie');
@@ -54,6 +54,20 @@ function buildOperationalSummary(task, history) {
   return task.description || 'Suivi en cours.';
 }
 
+function formatHistoryValue(value) {
+  if (value == null || value === '' || value === '—') return value;
+  const str = `${value}`.trim();
+  // Try to parse as a date — covers ISO strings, "Tue Apr 28..." JS date strings, etc.
+  const d = new Date(str);
+  if (!Number.isNaN(d.getTime())) {
+    const day   = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year  = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+  return str;
+}
+
 function buildDateNegotiationSteps(task, history) {
   const entries = Array.isArray(history) ? [...history].reverse() : [];
   const steps = [];
@@ -61,7 +75,7 @@ function buildDateNegotiationSteps(task, history) {
   if (task?.planned_date) {
     steps.push({
       label: 'Date prévue actuelle',
-      detail: `${formatDate(task.planned_date, { withYear: true })}`,
+      detail: `${formatDate(task.planned_date)}`,
     });
   }
 
@@ -70,8 +84,8 @@ function buildDateNegotiationSteps(task, history) {
     const message = `${entry.message || ''}`.toLowerCase();
     const actor = entry.actor_name || 'Système';
     const createdAt = formatDateTime(entry.created_at);
-    const oldValue = entry.old_value || '—';
-    const newValue = entry.new_value || '—';
+    const oldValue = entry.old_value ? formatHistoryValue(entry.old_value) : '—';
+    const newValue = entry.new_value ? formatHistoryValue(entry.new_value) : '—';
 
     if (fieldName.includes('planned') || fieldName.includes('date') || message.includes('date')) {
       steps.push({
@@ -319,7 +333,10 @@ const TaskDetailsPanel = ({
                   <TaskTypeToggle
                     task={task}
                     isPlanner={isPlanner}
-                    onTypeChanged={() => fetchDetail()}
+                    onTypeChanged={async () => {
+                      await fetchDetail();
+                      await onTaskUpdated?.();
+                    }}
                   />
                 )}
                 {task?.task_type === 'PREDICTIVE' && canConfirmPredictive && onConfirmPredictive && (
@@ -366,11 +383,11 @@ const TaskDetailsPanel = ({
                 </div>
                 <div className="task-detail__meta-pill">
                   <span>Date proposée</span>
-                  <strong>{task.proposed_delivery_date ? formatDate(task.proposed_delivery_date, { withYear: true }) : '—'}</strong>
+                  <strong>{task.proposed_delivery_date ? formatDate(task.proposed_delivery_date) : '—'}</strong>
                 </div>
                 <div className="task-detail__meta-pill">
                   <span>Proposé par</span>
-                  <strong>{task.proposed_by_role || '—'}</strong>
+                  <strong>{task.proposed_by_role === 'planner' ? 'Planificateur' : task.proposed_by_role === 'commercial' ? 'Commercial' : '—'}</strong>
                 </div>
               </div>
               {(isCommercial || isPlanner) && (
@@ -418,6 +435,76 @@ const TaskDetailsPanel = ({
                       </div>
                     </div>
                   ))
+                )}
+              </div>
+            </section>
+
+            {/* ── Historique complet ── */}
+            <section className="task-detail__section">
+              <div className="task-detail__section-head">
+                <h4>Historique des actions</h4>
+                <span>{history.length}</span>
+              </div>
+              {/* Intervenants */}
+              <div className="task-detail__actors-strip">
+                {task.created_by_name && (
+                  <div className="task-detail__actor task-detail__actor--commercial">
+                    <span className="task-detail__actor-avatar">{getInitials(task.created_by_name)}</span>
+                    <div>
+                      <strong>{task.created_by_name}</strong>
+                      <span>Commercial — créateur</span>
+                    </div>
+                  </div>
+                )}
+                {task.planned_by_name && task.planned_by_name !== task.created_by_name && (
+                  <div className="task-detail__actor task-detail__actor--planner">
+                    <span className="task-detail__actor-avatar">{getInitials(task.planned_by_name)}</span>
+                    <div>
+                      <strong>{task.planned_by_name}</strong>
+                      <span>Planificateur — dernier sur les dates</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="task-detail__timeline">
+                {history.length === 0 ? (
+                  <div className="task-detail__empty">Aucune action enregistrée.</div>
+                ) : (
+                  [...history].reverse().map((entry) => {
+                    const actorName = entry.actor_name || 'Système';
+                    const actorRole = entry.actor_role;
+                    const roleLabel = actorRole === 'planner' || actorRole === 'super_admin'
+                      ? 'Planificateur'
+                      : actorRole === 'commercial'
+                      ? 'Commercial'
+                      : null;
+                    return (
+                      <div key={entry.id} className="task-detail__timeline-item task-detail__timeline-item--history">
+                        <span className={`task-detail__history-dot task-detail__history-dot--${actorRole === 'commercial' ? 'commercial' : actorRole === 'planner' || actorRole === 'super_admin' ? 'planner' : 'system'}`} />
+                        <div style={{ flex: 1 }}>
+                          <div className="task-detail__timeline-head">
+                            <span className="task-detail__history-actor">
+                              {actorName}
+                              {roleLabel && (
+                                <span className={`task-detail__history-role task-detail__history-role--${actorRole === 'commercial' ? 'commercial' : 'planner'}`}>
+                                  {roleLabel}
+                                </span>
+                              )}
+                            </span>
+                            <time className="task-detail__history-time">{formatDateTime(entry.created_at)}</time>
+                          </div>
+                          <p className="task-detail__history-msg">{entry.message || entry.action_type}</p>
+                          {entry.old_value != null && entry.new_value != null && (
+                            <p className="task-detail__history-diff">
+                              <span className="task-detail__history-old">{formatHistoryValue(entry.old_value)}</span>
+                              <span aria-hidden> → </span>
+                              <span className="task-detail__history-new">{formatHistoryValue(entry.new_value)}</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </section>

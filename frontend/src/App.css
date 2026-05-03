@@ -1,18 +1,4 @@
-/* App.css — layout uniquement, styles globaux dans index.css */
-
-.app-layout {
-  display: flex;
-  align-items: stretch;
-  min-height: calc(100vh - 92px);
-}
-
-.app-main {
-  flex: 1;
-  background: #f0f2f5;
-  overflow-x: auto;
-  min-width: 0;
-  /* Pas de padding ici — géré dans chaque page */
-}
+/* App.css — sidebar off-canvas layout; global styles in index.css */
 
 /* Sidebar Off-canvas states */
 .sidebar-container {
@@ -28,10 +14,6 @@
 }
 
 @media (max-width: 900px) {
-  .app-layout {
-    flex-direction: column;
-  }
-
   .sidebar-container {
     position: fixed;
     top: 56px; /* Align just under header if possible, or 0 if overlapping */

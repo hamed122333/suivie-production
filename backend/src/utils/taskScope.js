@@ -1,6 +1,6 @@
 const { createHttpError } = require('./httpErrors');
 
-const PRIVILEGED_TASK_ROLES = new Set(['super_admin', 'planner']);
+const PRIVILEGED_TASK_ROLES = new Set(['super_admin', 'planner', 'commercial']);
 
 function isPrivilegedTaskRole(role) {
   return PRIVILEGED_TASK_ROLES.has(role);

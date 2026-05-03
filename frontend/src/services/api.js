@@ -63,7 +63,7 @@ export const taskAPI = {
   patchBoard: ({ workspaceId, columnOrders }) => api.patch('/tasks/board', { workspaceId, columnOrders }),
   delete: (id) => api.delete(`/tasks/${id}`),
   confirmPredictive: (id) => api.put(`/tasks/${id}/confirm-predictive`),
-  resolveConflict: (id, payload) => api.post(`/tasks/${id}/resolve-conflict`, payload),
+
   convertType: (id, newType) => api.post(`/tasks/${id}/convert-type`, { newType }),
 };
 
@@ -90,7 +90,6 @@ export const stockImportAPI = {
     }),
   createManual: (data) => api.post('/stock-import/manual', data),
   getActiveTasks: (id) => api.get(`/stock-import/${id}/active-tasks`),
-  getConflictsSummary: () => api.get('/stock-import/conflicts/summary'),
 };
 
 export default api;

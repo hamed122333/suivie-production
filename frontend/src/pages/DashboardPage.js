@@ -3,7 +3,8 @@ import { dashboardAPI, taskAPI } from '../services/api';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useAuth } from '../context/AuthContext';
 import { STATUS_COUNT_FIELDS, TASK_STATUS_CONFIG, TASK_STATUS_ORDER } from '../constants/task';
-import { formatDate, formatRelativeDate } from '../utils/formatters';
+import { formatDate, formatLongDate, formatRelativeDate } from '../utils/formatters';
+import Spinner from '../components/Spinner';
 import { useNavigate } from 'react-router-dom';
 import './DashboardPage.css';
 
@@ -24,6 +25,7 @@ const DashboardPage = () => {
   const [allTasks, setAllTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [importBanner, setImportBanner] = useState(null);
 
   const { workspaceId, loadingWorkspaces, workspaces, refreshWorkspaces, selectWorkspace } = useWorkspace();
   const { user, isCommercial } = useAuth();
@@ -148,29 +150,31 @@ const DashboardPage = () => {
   // ─── 3. RETURN ANTICIPÉ — APRÈS TOUS LES HOOKS ───────────────────────────
   if (loading) {
     return (
-      <div className="dashboard-loading">
-        <div className="dashboard-loading__spinner" />
-        <p>Chargement des indicateurs de production...</p>
-      </div>
+      <Spinner message="Chargement des indicateurs de production..." />
     );
   }
 
   // ─── 4. HANDLERS ─────────────────────────────────────────────────────────
   const handleImportOrders = async (file) => {
     if (!file || !canImportOrders) return;
+    setImporting(true);
+    setImportBanner(null);
     try {
-      setImporting(true);
       const formData = new FormData();
       formData.append('file', file);
       const response = await taskAPI.importOrders(formData);
       const importedWorkspaces = response?.data?.workspaces || [];
+      const importedCount = response?.data?.imported ?? '?';
+      const skippedCount = (response?.data?.skipped ?? 0) + (response?.data?.skippedExisting ?? 0);
       await refreshWorkspaces();
       if (importedWorkspaces.length > 0) {
         selectWorkspace(importedWorkspaces[0].id);
-        navigate('/kanban');
       }
+      const skippedNote = skippedCount > 0 ? ` • ${skippedCount} ligne(s) ignorée(s).` : '';
+      setImportBanner({ type: 'success', message: `${importedCount} ligne(s) importée(s).${skippedNote} Accédez au Kanban pour voir les commandes.` });
+      setTimeout(() => setImportBanner(null), 8000);
     } catch (err) {
-      window.alert(err?.response?.data?.error || 'Echec import commandes client.');
+      setImportBanner({ type: 'error', message: err?.response?.data?.error || 'Echec import commandes client.' });
     } finally {
       setImporting(false);
     }
@@ -179,6 +183,27 @@ const DashboardPage = () => {
   // ─── 5. RENDU ─────────────────────────────────────────────────────────────
   return (
     <div className="dashboard">
+      {importBanner && (
+        <div style={{
+          padding: '0.7rem 1.5rem',
+          background: importBanner.type === 'success' ? '#ecfdf5' : '#fef2f2',
+          color: importBanner.type === 'success' ? '#065f46' : '#991b1b',
+          borderBottom: `1px solid ${importBanner.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+        }}>
+          <span>{importBanner.type === 'success' ? '✓' : '⚠'} {importBanner.message}</span>
+          {importBanner.type === 'success' && (
+            <button type="button" className="btn btn-primary" style={{ padding: '0.3rem 0.8rem', fontSize: '0.8rem' }} onClick={() => navigate('/kanban')}>
+              Voir le Kanban
+            </button>
+          )}
+          <button type="button" onClick={() => setImportBanner(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: 'inherit' }}>✕</button>
+        </div>
+      )}
       <header className="dashboard__header">
         <div>
           <h1 className="dashboard__title">Tableau de bord operationnel</h1>
@@ -189,12 +214,7 @@ const DashboardPage = () => {
         </div>
         <div className="dashboard__meta">
           <span className="dashboard__date">
-            {new Date().toLocaleDateString('fr-FR', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })}
+            {formatLongDate()}
           </span>
           {user ? <span className="dashboard__user">Responsable: {user.name}</span> : null}
           <div className="dashboard__actions">
@@ -335,7 +355,7 @@ const DashboardPage = () => {
                     <strong>{task.title}</strong>
                     <p>{task.client_name || task.order_code || 'Sans detail client'}</p>
                   </div>
-                  <span>{formatDate(task.planned_date, { withYear: true })}</span>
+                  <span>{formatDate(task.planned_date)}</span>
                 </div>
               ))
             ) : (
@@ -368,7 +388,7 @@ const DashboardPage = () => {
                       <strong>{task.title}</strong>
                       <p>{task.client_name || task.order_code || '—'}</p>
                     </div>
-                    <span>{task.planned_date ? formatDate(task.planned_date, { withYear: true }) : '—'}</span>
+                    <span>{task.planned_date ? formatDate(task.planned_date) : '—'}</span>
                   </div>
                 ))
             ) : (

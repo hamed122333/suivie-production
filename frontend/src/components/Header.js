@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { notificationAPI } from '../services/api';
-import { getInitials } from '../utils/formatters';
+import { formatRelativeDate, getInitials } from '../utils/formatters';
 import logo from '../assets/logo.png';
 import './Header.css';
 
@@ -15,27 +15,8 @@ const ROLE_CONFIG = {
 };
 const NOTIFICATION_POLL_INTERVAL_MS = 30000;
 
-function formatNotificationTime(value) {
-  if (!value) return '';
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-
-  const diffMs = date.getTime() - Date.now();
-  const diffMinutes = Math.round(diffMs / 60000);
-  const diffHours = Math.round(diffMinutes / 60);
-  const diffDays = Math.round(diffHours / 24);
-  const formatter = new Intl.RelativeTimeFormat('fr-FR', { numeric: 'auto' });
-
-  if (Math.abs(diffMinutes) < 60) return formatter.format(diffMinutes, 'minute');
-  if (Math.abs(diffHours) < 24) return formatter.format(diffHours, 'hour');
-  if (Math.abs(diffDays) < 7) return formatter.format(diffDays, 'day');
-
-  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
-}
-
 const Header = ({ toggleSidebar, isSidebarOpen }) => {
-  const { user, logout, isSuperAdmin, isPlanner } = useAuth();
+  const { user, logout, isSuperAdmin, isPlanner, isCommercial } = useAuth();
   const { workspaceId, workspaces, selectWorkspace } = useWorkspace();
   const location = useLocation();
   const navigate = useNavigate();
@@ -46,7 +27,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
   const [notifLoading, setNotifLoading] = useState(false);
   const menuRef = useRef(null);
   const notifRef = useRef(null);
-  const canViewNotifications = isSuperAdmin || isPlanner;
+  const canViewNotifications = isSuperAdmin || isPlanner || isCommercial;
 
   const roleInfo = ROLE_CONFIG[user?.role] || ROLE_CONFIG.user;
 
@@ -116,14 +97,13 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
       }
     }
 
-    // Changer le workspace vers celui associé à la notification
+    setNotifOpen(false);
+    // Switch workspace first (synchronous context update), then navigate
     if (notification.workspace_id) {
       selectWorkspace(notification.workspace_id);
     }
-    
-    // Seulement naviguer vers la page Kanban, sans ouvrir le volet de détail
-    navigate('/kanban');
-    setNotifOpen(false);
+    // Use setTimeout(0) to let React flush the workspace state before navigation
+    setTimeout(() => navigate('/kanban'), 0);
   };
 
   const initials = getInitials(user?.name);
@@ -248,7 +228,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
                             <div className="app-header__notif-body">{notification.body}</div>
                             <div className="app-header__notif-meta">
                               {notification.workspace_name && <span>{notification.workspace_name}</span>}
-                              <time dateTime={notification.created_at}>{formatNotificationTime(notification.created_at)}</time>
+                              <time dateTime={notification.created_at}>{formatRelativeDate(notification.created_at)}</time>
                             </div>
                           </div>
                         </button>
