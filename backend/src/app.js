@@ -9,6 +9,7 @@ const userRoutes = require('./routes/userRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const workspaceRoutes = require('./routes/workspaceRoutes');
 const stockImportRoutes = require('./routes/stockImportRoutes');
+const stockImportMpRoutes = require('./routes/stockImportMpRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
@@ -46,6 +47,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/stock-import', stockImportRoutes);
+app.use('/api/stock-import-mp', stockImportMpRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/health', (req, res) => {
