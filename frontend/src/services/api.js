@@ -92,4 +92,14 @@ export const stockImportAPI = {
   getActiveTasks: (id) => api.get(`/stock-import/${id}/active-tasks`),
 };
 
+export const stockMpAPI = {
+  getAll: () => api.get('/stock-import-mp'),
+  upload: (formData) =>
+    api.post('/stock-import-mp/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  createManual: (data) => api.post('/stock-import-mp/manual', data),
+  getActiveTasks: (id) => api.get(`/stock-import-mp/${id}/active-tasks`),
+};
+
 export default api;

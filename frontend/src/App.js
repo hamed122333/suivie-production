@@ -8,6 +8,7 @@ import DashboardPage from "./pages/DashboardPage";
 import KanbanPage from "./pages/KanbanPage";
 import UsersPage from "./pages/UsersPage";
 import StockPage from "./pages/StockPage";
+import StockMpPage from "./pages/StockMpPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import "./App.css";
@@ -135,6 +136,16 @@ const AppRoutes = () => {
           <ProtectedRoute>
             <Layout>
               <StockPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/stock-mp"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <StockMpPage />
             </Layout>
           </ProtectedRoute>
         }
