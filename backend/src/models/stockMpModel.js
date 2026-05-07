@@ -15,52 +15,34 @@ const StockMpModel = {
     if (!normalizedArticle) return null;
     if (!isValidArticleCode(normalizedArticle)) return null;
     const result = await pool.query(
-      `SELECT *
+      `SELECT article, MAX(designation) as designation, MAX(client_name) as client_name, MAX(client_code) as client_code, SUM(quantity) as quantity
        FROM stock_mp
        WHERE UPPER(article) = UPPER($1)
-       ORDER BY id DESC
-       LIMIT 1`,
+       GROUP BY article`,
       [normalizedArticle]
     );
     return result.rows[0] || null;
   },
 
-  async upsertManual({ article, quantity, designation = null, clientCode = null, clientName = null, readyDate }) {
+  async upsertManual({ article, quantity, designation = null, clientCode = null, clientName = null, readyDate, entryDate = null, batchNumber = null }) {
     const normalizedArticle = normalizeArticleCode(article);
     const normalizedQty = Number(quantity || 0);
     if (!normalizedArticle || !isValidArticleCode(normalizedArticle) || !Number.isFinite(normalizedQty) || normalizedQty <= 0) {
       throw new Error('Invalid manual stock MP payload');
     }
 
-    const result = await pool.query(
-      `SELECT id, quantity FROM stock_mp WHERE UPPER(article) = UPPER($1) LIMIT 1`,
-      [normalizedArticle]
-    );
+    // New logic: We don't just update the first found row, we create a new entry for different entry dates or batches
+    const finalEntryDate = entryDate || new Date().toISOString().split('T')[0];
 
-    if (result.rows.length > 0) {
-      const current = result.rows[0];
-      const updated = await pool.query(
-        `UPDATE stock_mp
-         SET quantity = quantity + $2,
-             ready_date = COALESCE($3::DATE, ready_date),
-             is_used = FALSE,
-             designation = COALESCE($4, designation),
-             client_code = COALESCE($5, client_code),
-             client_name = COALESCE($6, client_name)
-         WHERE id = $1
-         RETURNING *`,
-        [current.id, normalizedQty, readyDate, designation, clientCode, clientName]
-      );
-      return { row: updated.rows[0], action: 'stock_added' };
-    }
-
+    // For manual entry, if the same article and same date, we might update or create new.
+    // To keep it "intelligent", let's create a new record for each import/manual entry to track by date.
     const inserted = await pool.query(
-      `INSERT INTO stock_mp (article, quantity, ready_date, designation, client_code, client_name)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO stock_mp (article, quantity, initial_quantity, entry_date, ready_date, designation, client_code, client_name, batch_number)
+       VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [normalizedArticle, normalizedQty, readyDate, designation, clientCode, clientName]
+      [normalizedArticle, normalizedQty, finalEntryDate, readyDate, designation, clientCode, clientName, batchNumber]
     );
-    return { row: inserted.rows[0], action: 'new_product_created' };
+    return { row: inserted.rows[0], action: 'new_entry_created' };
   },
 
   async findAvailableForTask({ stockMpId, itemReference, requiredQuantity }) {
@@ -90,31 +72,44 @@ const StockMpModel = {
     if (!itemReference) return null;
     const normalizedReference = normalizeArticleCode(itemReference);
     if (!isValidArticleCode(normalizedReference)) return null;
+
+    // Modification: check the sum of all available batches
     const result = await pool.query(
+      `SELECT SUM(quantity) as total_quantity
+       FROM stock_mp
+       WHERE UPPER(article) = UPPER($1) AND is_used = FALSE`,
+      [normalizedReference]
+    );
+
+    const totalQty = Number(result.rows[0]?.total_quantity || 0);
+
+    // Also get the first available batch for ID tracking if needed
+    const firstBatchResult = await pool.query(
       `SELECT id, article, quantity
        FROM stock_mp
-       WHERE UPPER(article) = UPPER($1)
-       ORDER BY id DESC
+       WHERE UPPER(article) = UPPER($1) AND is_used = FALSE AND quantity > 0
+       ORDER BY entry_date ASC, id ASC
        LIMIT 1`,
       [normalizedReference]
     );
-    const row = result.rows[0];
-    if (!row) return null;
+
+    const firstBatch = firstBatchResult.rows[0];
+    if (!firstBatch && totalQty <= 0) return null;
+
     return {
-      stockMpId: row.id,
-      article: row.article,
-      quantity: Number(row.quantity || 0),
-      available: Number(row.quantity || 0) >= qty,
+      stockMpId: firstBatch?.id || null,
+      article: normalizedReference,
+      quantity: totalQty,
+      available: totalQty >= qty,
     };
   },
 
   async getStockQuantity(itemReference) {
     if (!itemReference) return 0;
     const result = await pool.query(
-      `SELECT COALESCE(quantity, 0) AS quantity
+      `SELECT SUM(quantity) AS quantity
        FROM stock_mp
-       WHERE UPPER(article) = UPPER($1)
-       ORDER BY id DESC LIMIT 1`,
+       WHERE UPPER(article) = UPPER($1) AND is_used = FALSE`,
       [itemReference]
     );
     return Number(result.rows[0]?.quantity || 0);
@@ -138,34 +133,24 @@ const StockMpModel = {
         if (!isValidArticleCode(normalizedArticle)) {
           continue;
         }
-        const check = await client.query(
-          `SELECT id, quantity FROM stock_mp WHERE UPPER(article) = UPPER($1) LIMIT 1`,
-          [normalizedArticle]
-        );
 
-        if (check.rows.length > 0) {
-          const existingId = check.rows[0].id;
-          const result = await client.query(
-            `UPDATE stock_mp
-             SET quantity = $2,
-                 ready_date = $3::DATE,
-                 is_used = FALSE,
-                 designation = COALESCE($4, designation),
-                 client_code = COALESCE($5, client_code),
-                 client_name = COALESCE($6, client_name)
-             WHERE id = $1 RETURNING *`,
-            [existingId, record.quantity, record.readyDate, record.designation, record.clientCode, record.clientName]
-          );
-          created.push(result.rows[0]);
-        } else {
-          const result = await client.query(
-            `INSERT INTO stock_mp (article, quantity, ready_date, designation, client_code, client_name)
-             VALUES ($1, $2, $3, $4, $5, $6)
-             RETURNING *`,
-            [normalizedArticle, record.quantity, record.readyDate, record.designation, record.clientCode, record.clientName]
-          );
-          created.push(result.rows[0]);
-        }
+        // Always create a new entry for imports to track stock coming in at different times
+        const result = await client.query(
+          `INSERT INTO stock_mp (article, quantity, initial_quantity, entry_date, ready_date, designation, client_code, client_name, batch_number)
+           VALUES ($1, $2, $2, COALESCE($3, CURRENT_DATE), $4, $5, $6, $7, $8)
+           RETURNING *`,
+          [
+            normalizedArticle,
+            record.quantity,
+            record.entryDate || null,
+            record.readyDate,
+            record.designation,
+            record.clientCode,
+            record.clientName,
+            record.batchNumber || null
+          ]
+        );
+        created.push(result.rows[0]);
       }
 
       await client.query('COMMIT');
@@ -183,25 +168,32 @@ const StockMpModel = {
       `SELECT
          *
        FROM stock_mp
-       ORDER BY ready_date ASC, id ASC`
+       ORDER BY entry_date DESC, id DESC`
     );
 
     const now = new Date();
-    const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    const today = now.toISOString().split('T')[0];
     return result.rows.map(row => {
       const rDate = row.ready_date instanceof Date
-        ? row.ready_date.getFullYear() + '-' + String(row.ready_date.getMonth() + 1).padStart(2, '0') + '-' + String(row.ready_date.getDate()).padStart(2, '0')
-        : String(row.ready_date).slice(0, 10);
+        ? row.ready_date.toISOString().split('T')[0]
+        : row.ready_date ? String(row.ready_date).slice(0, 10) : null;
+
+      const eDate = row.entry_date instanceof Date
+        ? row.entry_date.toISOString().split('T')[0]
+        : row.entry_date ? String(row.entry_date).slice(0, 10) : null;
+
       return {
         ...row,
-        is_ready: rDate <= today
+        ready_date: rDate,
+        entry_date: eDate,
+        is_ready: rDate ? rDate <= today : true
       };
     });
   },
 
   async markAsUsed(id) {
     const result = await pool.query(
-      `UPDATE stock_mp SET is_used = TRUE WHERE id = $1 RETURNING *`,
+      `UPDATE stock_mp SET quantity = 0, used_quantity = initial_quantity, is_used = TRUE WHERE id = $1 RETURNING *`,
       [id]
     );
     return result.rows[0] || null;
@@ -232,21 +224,41 @@ const StockMpModel = {
     const normalizedArticle = normalizeArticleCode(article);
     if (!normalizedArticle) return null;
     if (!isValidArticleCode(normalizedArticle)) return null;
-    const result = await pool.query(
-      `UPDATE stock_mp
-       SET quantity = GREATEST(quantity - $2, 0),
-           is_used = CASE WHEN quantity - $2 <= 0 THEN TRUE ELSE is_used END
-       WHERE id = (
-         SELECT id
-         FROM stock_mp
-         WHERE UPPER(article) = UPPER($1)
-         ORDER BY id DESC
-         LIMIT 1
-       )
-       RETURNING *`,
-      [normalizedArticle, quantityToDeduct]
+
+    // FIFO Logic for deduction
+    const batches = await pool.query(
+      `SELECT id, quantity, used_quantity 
+       FROM stock_mp 
+       WHERE UPPER(article) = UPPER($1) AND is_used = FALSE AND quantity > 0
+       ORDER BY entry_date ASC, id ASC`,
+      [normalizedArticle]
     );
-    return result.rows[0] || null;
+
+    let remainingToDeduct = quantityToDeduct;
+    let lastUpdatedRow = null;
+
+    for (const batch of batches.rows) {
+      if (remainingToDeduct <= 0) break;
+
+      const deductFromThisBatch = Math.min(batch.quantity, remainingToDeduct);
+      const newQuantity = batch.quantity - deductFromThisBatch;
+      const newUsedQuantity = Number(batch.used_quantity || 0) + deductFromThisBatch;
+
+      const result = await pool.query(
+        `UPDATE stock_mp
+         SET quantity = $2,
+             used_quantity = $3,
+             is_used = CASE WHEN $2 <= 0 THEN TRUE ELSE is_used END
+         WHERE id = $1
+         RETURNING *`,
+        [batch.id, newQuantity, newUsedQuantity]
+      );
+
+      remainingToDeduct -= deductFromThisBatch;
+      lastUpdatedRow = result.rows[0];
+    }
+
+    return lastUpdatedRow;
   },
 
   async addQuantity(id, quantityToAdd) {

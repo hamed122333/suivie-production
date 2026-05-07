@@ -4,8 +4,14 @@ const StockImportModel = require('../models/stockImportModel');
 async function recalculateStockAllocation(itemReference, workspaceId) {
   if (!itemReference) return;
 
-  // Récupérer le stock disponible
-  const stock = await StockImportModel.findByArticle(itemReference);
+  // Récupérer le stock disponible (Vérifier PF puis MP)
+  let stock = await StockImportModel.findByArticle(itemReference);
+  if (!stock) {
+    // Essayer de trouver dans le stock MP si non trouvé dans PF
+    const StockMpModel = require('../models/stockMpModel');
+    stock = await StockMpModel.findByArticle(itemReference);
+  }
+
   const availableStock = stock ? Number(stock.quantity || 0) : 0;
 
   // Récupérer toutes les tâches non DONE pour cet article, triées par date

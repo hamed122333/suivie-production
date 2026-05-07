@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { stockMpAPI, taskAPI } from '../services/api';
-import { ALLOWED_ARTICLE_PREFIXES, isValidArticleCode, normalizeArticleCode } from '../utils/articleCode';
+import {  isValidArticleCode, normalizeArticleCode } from '../utils/articleCode';
 import './StockImportModal.css';
 
 const ManualStockMpModal = ({ onClose, onAdded }) => {

@@ -162,7 +162,8 @@ const stockImportMpController = {
           const value = `${rawValue || ''}`.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
           tempHeaders[value] = colNumber;
 
-          if (['article', 'code article', 'reference', 'ref'].includes(value)) {
+          // Added "etiquettes de lignes" as a candidate for finding the header row
+          if (['article', 'code article', 'reference', 'ref', 'etiquettes de lignes'].includes(value)) {
             foundArticle = true;
           }
         });
@@ -181,11 +182,11 @@ const stockImportMpController = {
         });
       }
 
-      const articleCandidates = ['article', 'articles', 'ref', 'reference', 'code article'];
+      const articleCandidates = ['article', 'articles', 'ref', 'reference', 'code article', 'etiquettes de lignes'];
       const designationCandidates = ['designation', 'designation article'];
       const clientCodeCandidates = ['client', 'code client'];
       const clientNameCandidates = ['nomclient', 'nom client', 'nom_client'];
-      const quantityCandidates = ['quantite', 'qt', 'qte', 'qty', 'quantity', 'quantites', 'somme de quantite'];
+      const quantityCandidates = ['somme de quantite', 'quantite', 'qt', 'qte', 'qty', 'quantity', 'quantites'];
       const dateCandidates = ['date', 'dates', 'date_import', 'jour', 'date entree en stock'];
 
       let articleColIdx = null;
@@ -236,7 +237,7 @@ const stockImportMpController = {
       if (articleColIdx === null || quantityColIdx === null) {
         return res.status(400).json({
           error:
-            'Colonnes introuvables. Le fichier doit contenir au moins les colonnes "CODE ARTICLE" et "Somme de QUANTITE".',
+            'Colonnes introuvables. Le fichier doit contenir au moins les colonnes "CODE ARTICLE" et "Somme de Quantité".',
         });
       }
 
@@ -300,7 +301,7 @@ const stockImportMpController = {
       if (records.length === 0) {
         return res.status(400).json({
           error:
-            'Aucune ligne valide trouvee. Verifiez que le fichier contient des donnees dans les colonnes "article" et "quantite".',
+            'Aucune ligne valide trouvee. Verifiez que le fichier contient des donnees dans les colonnes "CODE ARTICLE" et "Somme de Quantité".',
         });
       }
 
@@ -333,9 +334,6 @@ const stockImportMpController = {
 
       if (!normalizedArticle || !Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
         return res.status(400).json({ error: 'Article et quantite valides requis.' });
-      }
-      if (!isValidArticleCode(normalizedArticle)) {
-        return res.status(400).json({ error: 'Code article invalide. Prefixes autorises: CI, CV, DI, DV, FC, FD, PL, MP' });
       }
 
       const existing = await StockMpModel.findByArticle(normalizedArticle);

@@ -68,7 +68,6 @@ const StockMpPage = () => {
     const q = searchTerm.toLowerCase();
     return safeArray.filter((item) =>
       (item.article || '').toLowerCase().includes(q) ||
-      (item.designation || '').toLowerCase().includes(q) ||
       (item.client_name || '').toLowerCase().includes(q) ||
       (item.client_code || '').toLowerCase().includes(q)
     );
@@ -92,9 +91,13 @@ const StockMpPage = () => {
             aValue = (a.client_name || a.client_code || '').toLowerCase();
             bValue = (b.client_name || b.client_code || '').toLowerCase();
             break;
-          case 'designation':
-            aValue = (a.designation || '').toLowerCase();
-            bValue = (b.designation || '').toLowerCase();
+          case 'batch_number':
+            aValue = (a.batch_number || '').toLowerCase();
+            bValue = (b.batch_number || '').toLowerCase();
+            break;
+          case 'entry_date':
+            aValue = new Date(a.entry_date || 0).getTime();
+            bValue = new Date(b.entry_date || 0).getTime();
             break;
           case 'date':
           default:
@@ -117,7 +120,10 @@ const StockMpPage = () => {
   );
 
   const totalQty = useMemo(() => safeArray.reduce((sum, i) => sum + Number(i.quantity || 0), 0), [safeArray]);
+  const initialQtyTotal = useMemo(() => safeArray.reduce((sum, i) => sum + Number(i.initial_quantity || i.quantity || 0), 0), [safeArray]);
   const filteredQty = useMemo(() => filteredStock.reduce((sum, i) => sum + Number(i.quantity || 0), 0), [filteredStock]);
+  const filteredInitialQty = useMemo(() => filteredStock.reduce((sum, i) => sum + Number(i.initial_quantity || i.quantity || 0), 0), [filteredStock]);
+
   const uniqueArticleCount = useMemo(() => new Set(safeArray.map(i => i.article).filter(Boolean)).size, [safeArray]);
   const filteredArticleCount = useMemo(() => new Set(filteredStock.map(i => i.article).filter(Boolean)).size, [filteredStock]);
 
@@ -195,6 +201,9 @@ const StockMpPage = () => {
             <strong>{(isFiltered ? filteredQty : totalQty).toLocaleString('fr-FR')}</strong>
             <span>unités{isFiltered ? ' filtrées' : ' en stock'}</span>
           </div>
+          <div className="stock-stat">
+            <span className="text-xs text-muted">Utilisé: <strong>{((isFiltered ? filteredInitialQty : initialQtyTotal) - (isFiltered ? filteredQty : totalQty)).toLocaleString('fr-FR')}</strong></span>
+          </div>
           {isFiltered && (
             <button type="button" className="stock-stats-strip__clear" onClick={clearSearch}>
               ✕ Effacer le filtre «&nbsp;{searchTerm}&nbsp;»
@@ -221,16 +230,19 @@ const StockMpPage = () => {
                 <thead>
                   <tr>
                     <th onClick={() => requestSort('article')} className="sortable-header">
-                        Code Article {getSortIcon('article')}
-                      </th>
-                    <th onClick={() => requestSort('designation')} className="sortable-header">
-                        Désignation {getSortIcon('designation')}
+                        Article {getSortIcon('article')}
                       </th>
                     <th onClick={() => requestSort('client')} className="sortable-header">
-                        Client {getSortIcon('client')}
+                        Client / Source {getSortIcon('client')}
+                      </th>
+                    <th onClick={() => requestSort('batch_number')} className="sortable-header">
+                        N° Lot {getSortIcon('batch_number')}
+                      </th>
+                    <th onClick={() => requestSort('entry_date')} className="sortable-header text-center">
+                        Entrée {getSortIcon('entry_date')}
                       </th>
                     <th onClick={() => requestSort('quantity')} className="sortable-header text-center">
-                        Quantité {getSortIcon('quantity')}
+                        Stock Actuel {getSortIcon('quantity')}
                       </th>
                     <th onClick={() => requestSort('date')} className="sortable-header text-right">
                         Disponibilité {getSortIcon('date')}
@@ -242,7 +254,7 @@ const StockMpPage = () => {
                     <tr key={item.id || index}>
                       <td>
                         <div className="item-article">
-                          <div className="article-icon">📦</div>
+                          <div className="article-icon">MP</div>
                           <div className="article-info">
                             <span className="article-name">
                               {isFiltered && searchTerm
@@ -253,28 +265,36 @@ const StockMpPage = () => {
                         </div>
                       </td>
                       <td>
-                        <span className="item-designation text-sm text-gray">
-                          {item.designation
-                            ? (isFiltered ? highlightMatch(item.designation, searchTerm) : item.designation)
-                            : <span className="text-muted italic">Spécifiée par référence</span>}
-                        </span>
-                      </td>
-                      <td>
                         <div className="item-client">
                           {item.client_name ? (
                             <span className="client-name">
                               {isFiltered ? highlightMatch(item.client_name, searchTerm) : item.client_name}
                             </span>
                           ) : (
-                            <span className="text-muted italic">Non spécifié</span>
+                            <span className="text-muted italic">Direct / Stock</span>
                           )}
                           {item.client_code && (
                             <span className="client-code text-xs text-gray ml-2">({item.client_code})</span>
                           )}
                         </div>
                       </td>
+                      <td>
+                        <span className="batch-tag">{item.batch_number || 'N/A'}</span>
+                      </td>
+                      <td className="text-center">
+                        <span className="text-sm font-medium">{formatDate(item.entry_date)}</span>
+                      </td>
                       <td className="item-quantity text-center">
-                        <span className="qty-badge">{item.quantity}</span>
+                        <div className="qty-stack">
+                          <span className="qty-badge-primary">{Number(item.quantity).toLocaleString('fr-FR')}</span>
+                          <div className="progress-mini">
+                            <div
+                              className="progress-mini-bar"
+                              style={{ width: `${Math.min(100, (item.quantity / (item.initial_quantity || item.quantity)) * 100)}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-xs text-muted block mt-1">Initial: {Number(item.initial_quantity || item.quantity).toLocaleString('fr-FR')}</span>
+                        </div>
                       </td>
                       <td className="item-date text-right">
                         <div className="date-wrapper">

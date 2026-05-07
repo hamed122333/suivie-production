@@ -66,14 +66,14 @@ const StockImportMpModal = ({ onClose, onImported }) => {
         <div className="stock-import-modal__body">
           <p className="stock-import-modal__hint">
             Le fichier Excel doit contenir au minimum les colonnes :
-            <strong> CODE ARTICLE</strong> et <strong>Somme de QUANTITE</strong>.
+            <strong> ÉTIQUETTES DE LIGNES</strong> (Article) et <strong>Somme de QUANTITÉ</strong>.
             <br/><br/>
-            Colonnes recommandées pour faciliter le travail :
+            Autres colonnes supportées :
             <br/>
-            <span className="badge badge--gray">DESIGNATION ARTICLE</span>
+            <span className="badge badge--gray">DESIGNATION</span>
+            <span className="badge badge--gray">N° LOT / BATCH</span>
+            <span className="badge badge--gray">DATE ENTREE</span>
             <span className="badge badge--gray">CLIENT</span>
-            <span className="badge badge--gray">NOMCLIENT</span>
-            <span className="badge badge--gray">DATE ENTREE EN STOCK</span>
           </p>
 
           {error && <div className="stock-import-modal__error">{error}</div>}
@@ -84,9 +84,10 @@ const StockImportMpModal = ({ onClose, onImported }) => {
               <ul className="stock-import-modal__imported-list">
                 {result.records.slice(0, 10).map((r) => (
                   <li key={r.id}>
-                    {r.article} — {r.quantity} pcs
+                    <strong>{r.article}</strong> — {Number(r.quantity).toLocaleString('fr-FR')} pcs
+                    {r.designation && <span className="block text-xs text-muted">{r.designation}</span>}
                     <span className="stock-import-modal__ready-date">
-                      (Prêt le {formatDate(r.ready_date)})
+                      (Entrée: {formatDate(r.entry_date || r.date_import)})
                     </span>
                   </li>
                 ))}
