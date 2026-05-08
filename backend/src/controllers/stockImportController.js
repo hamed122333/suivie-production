@@ -1,67 +1,11 @@
 const ExcelJS = require('exceljs');
 const StockImportModel = require('../models/stockImportModel');
 const TaskModel = require('../models/taskModel');
-const TaskHistoryModel = require('../models/taskHistoryModel');
 const { isValidArticleCode, normalizeArticleCode } = require('../utils/articleCode');
+const { broadcast } = require('../services/sseService');
+const { recalculateStockAllocation } = require('../services/stockAllocationService');
 
-async function autoPromoteWaitingTasksByArticles(articles, actorId) {
-  const articleSet = new Set((articles || []).map((a) => `${a || ''}`.trim().toUpperCase()).filter(Boolean));
-  if (articleSet.size === 0) return 0;
-
-  const waitingTasks = await TaskModel.getAll({ status: 'WAITING_STOCK' });
-  const candidates = waitingTasks.filter((task) => articleSet.has(`${task.item_reference || ''}`.trim().toUpperCase()));
-  let promoted = 0;
-
-  for (const task of candidates) {
-    const stockAvailable = await StockImportModel.hasAvailableQuantity({
-      stockImportId: task.stock_import_id,
-      itemReference: task.item_reference,
-      requiredQuantity: task.quantity || 1,
-    });
-    if (!stockAvailable) continue;
-
-    const moved = await TaskModel.updateStatus(task.id, 'TODO', null, actorId, 'planner', {
-      systemAutoPromotion: true,
-    });
-    if (!moved) continue;
-    promoted += 1;
-    await TaskHistoryModel.log({
-      taskId: moved.id,
-      actorId,
-      actionType: 'stock_confirmed',
-      fieldName: 'stock',
-      message: 'Stock mis a jour puis fiche deplacee automatiquement vers A faire',
-    });
-  }
-
-  return promoted;
-}
-
-async function autoPromoteAllWaitingTasks(actorId = null) {
-  const waitingTasks = await TaskModel.getAll({ status: 'WAITING_STOCK' });
-  let promoted = 0;
-  for (const task of waitingTasks) {
-    const stockAvailable = await StockImportModel.hasAvailableQuantity({
-      stockImportId: task.stock_import_id,
-      itemReference: task.item_reference,
-      requiredQuantity: task.quantity || 1,
-    });
-    if (!stockAvailable) continue;
-    const moved = await TaskModel.updateStatus(task.id, 'TODO', null, actorId, 'planner', {
-      systemAutoPromotion: true,
-    });
-    if (!moved) continue;
-    promoted += 1;
-    await TaskHistoryModel.log({
-      taskId: moved.id,
-      actorId,
-      actionType: 'stock_confirmed',
-      fieldName: 'stock',
-      message: 'Auto-check stock: fiche deplacee automatiquement vers A faire',
-    });
-  }
-  return promoted;
-}
+// Old autoPromote functions removed — all stock logic is now in stockAllocationService.js
 
 /**
  * Extract a numeric value from an ExcelJS cell that may contain a raw
@@ -310,11 +254,13 @@ const stockImportController = {
       }
 
       const created = await StockImportModel.createMany(records);
-      const promotedTasks = await autoPromoteWaitingTasksByArticles(
-        created.map((row) => row.article),
-        req.user?.id || null
-      );
-      res.status(201).json({ imported: created.length, skipped, records: created, promotedTasks });
+      // Recalculate FIFO allocation for each imported article
+      const uniqueArticles = [...new Set(created.map(r => r.article.toUpperCase()))];
+      for (const art of uniqueArticles) {
+        await recalculateStockAllocation(art);
+      }
+      broadcast('stock-updated', { source: 'excel-import', articles: uniqueArticles, count: created.length });
+      res.status(201).json({ imported: created.length, skipped, records: created });
     } catch (err) {
       console.error('Excel import error:', err);
       res.status(500).json({ error: "Erreur lors de l'importation du fichier: " + err.message });
@@ -355,14 +301,12 @@ const stockImportController = {
         clientName: clientName || null,
         readyDate,
       });
-      const promotedTasks = await autoPromoteWaitingTasksByArticles(
-        [row.article],
-        req.user?.id || null
-      );
+      // Recalculate FIFO allocation for this article
+      await recalculateStockAllocation(row.article);
+      broadcast('stock-updated', { source: 'manual', articles: [row.article], count: 1 });
       res.status(201).json({
         imported: 1,
         records: [row],
-        promotedTasks,
         action,
         mode: resolvedMode,
       });
@@ -409,8 +353,33 @@ const stockImportController = {
     }
   },
 
+  /**
+   * POST /api/stock-import/recalculate-all
+   * Force recalculate FIFO allocation for every distinct article reference.
+   * Useful after deploying the allocation fix on existing data.
+   */
+  async recalculateAll(req, res) {
+    try {
+      // Get all distinct article references from active tasks
+      const allTasks = await TaskModel.getAll({
+        statusIn: ['WAITING_STOCK', 'TODO', 'IN_PROGRESS', 'BLOCKED'],
+      });
+      const articles = [...new Set(
+        allTasks
+          .map(t => (t.item_reference || '').toUpperCase())
+          .filter(Boolean)
+      )];
+
+      const { recalculateAllArticles } = require('../services/stockAllocationService');
+      const processed = await recalculateAllArticles();
+      res.json({ message: `Recalcul terminé pour ${processed} article(s)`, articles: processed });
+    } catch (err) {
+      console.error('Recalculate all error:', err);
+      res.status(500).json({ error: 'Erreur lors du recalcul global' });
+    }
+  },
+
 };
 
 module.exports = stockImportController;
 module.exports.calculateReadyDate = calculateReadyDate;
-module.exports.autoPromoteAllWaitingTasks = autoPromoteAllWaitingTasks;

@@ -413,7 +413,14 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
                         </div>
                         <div className="stock-article-item__info">
                           <span className="stock-article-item__name">{article.article}</span>
-                          <span className="stock-article-item__qty">Stock: {Number(article.quantity)} pcs</span>
+                          <span className="stock-article-item__qty">
+                            Stock: {Number(article.quantity)} pcs
+                            {article.task_count > 0 && (
+                              <span className="stock-article-item__reserved">
+                                {' '}— {Number(article.available_quantity)} dispo ({article.task_count} cmd{article.task_count > 1 ? 's' : ''})
+                              </span>
+                            )}
+                          </span>
                           {isSelected && (
                             <input
                               type="number"

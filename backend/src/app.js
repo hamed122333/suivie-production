@@ -10,6 +10,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const workspaceRoutes = require('./routes/workspaceRoutes');
 const stockImportRoutes = require('./routes/stockImportRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const { addClient } = require('./services/sseService');
 
 const app = express();
 
@@ -47,6 +48,22 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/stock-import', stockImportRoutes);
 app.use('/api/notifications', notificationRoutes);
+
+// SSE endpoint — real-time push to frontend
+app.get('/api/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no', // Nginx: disable buffering
+  });
+  res.write(':\n\n'); // initial comment to flush headers
+  addClient(res);
+
+  // Keep-alive every 30s to prevent proxy/timeout drops
+  const keepAlive = setInterval(() => res.write(':\n\n'), 30000);
+  req.on('close', () => clearInterval(keepAlive));
+});
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Suivi Production API running' });

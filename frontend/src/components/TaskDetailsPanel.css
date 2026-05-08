@@ -130,6 +130,69 @@
   color: #dc2626;
 }
 
+.task-detail-label--success {
+  color: #166534;
+}
+
+.task-detail-value--success {
+  color: #16a34a;
+}
+
+/* ── Stock allocation bar ── */
+.task-detail__stock-order {
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: #eff6ff;
+  color: #1e40af;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+}
+
+.task-detail__stock-bar-wrap {
+  margin-bottom: 0.75rem;
+}
+
+.task-detail__stock-bar {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.task-detail__stock-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.task-detail__stock-bar-fill--full {
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+
+.task-detail__stock-bar-fill--partial {
+  background: linear-gradient(90deg, #f59e0b, #eab308);
+}
+
+.task-detail__stock-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.3rem;
+  font-size: 0.68rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.task-detail__stock-note {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  font-size: 0.74rem;
+  color: #92400e;
+  line-height: 1.4;
+}
+
 .task-detail__description {
   color: #334155;
   line-height: 1.65;

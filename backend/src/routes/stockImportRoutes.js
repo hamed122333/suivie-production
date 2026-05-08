@@ -44,4 +44,12 @@ router.get('/', authenticate, stockImportController.getAll);
 // Get active tasks for a specific article
 router.get('/:id/active-tasks', authenticate, stockImportController.getActiveTasks);
 
+// Force recalculate allocation for all articles — admin only
+router.post(
+  '/recalculate-all',
+  authenticate,
+  requireRoles(['super_admin']),
+  stockImportController.recalculateAll
+);
+
 module.exports = router;

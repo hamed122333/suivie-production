@@ -175,22 +175,64 @@
   color: #fff;
 }
 
+/* ── Info row: facts + stock badge ── */
+.task-card__info-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+  flex-wrap: wrap;
+}
+
 .task-card__facts {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-bottom: 0.7rem;
+  gap: 0.3rem;
+  flex: 1;
+  min-width: 0;
 }
 
-.task-card__facts span {
+.task-card__fact {
   display: inline-flex;
   align-items: center;
-  padding: 0.18rem 0.45rem;
-  border-radius: 999px;
+  gap: 0.2rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 0.67rem;
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-card__fact--ref {
+  background: #f1f5f9;
+  color: #475569;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  letter-spacing: 0.02em;
+}
+
+.task-card__fact--line {
   background: #eff6ff;
   color: #1e40af;
-  font-size: 0.68rem;
-  font-weight: 600;
+}
+
+.task-card__fact--delivery {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.task-card__fact--due {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.task-card__fact-icon {
+  font-size: 0.6rem;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .task-card__blocked {

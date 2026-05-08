@@ -7,6 +7,7 @@ import Spinner from '../components/Spinner';
 import { taskAPI, userAPI, dashboardAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import useServerEvents from '../hooks/useServerEvents';
 
 const KanbanPage = () => {
   const [tasks, setTasks] = useState([]);
@@ -54,6 +55,18 @@ const KanbanPage = () => {
       console.error('Failed to fetch stats', err);
     }
   }, [workspaceId]);
+
+  // Real-time: refetch when stock or task allocations change
+  useServerEvents({
+    'stock-updated': () => {
+      fetchTasks(workspaceId);
+      fetchStats();
+    },
+    'tasks-updated': () => {
+      fetchTasks(workspaceId);
+      fetchStats();
+    },
+  });
 
   const handleExport = async (startDate, endDate, exportAll) => {
     try {

@@ -575,6 +575,12 @@
   white-space: nowrap;
 }
 
+.stock-article-item__reserved {
+  color: #b45309;
+  font-weight: 600;
+  font-size: 0.76rem;
+}
+
 .stock-article-item__input-qty {
   width: 60px;
   padding: 0.15rem 0.35rem;

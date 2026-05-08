@@ -108,6 +108,8 @@ const updateFieldMap = {
   isKnownProduct: 'is_known_product',
   stockAvailableAtCreation: 'stock_available_at_creation',
   stockDeficit: 'stock_deficit',
+  stockAllocated: 'stock_allocated',
+  priorityOrder: 'priority_order',
   urgentDatePending: 'urgent_date_pending',
 };
 
@@ -132,6 +134,16 @@ function appendFilters(filters, params) {
   if (filters.status) {
     params.push(filters.status);
     conditions.push(`t.status = $${params.length}`);
+  }
+
+  if (filters.statusIn && Array.isArray(filters.statusIn) && filters.statusIn.length > 0) {
+    params.push(filters.statusIn);
+    conditions.push(`t.status = ANY($${params.length}::text[])`);
+  }
+
+  if (filters.itemReference) {
+    params.push(filters.itemReference.toUpperCase());
+    conditions.push(`UPPER(t.item_reference) = $${params.length}`);
   }
 
   if (filters.date) {
@@ -433,7 +445,8 @@ const TaskModel = {
         return null;
       }
 
-      const isPrivileged = userRole === 'planner' || options.systemAutoPromotion;
+      const isSystem = userRole === 'system' || options.systemAutoPromotion;
+      const isPrivileged = userRole === 'planner' || userRole === 'super_admin' || isSystem;
       if (!isPrivileged && currentTask.assigned_to !== userId) {
         await client.query('ROLLBACK');
         throw new Error('Not authorized to update this task');
@@ -446,7 +459,7 @@ const TaskModel = {
 
       const changingWaitingStock =
         currentTask.status === 'WAITING_STOCK' || status === 'WAITING_STOCK';
-      if (changingWaitingStock && !options.systemAutoPromotion) {
+      if (changingWaitingStock && !isSystem) {
         await client.query('ROLLBACK');
         throw new Error('WAITING_STOCK status can only be changed by system auto promotion');
       }

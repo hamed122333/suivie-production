@@ -6,6 +6,7 @@ import Spinner from '../components/Spinner';
 import EmptyState from '../components/EmptyState';
 import { useAuth } from '../context/AuthContext';
 import { formatDate } from '../utils/formatters';
+import useServerEvents from '../hooks/useServerEvents';
 import './StockPage.css';
 
 const StockPage = () => {
@@ -38,6 +39,12 @@ const StockPage = () => {
   };
 
   useEffect(() => { fetchStock(); }, []);
+
+  // Real-time: auto-refresh when stock changes from another tab/user
+  useServerEvents({
+    'stock-updated': () => fetchStock(),
+    'tasks-updated': () => fetchStock(), // allocation changes affect available_quantity
+  });
 
   const handleImported = () => { fetchStock(); };
   const handleManualAdded = () => { fetchStock(); };

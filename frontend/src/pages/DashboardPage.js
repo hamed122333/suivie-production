@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { dashboardAPI, taskAPI } from '../services/api';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useAuth } from '../context/AuthContext';
@@ -6,6 +6,7 @@ import { STATUS_COUNT_FIELDS, TASK_STATUS_CONFIG, TASK_STATUS_ORDER } from '../c
 import { formatDate, formatLongDate, formatRelativeDate } from '../utils/formatters';
 import Spinner from '../components/Spinner';
 import { useNavigate } from 'react-router-dom';
+import useServerEvents from '../hooks/useServerEvents';
 import './DashboardPage.css';
 
 const MetricTile = ({ label, value, tone = 'blue', helper }) => (
@@ -35,41 +36,46 @@ const DashboardPage = () => {
   const activeWorkspace = workspaces?.find((workspace) => String(workspace.id) === String(workspaceId));
   const workspaceName = workspaceId === 'all' ? 'Tous les espaces' : activeWorkspace?.name || '';
 
+  const fetchData = useCallback(async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+    try {
+      const apiWorkspaceId = workspaceId !== 'all' ? workspaceId : null;
+      const taskParams = apiWorkspaceId ? { workspaceId: apiWorkspaceId } : {};
+
+      const [statsResponse, tasksResponse] = await Promise.all([
+        dashboardAPI.getStats(apiWorkspaceId),
+        taskAPI.getAll(taskParams),
+      ]);
+
+      setStats(statsResponse.data);
+      setAllTasks(tasksResponse.data || []);
+      setRecentTasks(
+        [...tasksResponse.data]
+          .sort((left, right) => {
+            const leftDate = new Date(left.updated_at || left.created_at).getTime();
+            const rightDate = new Date(right.updated_at || right.created_at).getTime();
+            return rightDate - leftDate;
+          })
+          .slice(0, 8)
+      );
+    } catch (err) {
+      console.error('Failed to load dashboard data', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [workspaceId]);
+
   useEffect(() => {
     if (loadingWorkspaces) return;
     if (workspaceId === null) return;
+    fetchData(true);
+  }, [workspaceId, loadingWorkspaces, fetchData]);
 
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const apiWorkspaceId = workspaceId !== 'all' ? workspaceId : null;
-        const taskParams = apiWorkspaceId ? { workspaceId: apiWorkspaceId } : {};
-
-        const [statsResponse, tasksResponse] = await Promise.all([
-          dashboardAPI.getStats(apiWorkspaceId),
-          taskAPI.getAll(taskParams),
-        ]);
-
-        setStats(statsResponse.data);
-        setAllTasks(tasksResponse.data || []);
-        setRecentTasks(
-          [...tasksResponse.data]
-            .sort((left, right) => {
-              const leftDate = new Date(left.updated_at || left.created_at).getTime();
-              const rightDate = new Date(right.updated_at || right.created_at).getTime();
-              return rightDate - leftDate;
-            })
-            .slice(0, 8)
-        );
-      } catch (err) {
-        console.error('Failed to load dashboard data', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [workspaceId, loadingWorkspaces]);
+  // Real-time: refresh dashboard when stock or tasks change
+  useServerEvents({
+    'stock-updated': () => fetchData(false),
+    'tasks-updated': () => fetchData(false),
+  });
 
   // ─── 2. CALCULS ET useMemo — AVANT TOUT RETURN ANTICIPÉ ──────────────────
   const counts = stats?.counts || {};

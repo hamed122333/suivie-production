@@ -4,17 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Suivi Production** is a full-stack factory task tracking system (similar to Jira) for production management. It features Kanban boards, stock management, multi-workspace support, and role-based access control.
+**Suivi Production** is a full-stack factory task tracking system for production management. It features Kanban boards, stock management, multi-workspace support, role-based access control, and bidirectional notifications between planners and commercials.
 
 ## Commands
 
 ### Docker (recommended)
 ```bash
-# Development (hot reload, seed data)
-docker compose -f docker-compose.dev.yml up --build
-
-# Production (Nginx reverse proxy)
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.dev.yml up --build      # Dev (hot reload, seed data)
+docker compose -f docker-compose.prod.yml up -d --build   # Production (Nginx reverse proxy)
 ```
 
 ### Backend (`/backend`)
@@ -27,83 +24,99 @@ npm run migrate    # Run database migrations/setup
 ### Frontend (`/frontend`)
 ```bash
 npm start          # Dev server (port 3000)
-npm run build      # Production build
+npm run build      # Production build (verify no warnings)
 npm test           # Run tests
 ```
 
 ## Architecture
 
 ### Stack
-- **Frontend:** React 18, React Router, Axios, Vanilla CSS
+- **Frontend:** React 18, React Router, Axios, Vanilla CSS (BEM naming)
 - **Backend:** Node.js, Express.js
-- **Database:** PostgreSQL 15+ (pool configured in `backend/src/config/db.js`, IPv4-optimized for Supabase)
+- **Database:** PostgreSQL 15+ (pool in `backend/src/config/db.js`, IPv4-optimized for Supabase)
 - **Auth:** JWT (24h tokens), bcryptjs
 
 ### Backend (`backend/src/`)
-- `server.js` — Entry point; starts express app + schedules auto-promotion of `WAITING_STOCK` → `TODO` tasks daily
+- `server.js` — Entry point; starts express + schedules daily auto-promotion `WAITING_STOCK → TODO`
 - `app.js` — Express setup: CORS, rate limits (200 req/15min general, 20 req/15min auth), route mounting
 - `routes/` — Express routers: auth, tasks, users, dashboard, workspaces, stock-import, notifications
 - `controllers/` — Business logic layer, one file per domain
 - `models/` — Direct PostgreSQL queries (no ORM), one file per domain
-- `middleware/auth.js` — JWT verification + role-based access enforcement
-- `services/emailService.js` — Nodemailer for password reset emails
-- `constants/task.js` — Single source of truth for task statuses, priorities, and tracked fields
-- `utils/` — Task validation, scope helpers, article codes, HTTP error factories
+- `middleware/auth.js` — JWT verification + role-based access via `requireRoles()`
+- `services/stockAllocationService.js` — FIFO stock allocation algorithm
+- `services/emailService.js` — Nodemailer for password reset
+- `constants/task.js` — Single source of truth for statuses, priorities, tracked fields
+- `utils/` — Task validation, scope helpers (`taskScope.js`), article codes (`articleCode.js`), HTTP error factories
 
 ### Frontend (`frontend/src/`)
 - `App.js` — Root router with protected routes
 - `context/AuthContext.js` — Global user/auth state; `context/WorkspaceContext.js` — active workspace
-- `services/api.js` — Axios instance with JWT interceptors; all API calls go through here
+- `services/api.js` — Axios instance with JWT interceptors; all API calls centralized here
 - `pages/` — Full-page views (Dashboard, Kanban, Users, Stock, Auth)
-- `components/` — Reusable UI: KanbanBoard, TaskCard, modals
+- `components/` — Reusable UI: KanbanBoard, TaskCard, TaskDetailsPanel, modals
 - `constants/task.js` — Mirrors backend constants (keep in sync manually)
-- `utils/` — Formatters, localStorage auth helpers, article code utilities
+- `utils/formatters.js` — Date formatting (`DD/MM/YYYY`), relative dates, number formatting, `getInitials()`
 
-### Data Model Key Points
-- **Task statuses:** `WAITING_STOCK`, `TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`
+### Data Model
+- **Task statuses:** `WAITING_STOCK` → `TODO` → `IN_PROGRESS` → `DONE` (+ `BLOCKED`)
 - **User roles:** `super_admin` > `planner` > `commercial` > `user`
-  - `super_admin`: full access, user creation, all task management
-  - `planner`: status updates, task modifications, Kanban management
-  - `commercial`: task creation (TODO/WAITING_STOCK only)
+  - `super_admin`: full access, user CRUD, all task management
+  - `planner`: status updates, task modifications, Kanban drag & drop, date negotiation
+  - `commercial`: task creation, sees all tasks on Kanban, receives notifications
   - `user`: read-only
 - Tables: `users`, `workspaces`, `tasks`, `task_comments`, `task_history`, `notifications`, `password_reset_tokens`, `stock_imports`
-- A default workspace is auto-created on first migration
-- Password reset tokens expire after 30 minutes
 
 ### Environment Variables
 Copy `backend/.env.example` to `backend/.env`. Key vars:
 - `BOOTSTRAP_ADMIN_*` — Seeds the first `super_admin` on migration
-- `JWT_SECRET` — Must be set in production
+- `JWT_SECRET` — Must be set in production (32+ chars)
 - `DATABASE_URL` — PostgreSQL connection string
 - `SMTP_*` — Email service for password reset
-- `REACT_APP_API_URL` — Frontend points to backend (default: `http://localhost:5000`)
+- `REACT_APP_API_URL` — Frontend → backend (default `http://localhost:5000`)
 
-## Stock Allocation System (Production Ready)
+## Key Systems
 
-The system uses **automatic FIFO (First In First Out) allocation by delivery date**:
+### Stock Allocation (FIFO)
+Automatic allocation by delivery date priority:
+1. `recalculateStockAllocation(itemReference)` runs on task create/update/delete/status-change
+2. Tasks sorted by `planned_date`, then `due_date`, then `id` (deterministic FIFO)
+3. Stock allocated sequentially; deficit > 0 → auto-transition to `WAITING_STOCK`
+4. Bidirectional: `TODO → WAITING_STOCK` if stock becomes insufficient, `WAITING_STOCK → TODO` if stock becomes available
+5. Daily midnight job also promotes eligible tasks
 
-1. **How it works**: When a task is created/updated with an article reference, `recalculateStockAllocation()` runs automatically
-2. **Sorting**: Tasks are sorted by `planned_date`, then `due_date` (earliest first)
-3. **Allocation**: Stock is allocated sequentially to each task in order
-4. **Deficit handling**: Tasks with deficit > 0 automatically transition to WAITING_STOCK status
-5. **Display**: Only the compact **StockAllocationBadge** shows `requested / ⚠️ deficit` (for WAITING_STOCK only)
-6. **No conflicts**: Old manual conflict resolution removed - all allocation is automatic and silent
-7. **Auto-promotion**: Daily job at midnight promotes WAITING_STOCK → TODO if stock is now available
+Key files: `stockAllocationService.js`, `StockAllocationBadge.js`, `taskController.js`
 
-Key files:
-- `backend/src/services/stockAllocationService.js` — Core allocation algorithm
-- `frontend/src/components/StockAllocationBadge.js` — Displays allocation details
-- `backend/src/controllers/taskController.js` — Calls allocation on create/update
+### Notification System
+Bidirectional notifications between planner and commercial:
+- **Commercial → Planner**: task creation notifications to all planners/super_admins
+- **Planner → All Commercials**: status changes, date modifications, date negotiation (PROPOSE/ACCEPT/REJECT)
+- All commercials receive notifications (not just the task creator)
+- Polling every 30s in `Header.js`; notification dropdown with mark-as-read
 
-## Production Checklist
+Key files: `notificationModel.js`, `notificationController.js`, `Header.js`
 
-See `PRODUCTION_DEPLOYMENT.md` for complete production deployment guide.
+### Date Negotiation
+Commercial and planner can negotiate delivery dates on tasks:
+- Actions: `PROPOSE`, `ACCEPT`, `REJECT` via `PUT /api/tasks/:id/date-negotiation`
+- Status flow: `PENDING_PLANNER_REVIEW` ↔ `PENDING_COMMERCIAL_REVIEW` → `ACCEPTED`
+- Full history tracked in `task_history` with actor name and role
 
-Critical items:
-- [ ] Update JWT_SECRET (32+ chars, random)
-- [ ] Set NODE_ENV=production
-- [ ] Run database migrations
-- [ ] Use HTTPS with valid SSL certificate
-- [ ] Test stock allocation: multiple tasks same article, different dates
-- [ ] Verify NO conflict badges appear anywhere
-- [ ] Test auto-promotion job runs daily
+### Task Visibility
+- `utils/taskScope.js` controls visibility via `applyTaskVisibility()`
+- `PRIVILEGED_TASK_ROLES = ['super_admin', 'planner', 'commercial']` — see all tasks
+- Regular `user` role only sees tasks they created
+
+### Article Code Validation
+- Allowed prefixes: `CI`, `CV`, `DI`, `DV`, `FC`, `FD`, `PL`
+- Regex: `/^(CI|CV|DI|DV|FC|FD|PL)[A-Z0-9-]+$/`
+- Defined in `backend/src/utils/articleCode.js`
+
+### Excel Import
+- **Task import** (`importOrders`): forward-fills Date, Pièce no, Nom, Délai demandé across multi-line order groups
+- **Stock import**: two-phase deduplication (exact row dedup → aggregate by article)
+- Uses ExcelJS for parsing
+
+## CSS Conventions
+- BEM naming: `.task-card__title`, `.task-card__priority--high`
+- CSS variables defined in `index.css` `:root` (e.g. `--color-primary`, `--radius-md`)
+- Date format standard: `DD/MM/YYYY` via `formatters.js` — never use `toLocaleDateString()` inline

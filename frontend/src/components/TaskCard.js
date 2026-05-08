@@ -23,19 +23,16 @@ function buildShortOpsMessage(task) {
       return 'Nouveau produit — sans référence stock';
     }
 
-    // Concise message: just show the key shortage number
     if (deficit !== null && deficit > 0) {
-      return `Stock insuffisant — ${deficit} pcs manquants`;
+      return `Stock insuffisant — ${deficit} manquants sur ${qty}`;
     }
 
     return `Stock insuffisant — ${qty || '—'} pcs demandés`;
   }
 
   if (status === 'TODO') {
-    if (task?.task_type === 'PREDICTIVE') {
-      return 'Commande prévisionnelle';
-    }
-    return `Stock validé${qty > 0 ? ` — ${qty} pcs commandés` : ''}`;
+    if (task?.task_type === 'PREDICTIVE') return 'Commande prévisionnelle';
+    return qty > 0 ? `Stock validé — ${qty} pcs` : 'Stock validé';
   }
 
   if (status === 'BLOCKED') return 'Bloquée — action requise';
@@ -50,7 +47,6 @@ function getDateConfirmationBadge(task) {
   const proposedDate = task?.proposed_delivery_date;
   const dateSuffix = proposedDate ? ` (${formatDate(proposedDate)})` : '';
 
-  // Badge date urgente pour les tâches TODO/IN_PROGRESS/BLOCKED
   if (task?.urgent_date_pending && task?.status !== 'WAITING_STOCK') {
     return {
       className: 'task-card__date-check--warn',
@@ -99,8 +95,8 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
   const isPredictive = task.task_type === 'PREDICTIVE';
   const typeConfig = isPredictive ? TASK_TYPE_CONFIG.PREDICTIVE : null;
 
-  // Calcul urgence J-2 / J-1 (uniquement WAITING_STOCK)
-  const daysLeft = task.status === 'WAITING_STOCK' ? getDaysUntilPlannedDate(task) : null;
+  // Urgence J-2 / J-1 (toutes les tâches actives sauf DONE)
+  const daysLeft = task.status !== 'DONE' ? getDaysUntilPlannedDate(task) : null;
   const isDeadlineAlert = daysLeft !== null && daysLeft <= WAITING_STOCK_ALERT_DAYS;
   const isOverdue = daysLeft !== null && daysLeft < 0;
 
@@ -112,12 +108,22 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
       : 'task-card--alert-j2'
     : '';
 
+  // Facts to display as pills
+  const facts = [];
+  if (showReference) facts.push({ key: 'ref', label: task.item_reference });
+  if (task.production_line) facts.push({ key: 'line', label: task.production_line });
+  if (task.planned_date) facts.push({ key: 'delivery', label: `${formatDate(task.planned_date)}`, icon: '📦' });
+  if (task.due_date && task.due_date !== task.planned_date) facts.push({ key: 'due', label: `${formatDate(task.due_date)}`, icon: '📅' });
+
+  const hasStockBadge = task.status === 'WAITING_STOCK' || (task.priority_order != null && task.status !== 'DONE');
+
   return (
     <article
       className={`task-card ${isDragging ? 'task-card--dragging' : ''} ${onOpen ? 'task-card--interactive' : ''} ${urgencyClass}`}
       style={{ borderLeftColor: isOverdue ? '#dc2626' : isDeadlineAlert ? (daysLeft <= 1 ? '#ea580c' : '#d97706') : priority.color }}
       onClick={() => onOpen?.(task)}
     >
+      {/* ── Header row ── */}
       <div className="task-card__top">
         <div className="task-card__meta">
           <span className="task-card__key">{getTaskKey(task)}</span>
@@ -143,29 +149,41 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
         </div>
       </div>
 
+      {/* ── Title + subtitle ── */}
       <h4 className="task-card__title">{task.title}</h4>
       {subtitle && <div className="task-card__subtitle">{subtitle}</div>}
 
-      {shortOpsMessage ? <p className="task-card__desc">{shortOpsMessage}</p> : task.description && <p className="task-card__desc">{task.description}</p>}
+      {/* ── Ops message ── */}
+      {shortOpsMessage
+        ? <p className="task-card__desc">{shortOpsMessage}</p>
+        : task.description && <p className="task-card__desc">{task.description}</p>}
 
+      {/* ── Date negotiation badge ── */}
       {dateCheck && (
         <div className={`task-card__date-check ${dateCheck.className}`} title={dateCheck.text}>
-          <span className="task-card__date-check-icon" aria-hidden>
-            {dateCheck.icon}
-          </span>
+          <span className="task-card__date-check-icon" aria-hidden>{dateCheck.icon}</span>
           <span>{dateCheck.text}</span>
         </div>
       )}
 
-      {/* Stock allocation badge (compact) */}
-      {task.status === 'WAITING_STOCK' && <StockAllocationBadge task={task} />}
+      {/* ── Info row: facts + stock badge side by side ── */}
+      {(facts.length > 0 || hasStockBadge) && (
+        <div className="task-card__info-row">
+          {facts.length > 0 && (
+            <div className="task-card__facts">
+              {facts.map(f => (
+                <span key={f.key} className={`task-card__fact task-card__fact--${f.key}`}>
+                  {f.icon && <span className="task-card__fact-icon" aria-hidden>{f.icon}</span>}
+                  {f.label}
+                </span>
+              ))}
+            </div>
+          )}
+          <StockAllocationBadge task={task} />
+        </div>
+      )}
 
-      <div className="task-card__facts">
-        {showReference && <span className="task-card__fact-ref">Réf {task.item_reference}</span>}
-        {task.production_line && <span className="task-card__fact-line">{task.production_line}</span>}
-        {task.due_date && <span className="task-card__fact-date">Échéance {formatDate(task.due_date)}</span>}
-      </div>
-
+      {/* ── Blocked banner ── */}
       {task.blocked_reason && (
         <div className="task-card__blocked">
           <span aria-hidden>⚠</span>
@@ -176,6 +194,7 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
         </div>
       )}
 
+      {/* ── Footer ── */}
       <div className="task-card__footer">
         <div className="task-card__footer-copy">
           <span className="task-card__time">{when}</span>
@@ -187,10 +206,7 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
         </div>
         <div className="task-card__avatars">
           {task.planned_by_name && task.planned_by_name !== task.created_by_name && (
-            <span
-              className="task-card__avatar task-card__avatar--planner"
-              title={`Planifié par ${task.planned_by_name}`}
-            >
+            <span className="task-card__avatar task-card__avatar--planner" title={`Planifié par ${task.planned_by_name}`}>
               {getInitials(task.planned_by_name)}
             </span>
           )}

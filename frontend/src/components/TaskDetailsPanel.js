@@ -9,7 +9,8 @@ import './TaskDetailsPanel.css';
 const DETAIL_FIELDS = [
   { key: 'client_name', label: 'Client', icon: '👤' },
   { key: 'item_reference', label: 'Article', icon: '📦' },
-  { key: 'planned_date', label: 'Date prévue', icon: '🗓️', format: (val) => formatDate(val) },
+  { key: 'planned_date', label: 'Date livraison', icon: '🚚', format: (val) => formatDate(val) },
+  { key: 'due_date', label: 'Échéance', icon: '🗓️', format: (val) => formatDate(val), hideIf: (task) => task.due_date === task.planned_date },
   {
     key: 'quantity',
     label: 'Quantité',
@@ -283,7 +284,7 @@ const TaskDetailsPanel = ({
             <section className="task-panel-section task-details">
               <h4 className="task-panel-subtitle">Détails essentiels</h4>
               <div className="task-details-grid">
-                {DETAIL_FIELDS.filter((f) => task[f.key]).map((f) => (
+                {DETAIL_FIELDS.filter((f) => task[f.key] && !(f.hideIf && f.hideIf(task))).map((f) => (
                   <div key={f.key} className="task-detail-item">
                     <span className="task-detail-label" aria-hidden>
                       {f.icon} {f.label}
@@ -306,29 +307,69 @@ const TaskDetailsPanel = ({
               </div>
             </section>
 
-            {(task.stock_available_at_creation != null || task.stock_deficit != null) && (
+            {(task.stock_available_at_creation != null || task.stock_deficit != null || task.stock_allocated != null) && (
               <section className="task-detail__section">
-                <h4 className="task-panel-subtitle">Stock & Approvisionnement</h4>
+                <div className="task-detail__section-head">
+                  <h4>Stock & Approvisionnement</h4>
+                  {task.priority_order != null && (
+                    <span className="task-detail__stock-order">
+                      Priorité #{task.priority_order}
+                    </span>
+                  )}
+                </div>
+
+                {/* Stock allocation progress bar */}
+                {task.quantity != null && task.quantity > 0 && (
+                  <div className="task-detail__stock-bar-wrap">
+                    <div className="task-detail__stock-bar">
+                      <div
+                        className={`task-detail__stock-bar-fill ${Number(task.stock_deficit || 0) > 0 ? 'task-detail__stock-bar-fill--partial' : 'task-detail__stock-bar-fill--full'}`}
+                        style={{ width: `${Math.min(100, (Number(task.stock_allocated || 0) / Number(task.quantity)) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="task-detail__stock-bar-labels">
+                      <span>{formatNumber(task.stock_allocated || 0)} alloués</span>
+                      <span>{formatNumber(task.quantity)} demandés</span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="task-details-grid">
                   {task.stock_available_at_creation != null && (
                     <div className="task-detail-item">
-                      <span className="task-detail-label" aria-hidden>📦 Stock initial</span>
+                      <span className="task-detail-label" aria-hidden>📦 Stock global</span>
                       <strong className="task-detail-value">{formatNumber(task.stock_available_at_creation)} {task.quantity_unit || 'pcs'}</strong>
                     </div>
                   )}
                   {task.quantity != null && (
                     <div className="task-detail-item">
-                      <span className="task-detail-label" aria-hidden>🛒 Commandé</span>
+                      <span className="task-detail-label" aria-hidden>🛒 Demandé</span>
                       <strong className="task-detail-value">{formatNumber(task.quantity)} {task.quantity_unit || 'pcs'}</strong>
                     </div>
                   )}
-                  {task.stock_deficit != null && task.stock_deficit > 0 && (
+                  {task.stock_allocated != null && (
+                    <div className="task-detail-item">
+                      <span className={`task-detail-label ${Number(task.stock_allocated) >= Number(task.quantity) ? 'task-detail-label--success' : ''}`} aria-hidden>
+                        ✓ Alloué
+                      </span>
+                      <strong className={`task-detail-value ${Number(task.stock_allocated) >= Number(task.quantity) ? 'task-detail-value--success' : ''}`}>
+                        {formatNumber(task.stock_allocated)} {task.quantity_unit || 'pcs'}
+                      </strong>
+                    </div>
+                  )}
+                  {task.stock_deficit != null && Number(task.stock_deficit) > 0 && (
                     <div className="task-detail-item">
                       <span className="task-detail-label task-detail-label--danger" aria-hidden>⚠ Manquant</span>
                       <strong className="task-detail-value task-detail-value--danger">{formatNumber(task.stock_deficit)} {task.quantity_unit || 'pcs'}</strong>
                     </div>
                   )}
                 </div>
+
+                {task.priority_order != null && task.priority_order > 1 && (
+                  <div className="task-detail__stock-note">
+                    D'autres commandes avec la même référence article sont servies en priorité (FIFO par date de livraison).
+                  </div>
+                )}
                 {isPlanner && task && (
                   <TaskTypeToggle
                     task={task}

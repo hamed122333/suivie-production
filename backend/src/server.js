@@ -1,22 +1,23 @@
 const app = require('./app');
-const { autoPromoteAllWaitingTasks } = require('./controllers/stockImportController');
+const { recalculateAllArticles } = require('./services/stockAllocationService');
 
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-const AUTO_PROMOTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
+// Daily FIFO recalculation — catches any missed updates
+const AUTO_RECALC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 setInterval(async () => {
   try {
-    const promoted = await autoPromoteAllWaitingTasks(null);
-    if (promoted > 0) {
-      console.log(`Auto promotion moved ${promoted} WAITING_STOCK task(s) to TODO`);
+    const processed = await recalculateAllArticles();
+    if (processed > 0) {
+      console.log(`[Cron] FIFO recalculation completed for ${processed} article(s)`);
     }
   } catch (error) {
-    console.error('Auto promotion failed:', error.message);
+    console.error('[Cron] FIFO recalculation failed:', error.message);
   }
-}, AUTO_PROMOTION_INTERVAL_MS);
+}, AUTO_RECALC_INTERVAL_MS);
 
 module.exports = server;

@@ -180,24 +180,39 @@ const StockImportModel = {
   },
 
   async getAll() {
+    // Main stock data + sum of quantities already reserved by active tasks per article
     const result = await pool.query(
       `SELECT
-         *
-       FROM stock_import
-       ORDER BY ready_date ASC, id ASC`
+         si.*,
+         COALESCE(alloc.total_reserved, 0) AS total_reserved,
+         COALESCE(alloc.task_count, 0) AS task_count
+       FROM stock_import si
+       LEFT JOIN LATERAL (
+         SELECT
+           SUM(t.quantity) AS total_reserved,
+           COUNT(*) AS task_count
+         FROM tasks t
+         WHERE UPPER(t.item_reference) = UPPER(si.article)
+           AND t.status IN ('WAITING_STOCK', 'TODO', 'IN_PROGRESS', 'BLOCKED')
+       ) alloc ON TRUE
+       ORDER BY si.ready_date ASC, si.id ASC`
     );
-    
+
     // Evaluate is_ready in JS to avoid DB timezone issues
     const now = new Date();
     const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
     return result.rows.map(row => {
-      // row.ready_date might be a Date object or string
-      const rDate = row.ready_date instanceof Date 
+      const rDate = row.ready_date instanceof Date
         ? row.ready_date.getFullYear() + '-' + String(row.ready_date.getMonth() + 1).padStart(2, '0') + '-' + String(row.ready_date.getDate()).padStart(2, '0')
         : String(row.ready_date).slice(0, 10);
+      const totalReserved = Number(row.total_reserved || 0);
+      const stockQty = Number(row.quantity || 0);
       return {
         ...row,
-        is_ready: rDate <= today
+        is_ready: rDate <= today,
+        total_reserved: totalReserved,
+        available_quantity: Math.max(0, stockQty - totalReserved),
+        task_count: Number(row.task_count || 0),
       };
     });
   },
