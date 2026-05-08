@@ -10,6 +10,7 @@ import UsersPage from "./pages/UsersPage";
 import StockPage from "./pages/StockPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import ErrorBoundary from "./components/ErrorBoundary";
 import "./App.css";
 import { WorkspaceProvider } from "./context/WorkspaceContext";
 
@@ -146,15 +147,17 @@ const AppRoutes = () => {
 
 function App() {
   return (
-    <AuthProvider>
-      <WorkspaceProvider>
-        <BrowserRouter
-          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
-        >
-          <AppRoutes />
-        </BrowserRouter>
-      </WorkspaceProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <WorkspaceProvider>
+          <BrowserRouter
+            future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+          >
+            <AppRoutes />
+          </BrowserRouter>
+        </WorkspaceProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

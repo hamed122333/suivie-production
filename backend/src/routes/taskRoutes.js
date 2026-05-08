@@ -3,9 +3,25 @@ const multer = require('multer');
 const router = express.Router();
 const taskController = require('../controllers/taskController');
 const { authenticate, requireRoles, requireCommercial, requirePlanner } = require('../middleware/auth');
+
+const ALLOWED_MIME_TYPES = [
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/octet-stream',
+];
+
+const fileFilter = (req, file, cb) => {
+  if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Type de fichier non autorisé. Utilisez un fichier Excel (.xlsx, .xls)'), false);
+  }
+};
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter,
 });
 
 // Réordonner le tableau : planificateur uniquement
