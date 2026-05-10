@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { dashboardAPI, taskAPI } from '../services/api';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useAuth } from '../context/AuthContext';
-import { STATUS_COUNT_FIELDS, TASK_STATUS_CONFIG, TASK_STATUS_ORDER } from '../constants/task';
-import { formatDate, formatLongDate, formatRelativeDate } from '../utils/formatters';
+import { TASK_STATUS_CONFIG } from '../constants/task';
+import { formatDate, formatLongDate } from '../utils/formatters';
 import Spinner from '../components/Spinner';
 import { useNavigate } from 'react-router-dom';
 import useServerEvents from '../hooks/useServerEvents';
@@ -137,27 +137,27 @@ const DashboardPage = () => {
   const stockSummary = analytics.stockSummary || {};
 
   const canImportOrders = Boolean(isCommercial);
-  const attentionItems = [
+const attentionItems = [
     {
-      label: 'Retards livraison',
+      label: 'Retards',
       value: derived.overdueCount,
-      helper: 'Fiches non clôturées avec date dépassée',
+      helper: 'Depassees',
       tone: 'red',
       onClick: () => navigate('/kanban'),
     },
     {
-      label: 'Hors stock PF',
+      label: 'Hors stock',
       value: derived.waitingCount,
-      helper: 'Commandes à traiter côté stock/date',
+      helper: 'En attente',
       tone: 'amber',
       onClick: () => navigate('/kanban?status=WAITING_STOCK'),
     },
     {
-      label: 'Dates non confirmées',
-      value: derived.waitingUnconfirmedCount,
-      helper: 'Validation commercial/planner attendue',
+      label: "Today",
+      value: counts.dueToday || 0,
+      helper: "Echeance",
       tone: 'blue',
-      onClick: () => navigate('/kanban?status=WAITING_STOCK'),
+      onClick: () => navigate('/kanban'),
     },
   ];
 
@@ -288,7 +288,7 @@ const DashboardPage = () => {
         ))}
       </section>
 
-      <section className="dashboard__overview">
+<section className="dashboard__overview">
         <div className="dashboard__metrics">
           <div
             className="dashboard-tile-action"
@@ -297,9 +297,9 @@ const DashboardPage = () => {
             onClick={() => navigate('/kanban')}
             onKeyDown={(e) => e.key === 'Enter' && navigate('/kanban')}
           >
-            <MetricTile label="Lignes (import + manuel)" value={derived.totalLines} tone="blue" helper="Toutes les lignes visibles" />
+            <MetricTile label="Total lignes" value={derived.totalLines} tone="blue" />
           </div>
-          <MetricTile label="Commandes (Pièce no)" value={derived.totalOrders} tone="sky" helper="Distinct par ordre" />
+          <MetricTile label="Commandes" value={derived.totalOrders} tone="sky" />
           <div
             className="dashboard-tile-action"
             role="button"
@@ -307,52 +307,17 @@ const DashboardPage = () => {
             onClick={() => navigate('/kanban?status=WAITING_STOCK')}
             onKeyDown={(e) => e.key === 'Enter' && navigate('/kanban?status=WAITING_STOCK')}
           >
-            <MetricTile label="Hors stock PF" value={derived.waitingCount} tone="amber" helper="En attente stock / date" />
+            <MetricTile label="Hors stock" value={derived.waitingCount} tone="amber" />
           </div>
-          <MetricTile label="Dates modifiées" value={derived.waitingModifiedCount} tone="slate" helper="Attente OK commercial" />
-          <MetricTile label="Taux clôturé" value={`${completionRate}%`} tone="green" helper={`${counts.totalDone || 0} fiches terminées`} />
-        </div>
-
-        <div className="dashboard__workflow">
-          <div className="dashboard__workflow-head">
-            <div>
-              <h2>Flux production</h2>
-              <p>Cliquer sur une colonne pour ouvrir le Kanban filtré.</p>
-            </div>
-            <div className="dashboard__completion">
-              <strong>{completionRate}%</strong>
-              <span>taux de completion</span>
-            </div>
-          </div>
-          <div className="dashboard__workflow-grid">
-            {TASK_STATUS_ORDER.map((status) => {
-              const config = TASK_STATUS_CONFIG[status];
-              const countKey = STATUS_COUNT_FIELDS[status];
-              return (
-                <button
-                  type="button"
-                  key={status}
-                  className="dashboard__stage"
-                  style={{ background: config.bg, border: 'none', cursor: 'pointer' }}
-                  onClick={() => navigate(`/kanban?status=${encodeURIComponent(status)}`)}
-                  title="Ouvrir le Kanban filtré"
-                >
-                  <span className="dashboard__stage-name" style={{ color: config.color }}>
-                    {config.label}
-                  </span>
-                  <strong style={{ color: config.color }}>{counts[countKey] || 0}</strong>
-                </button>
-              );
-            })}
-          </div>
+          <MetricTile label="Terminees" value={`${completionRate}%`} tone="green" helper={`${counts.totalDone || 0} / ${totalTasks}`} />
         </div>
       </section>
 
-      <section className="dashboard__grid">
-        <article className="dashboard-panel">
+<section className="dashboard__grid">
+        <article className="dashboard-panel dashboard-panel--wide">
           <div className="dashboard-panel__head">
-            <h3>Livraisons (7 jours)</h3>
-            <span>{derived.upcomingTasks.length}</span>
+            <h3>7 prochains jours</h3>
+            <span>{derived.upcomingTasks.length} taches</span>
           </div>
           <div className="dashboard-list">
             {derived.upcomingTasks.length ? (
@@ -366,29 +331,31 @@ const DashboardPage = () => {
                   onKeyDown={(e) => e.key === 'Enter' && navigate(`/kanban?taskId=${task.id}`)}
                 >
                   <div>
-                    <strong>{task.title}</strong>
-                    <p>{task.client_name || task.order_code || 'Sans detail client'}</p>
+                    <strong>{task.client_name || task.order_code || '—'}</strong>
+                    <p>{task.item_reference ? `${task.item_reference} x${task.quantity}` : task.title}</p>
                   </div>
-                  <span>{formatDate(task.planned_date)}</span>
+                  <span className={task.planned_date === todayISO ? 'date-today' : ''}>
+                    {formatDate(task.planned_date)}
+                  </span>
                 </div>
               ))
             ) : (
-              <div className="dashboard__empty">Aucune echeance proche.</div>
+              <div className="dashboard__empty">Aucune echeance cette semaine</div>
             )}
           </div>
         </article>
 
         <article className="dashboard-panel">
           <div className="dashboard-panel__head">
-            <h3>Hors stock à traiter</h3>
-            <span>{derived.waitingUnconfirmedCount}</span>
+            <h3>Hors stock</h3>
+            <span>{derived.waitingCount} taches</span>
           </div>
           <div className="dashboard-list">
-            {allTasks.filter((t) => t.status === 'WAITING_STOCK').slice(0, 8).length ? (
+            {allTasks.filter((t) => t.status === 'WAITING_STOCK').slice(0, 6).length ? (
               allTasks
                 .filter((t) => t.status === 'WAITING_STOCK')
                 .sort((a, b) => String(a.planned_date || '').localeCompare(String(b.planned_date || '')))
-                .slice(0, 8)
+                .slice(0, 6)
                 .map((task) => (
                   <div
                     key={task.id}
@@ -399,35 +366,57 @@ const DashboardPage = () => {
                     onKeyDown={(e) => e.key === 'Enter' && navigate(`/kanban?taskId=${task.id}`)}
                   >
                     <div>
-                      <strong>{task.title}</strong>
-                      <p>{task.client_name || task.order_code || '—'}</p>
+                      <strong>{task.client_name || task.order_code || '—'}</strong>
+                      <p>{task.item_reference} ({task.stock_deficit} manquant)</p>
                     </div>
-                    <span>{task.planned_date ? formatDate(task.planned_date) : '—'}</span>
                   </div>
                 ))
             ) : (
-              <div className="dashboard__empty">Aucune fiche Hors stock.</div>
+              <div className="dashboard__empty">Aucun hors stock</div>
             )}
+          </div>
+        </article>
+
+        <article className="dashboard-panel">
+          <div className="dashboard-panel__head">
+            <h3>Stock</h3>
+            <button type="button" className="btn-link" onClick={() => navigate('/stock')}>Voir tout →</button>
+          </div>
+          <div className="stock-summary-compact">
+            <div className="stock-stat-row">
+              <span>Articles</span>
+              <strong>{stockSummary.totalArticles || 0}</strong>
+            </div>
+            <div className="stock-stat-row stock-stat-row--success">
+              <span>Disponible</span>
+              <strong>{stockSummary.availableQuantity?.toLocaleString('fr-FR') || 0}</strong>
+            </div>
+            <div className="stock-stat-row stock-stat-row--warning">
+              <span>Reserve</span>
+              <strong>{stockSummary.reservedQuantity?.toLocaleString('fr-FR') || 0}</strong>
+            </div>
+            <div className="stock-stat-row stock-stat-row--danger">
+              <span>Stock faible</span>
+              <strong>{stockSummary.lowStockCount || 0}</strong>
+            </div>
           </div>
         </article>
 
         <article className="dashboard-panel dashboard-panel--wide">
           <div className="dashboard-panel__head">
-            <h3>Activité récente</h3>
-            <span>{recentTasks.length} lignes</span>
+            <h3>Activite recente</h3>
           </div>
           <div className="dashboard-table">
             {recentTasks.length === 0 ? (
-              <div className="dashboard__empty">Aucune fiche recente.</div>
+              <div className="dashboard__empty">Aucune activite recente</div>
             ) : (
               <table>
                 <thead>
                   <tr>
                     <th>Ligne</th>
-                    <th>Client / Pièce</th>
+                    <th>Client</th>
                     <th>Statut</th>
-                    <th>Date prévue</th>
-                    <th>Maj</th>
+                    <th>Date</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -438,97 +427,21 @@ const DashboardPage = () => {
                         key={task.id}
                         style={{ cursor: 'pointer' }}
                         onClick={() => navigate(`/kanban?taskId=${task.id}`)}
-                        title="Ouvrir la fiche dans le Kanban"
                       >
-                        <td>
-                          <div className="dashboard-table__main">
-                            <strong>{`SP-${task.id}`}</strong>
-                            <span>{task.title}</span>
-                          </div>
-                        </td>
+                        <td><strong>SP-{task.id}</strong></td>
                         <td>{task.client_name || task.order_code || '—'}</td>
                         <td>
-                          <span
-                            className="dashboard-table__pill"
-                            style={{ background: status.bg, color: status.color }}
-                          >
+                          <span className="dashboard-table__pill" style={{ background: status.bg, color: status.color }}>
                             {status.shortLabel}
                           </span>
                         </td>
                         <td>{formatDate(task.planned_date)}</td>
-                        <td>{formatRelativeDate(task.updated_at || task.created_at, { compact: true })}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             )}
-          </div>
-        </article>
-
-        <article className="dashboard-panel">
-          <div className="dashboard-panel__head">
-            <h3>Stock disponible</h3>
-            <span>{stockSummary.totalArticles || 0} articles</span>
-          </div>
-          <div className="dashboard-list">
-            <div className="analytics-stock">
-              <div className="stock-metric">
-                <span className="stock-metric__value">{stockSummary.totalQuantity?.toLocaleString('fr-FR') || 0}</span>
-                <span className="stock-metric__label">Total unités</span>
-              </div>
-              <div className="stock-metric stock-metric--success">
-                <span className="stock-metric__value">{stockSummary.availableQuantity?.toLocaleString('fr-FR') || 0}</span>
-                <span className="stock-metric__label">Disponible</span>
-              </div>
-              <div className="stock-metric stock-metric--warning">
-                <span className="stock-metric__value">{stockSummary.reservedQuantity?.toLocaleString('fr-FR') || 0}</span>
-                <span className="stock-metric__label">Réservé</span>
-              </div>
-            </div>
-            <button type="button" className="btn-link" onClick={() => navigate('/stock')}>
-              Voir le stock →
-            </button>
-          </div>
-        </article>
-
-        <article className="dashboard-panel">
-          <div className="dashboard-panel__head">
-            <h3>Top Clients</h3>
-          </div>
-          <div className="dashboard-list">
-            {(analytics.topClients || []).length > 0 ? (
-              analytics.topClients.map((client, idx) => (
-                <div key={idx} className="analytics-row">
-                  <span className="analytics-rank">{idx + 1}</span>
-                  <span className="analytics-name">{client.name}</span>
-                  <span className="analytics-count">{client.count} cmd</span>
-                </div>
-              ))
-            ) : (
-              <div className="dashboard__empty">Aucune donnée</div>
-            )}
-          </div>
-        </article>
-
-        <article className="dashboard-panel dashboard-panel--wide">
-          <div className="dashboard-panel__head">
-            <h3>Répartition par catégorie</h3>
-          </div>
-          <div className="category-breakdown">
-            {Object.entries(analytics.categoryBreakdown || {}).map(([cat, count]) => {
-              const colors = { CI: '#3b82f6', CV: '#3b82f6', DI: '#8b5cf6', DV: '#8b5cf6', FC: '#f59e0b', FD: '#f59e0b', PL: '#10b981', OTHER: '#64748b' };
-              const labels = { CI: 'Carterie', CV: 'Carterie', DI: 'Divers', DV: 'Divers', FC: 'Feraille', FD: 'Feraille', PL: 'Plastique', OTHER: 'Autre' };
-              if (count === 0) return null;
-              return (
-                <div key={cat} className="category-item">
-                  <div className="category-bar" style={{ background: colors[cat] || '#64748b', width: `${Math.min(100, count * 5)}%` }}>
-                    <span className="category-label">{labels[cat] || cat}</span>
-                    <span className="category-count">{count}</span>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </article>
       </section>

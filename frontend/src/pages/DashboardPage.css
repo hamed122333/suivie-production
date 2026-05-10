@@ -610,113 +610,71 @@
   }
 }
 
-/* Analytics styles */
-.analytics-stock {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.stock-metric {
-  flex: 1;
-  text-align: center;
-  padding: 0.75rem;
-  background: #f8fafc;
-  border-radius: 8px;
-}
-
-.stock-metric__value {
-  display: block;
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.stock-metric__label {
-  font-size: 0.7rem;
-  color: #64748b;
-  text-transform: uppercase;
-}
-
-.stock-metric--success .stock-metric__value { color: #22c55e; }
-.stock-metric--warning .stock-metric__value { color: #f59e0b; }
-
-.btn-link {
-  background: none;
-  border: none;
-  color: var(--color-primary);
-  font-size: 0.85rem;
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
-}
-
-.btn-link:hover {
-  color: #0041a8;
-}
-
-.analytics-row {
-  display: flex;
-  align-items: center;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.analytics-rank {
-  width: 24px;
-  height: 24px;
-  background: #f1f5f9;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #64748b;
-  margin-right: 0.75rem;
-}
-
-.analytics-name {
-  flex: 1;
-  font-weight: 500;
-  color: #334155;
-}
-
-.analytics-count {
-  font-size: 0.8rem;
-  color: #94a3b8;
+/* Simplified dashboard styles */
+.date-today {
+  background: #dcfce7;
+  color: #16a34a;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
   font-weight: 600;
 }
 
-.category-breakdown {
+.stock-summary-compact {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.category-item {
-  display: flex;
-  flex-direction: column;
-}
-
-.category-bar {
+.stock-stat-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.4rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: #f8fafc;
   border-radius: 6px;
-  color: white;
-  font-size: 0.8rem;
 }
 
-.category-label {
-  font-weight: 600;
+.stock-stat-row span {
+  font-size: 0.85rem;
+  color: #64748b;
 }
 
-.category-count {
+.stock-stat-row strong {
+  font-size: 1rem;
   font-weight: 700;
-  background: rgba(255,255,255,0.2);
-  padding: 0.1rem 0.5rem;
-  border-radius: 4px;
+  color: #0f172a;
+}
+
+.stock-stat-row--success {
+  background: #f0fdf4;
+}
+.stock-stat-row--success strong {
+  color: #22c55e;
+}
+
+.stock-stat-row--warning {
+  background: #fffbeb;
+}
+.stock-stat-row--warning strong {
+  color: #f59e0b;
+}
+
+.stock-stat-row--danger {
+  background: #fef2f2;
+}
+.stock-stat-row--danger strong {
+  color: #ef4444;
+}
+
+.dashboard-list__item p {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.dashboard__empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.9rem;
 }
