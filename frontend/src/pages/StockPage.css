@@ -1,22 +1,26 @@
 .stock-page-container {
-  padding: 2rem;
-  max-width: 1200px;
+  padding: 1rem;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
   border-radius: 12px;
   background-color: transparent;
+  box-sizing: border-box;
 }
 
 .stock-page-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-end;
-  margin-bottom: 2rem;
-  padding-bottom: 1.5rem;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
 }
 
 .title-section h2 {
   margin: 0 0 0.5rem 0;
-  font-size: 2rem;
+  font-size: 1.5rem;
   color: #1e293b;
   font-weight: 800;
   display: flex;
@@ -27,13 +31,14 @@
 .title-section p {
   margin: 0;
   color: #64748b;
-  font-size: 1rem;
+  font-size: 0.875rem;
 }
 
 .actions-section {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .search-wrapper {
@@ -71,7 +76,9 @@
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   overflow: hidden;
   transition: border-color 0.2s, box-shadow 0.2s;
-  min-width: 340px;
+  flex: 1;
+  min-width: 200px;
+  max-width: 400px;
 }
 
 .stock-search-bar:focus-within {
@@ -92,10 +99,11 @@
   border: none;
   outline: none;
   background: transparent;
-  padding: 0.6rem 0.25rem;
+  padding: 0.6rem 0.5rem;
   font-size: 0.875rem;
   color: var(--color-text);
   min-width: 0;
+  width: 100%;
 }
 
 .stock-search-bar__input::placeholder {
@@ -139,12 +147,12 @@
 .stock-stats-strip {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  padding: 0.65rem 1.25rem;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
   background: #f8fafc;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
   flex-wrap: wrap;
 }
 
@@ -240,11 +248,18 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
 .table-responsive {
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-responsive table {
+  min-width: 900px;
+  width: 100%;
 }
 
 .sortable-header {
@@ -570,34 +585,90 @@
 }
 
 @media (max-width: 768px) {
+  .stock-page-container {
+    padding: 0.75rem;
+  }
+
   .stock-page-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 1.5rem;
+    gap: 1rem;
+  }
+
+  .title-section h2 {
+    font-size: 1.25rem;
   }
 
   .actions-section {
     width: 100%;
     flex-direction: column;
     align-items: stretch;
+    gap: 0.75rem;
   }
 
-  .search-wrapper, .search-input, .buttons-group, .btn-action {
+  .stock-search-bar {
+    max-width: 100%;
+    min-width: unset;
+  }
+
+  .stock-filters {
     width: 100%;
+    flex-wrap: wrap;
   }
 
-  .buttons-group {
-    flex-direction: column;
+  .filter-select {
+    flex: 1;
+    min-width: 120px;
   }
 
-  .pagination-footer {
+  .stock-stats-strip {
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .stock-stat {
     flex-direction: column;
-    justify-content: center;
+    gap: 0.1rem;
+  }
+
+  .stock-stat strong {
+    font-size: 0.9rem;
+  }
+
+  .stock-stat span {
+    font-size: 0.7rem;
+  }
+
+  .table-card {
+    border-radius: 8px;
+  }
+
+  .pagination-container {
+    flex-direction: column;
+    gap: 0.75rem;
     padding: 1rem;
   }
 
   .pagination-controls {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .pagination-buttons {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .stock-stats-strip__clear {
+    margin-left: 0;
+    margin-top: 0.5rem;
+    width: 100%;
+    text-align: center;
+  }
+
+  .stock-stat--divider {
+    display: none;
   }
 }
