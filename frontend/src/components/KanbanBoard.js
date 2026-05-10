@@ -81,8 +81,12 @@ function applyMove(taskList, draggedId, targetStatus, insertBeforeId) {
   return TASK_STATUS_ORDER.flatMap((status) => byColumn[status] || []);
 }
 
-function taskMatchesFilters(task, filterQuery, filterPriority, filterCriticalDeficit, filterPredictiveOnly) {
+function taskMatchesFilters(task, filterQuery, filterPriority, filterCategory, filterCriticalDeficit, filterPredictiveOnly) {
   if (filterPriority && task.priority !== filterPriority) return false;
+  if (filterCategory && task.item_reference) {
+    const prefix = task.item_reference.substring(0, 2).toUpperCase();
+    if (prefix !== filterCategory) return false;
+  }
   if (filterCriticalDeficit && (!task.stock_deficit || task.stock_deficit <= 0)) return false;
   if (filterPredictiveOnly && task.task_type !== 'PREDICTIVE') return false;
 
@@ -112,6 +116,7 @@ const KanbanBoard = ({
   workspaceId,
   filterQuery = '',
   filterPriority = '',
+  filterCategory = '',
   filterCriticalDeficit = false,
   filterPredictiveOnly = false,
   onStatsRefresh,
@@ -158,17 +163,16 @@ const KanbanBoard = ({
 
   const isAllWorkspaces = workspaceId === 'all';
   const deferredQuery = useDeferredValue(filterQuery);
-  const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filterCriticalDeficit || filterPredictiveOnly);
+const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filterCategory || filterCriticalDeficit || filterPredictiveOnly);
 
-  const visibleTaskIds = useMemo(() => {
-    const ids = new Set();
-    for (const task of tasks) {
-      if (taskMatchesFilters(task, deferredQuery, filterPriority, filterCriticalDeficit, filterPredictiveOnly)) {
-        ids.add(task.id);
-      }
-    }
-    return ids;
-  }, [tasks, deferredQuery, filterPriority, filterCriticalDeficit, filterPredictiveOnly]);
+      const visibleTasks = useMemo(() => {
+        return tasks.filter((task) => {
+          if (taskMatchesFilters(task, deferredQuery, filterPriority, filterCategory, filterCriticalDeficit, filterPredictiveOnly)) {
+            return true;
+          }
+          return false;
+        });
+      }, [tasks, deferredQuery, filterPriority, filterCategory, filterCriticalDeficit, filterPredictiveOnly]);
 
   const getTasksByStatus = useCallback(
     (status) => tasks.filter((task) => task.status === status).sort(sortInColumn).filter((task) => visibleTaskIds.has(task.id)),

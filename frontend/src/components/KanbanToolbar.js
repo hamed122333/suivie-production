@@ -7,11 +7,24 @@ const PRIORITIES = [
   ...TASK_PRIORITY_OPTIONS,
 ];
 
+const CATEGORIES = [
+  { value: '', label: 'Toutes categories' },
+  { value: 'CI', label: 'Carterie (CI)' },
+  { value: 'CV', label: 'Carterie (CV)' },
+  { value: 'DI', label: 'Divers (DI)' },
+  { value: 'DV', label: 'Divers (DV)' },
+  { value: 'FC', label: 'Feraille (FC)' },
+  { value: 'FD', label: 'Feraille (FD)' },
+  { value: 'PL', label: 'Plastique (PL)' },
+];
+
 const KanbanToolbar = ({
   search,
   onSearchChange,
   priority,
   onPriorityChange,
+  category,
+  onCategoryChange,
   criticalDeficit,
   onCriticalDeficitChange,
   predictiveOnly,
@@ -25,7 +38,7 @@ const KanbanToolbar = ({
   const importInputRef = useRef(null);
   const [inputValue, setInputValue] = useState(search);
   const counts = stats?.counts || {};
-  const activeFilters = [search.trim(), priority, criticalDeficit, predictiveOnly].filter(Boolean).length;
+  const activeFilters = [search.trim(), priority, category, criticalDeficit, predictiveOnly].filter(Boolean).length;
 
   const applySearch = () => onSearchChange(inputValue.trim());
 
@@ -89,6 +102,17 @@ const KanbanToolbar = ({
           </select>
         </label>
 
+        <label className="kanban-toolbar__filter">
+          <span>Categorie</span>
+          <select value={category} onChange={(e) => onCategoryChange(e.target.value)}>
+            {CATEGORIES.map((item) => (
+              <option key={item.value || 'all'} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <div className="kanban-toolbar__checkboxes">
           <label className="kanban-toolbar__checkbox">
             <input
@@ -114,6 +138,7 @@ const KanbanToolbar = ({
             setInputValue('');
             onSearchChange('');
             onPriorityChange('');
+            onCategoryChange('');
             onCriticalDeficitChange(false);
             onPredictiveOnlyChange(false);
           }}>
