@@ -11,6 +11,9 @@ const TASK_TYPES = ['PRODUCTION_ORDER', 'PREDICTIVE'];
 // Nombre de jours à partir duquel une date est considérée urgente (approbation planner requise)
 const URGENT_DATE_THRESHOLD_DAYS = 3;
 
+// Seuil (jours) à partir duquel une date de livraison est considérée urgente dans la colonne Hors stock
+const WAITING_STOCK_ALERT_DAYS = 2;
+
 const TASK_BOARD_STATUSES = [...TASK_STATUSES];
 const TASK_CREATION_STATUSES = ['TODO', 'WAITING_STOCK'];
 const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
@@ -51,4 +54,5 @@ module.exports = {
   TRACKED_TASK_FIELDS,
   TASK_TYPES,
   URGENT_DATE_THRESHOLD_DAYS,
+  WAITING_STOCK_ALERT_DAYS,
 };

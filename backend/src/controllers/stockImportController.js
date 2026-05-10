@@ -1,9 +1,26 @@
 const ExcelJS = require('exceljs');
 const StockImportModel = require('../models/stockImportModel');
+const StockHistoryModel = require('../models/stockHistoryModel');
 const TaskModel = require('../models/taskModel');
 const { isValidArticleCode, normalizeArticleCode } = require('../utils/articleCode');
 const { broadcast } = require('../services/sseService');
 const { recalculateStockAllocation } = require('../services/stockAllocationService');
+
+async function logStockHistory(article, quantityAdded, quantityBefore, quantityAfter, source = 'manual', sourceDetail = null, userId = null) {
+  try {
+    await StockHistoryModel.create({
+      article,
+      quantityAdded,
+      quantityBefore,
+      quantityAfter,
+      source,
+      sourceDetail,
+      createdBy: userId,
+    });
+  } catch (err) {
+    console.error('[StockHistory] Failed to log:', err.message);
+  }
+}
 
 // Old autoPromote functions removed — all stock logic is now in stockAllocationService.js
 
@@ -277,6 +294,27 @@ const stockImportController = {
     }
   },
 
+  async getByArticle(req, res) {
+    try {
+      const { article } = req.params;
+      if (!article) {
+        return res.status(400).json({ error: 'Article reference required' });
+      }
+      const normalizedArticle = normalizeArticleCode(article);
+      if (!normalizedArticle) {
+        return res.status(400).json({ error: 'Invalid article code' });
+      }
+      const stock = await StockImportModel.findByArticle(normalizedArticle);
+      if (!stock) {
+        return res.status(404).json({ error: 'Article not found' });
+      }
+      res.json(stock);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  },
+
   async createManual(req, res) {
     try {
       const { article, quantity, designation, clientCode, clientName } = req.body;
@@ -290,18 +328,31 @@ const stockImportController = {
       }
 
       const existing = await StockImportModel.findByArticle(normalizedArticle);
+      const quantityBefore = existing ? Number(existing.quantity || 0) : 0;
+      const quantityToAdd = Number(Number(quantity).toFixed(2));
       const resolvedMode = existing ? 'add_stock' : 'new_product';
 
       const readyDate = calculateReadyDate(normalizedArticle, null);
       const { row, action } = await StockImportModel.upsertManual({
         article: normalizedArticle,
-        quantity: Number(Number(quantity).toFixed(2)),
+        quantity: quantityToAdd,
         designation: designation || null,
         clientCode: clientCode || null,
         clientName: clientName || null,
         readyDate,
       });
-      // Recalculate FIFO allocation for this article
+
+      const quantityAfter = quantityBefore + quantityToAdd;
+      await logStockHistory(
+        normalizedArticle,
+        quantityToAdd,
+        quantityBefore,
+        quantityAfter,
+        'manual',
+        `${action} - Client: ${clientName || '-'} - ${designation || ''}`,
+        req.user?.id
+      );
+
       await recalculateStockAllocation(row.article);
       broadcast('stock-updated', { source: 'manual', articles: [row.article], count: 1 });
       res.status(201).json({
@@ -350,6 +401,178 @@ const stockImportController = {
     } catch (err) {
       console.error('Get active tasks error:', err);
       res.status(500).json({ error: 'Erreur lors de la récupération des tâches' });
+    }
+  },
+
+  /**
+   * PUT /api/stock-import/:id
+   * Update stock record (quantity, ready_date, etc.)
+   */
+  async update(req, res) {
+    try {
+      const { id } = req.params;
+      const stockId = parseInt(id, 10);
+      if (!Number.isInteger(stockId) || stockId < 1) {
+        return res.status(400).json({ error: 'ID invalide' });
+      }
+
+      const { quantity, ready_date, designation, client_code, client_name } = req.body;
+      const updates = {};
+      if (quantity !== undefined) {
+        const qty = Number(quantity);
+        if (!Number.isFinite(qty) || qty < 0) {
+          return res.status(400).json({ error: 'Quantité invalide' });
+        }
+        updates.quantity = qty;
+      }
+      if (ready_date !== undefined) {
+        if (ready_date === null) {
+          updates.ready_date = null;
+        } else {
+          const date = new Date(ready_date);
+          if (Number.isNaN(date.getTime())) {
+            return res.status(400).json({ error: 'Date invalide' });
+          }
+          updates.ready_date = date.toISOString().slice(0, 10);
+        }
+      }
+      if (designation !== undefined) updates.designation = designation;
+      if (client_code !== undefined) updates.client_code = client_code;
+      if (client_name !== undefined) updates.client_name = client_name;
+
+      const updated = await StockImportModel.updateById(stockId, updates);
+      if (!updated) {
+        return res.status(404).json({ error: 'Stock non trouvé' });
+      }
+
+      if (updates.quantity !== undefined) {
+        await recalculateStockAllocation(updated.article);
+        broadcast('stock-updated', { source: 'update', article: updated.article });
+        broadcast('tasks-updated', { source: 'stock_update', article: updated.article });
+      }
+
+      res.json(updated);
+    } catch (err) {
+      console.error('Stock update error:', err);
+      res.status(500).json({ error: 'Erreur lors de la mise à jour' });
+    }
+  },
+
+  /**
+   * DELETE /api/stock-import/:id
+   * Delete stock record and recalculate allocation
+   */
+  async delete(req, res) {
+    try {
+      const { id } = req.params;
+      const stockId = parseInt(id, 10);
+      if (!Number.isInteger(stockId) || stockId < 1) {
+        return res.status(400).json({ error: 'ID invalide' });
+      }
+
+      const deleted = await StockImportModel.deleteById(stockId);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Stock non trouvé' });
+      }
+
+      if (deleted.article) {
+        await recalculateStockAllocation(deleted.article);
+        broadcast('stock-updated', { source: 'delete', article: deleted.article });
+        broadcast('tasks-updated', { source: 'stock_delete', article: deleted.article });
+      }
+
+      res.json({ message: 'Stock supprimé', article: deleted.article });
+    } catch (err) {
+      console.error('Stock delete error:', err);
+      res.status(500).json({ error: 'Erreur lors de la suppression' });
+    }
+  },
+
+  /**
+   * PATCH /api/stock-import/:id/adjust
+   * Adjust stock quantity (add or subtract)
+   */
+  async adjustQuantity(req, res) {
+    try {
+      const { id } = req.params;
+      const stockId = parseInt(id, 10);
+      if (!Number.isInteger(stockId) || stockId < 1) {
+        return res.status(400).json({ error: 'ID invalide' });
+      }
+
+      const { adjustment } = req.body;
+      const adj = Number(adjustment);
+      if (!Number.isFinite(adj)) {
+        return res.status(400).json({ error: 'Ajustement invalide' });
+      }
+
+      const stock = await StockImportModel.findById(stockId);
+      if (!stock) {
+        return res.status(404).json({ error: 'Stock non trouvé' });
+      }
+
+      const quantityBefore = Number(stock.quantity || 0);
+      let updated;
+      if (adj > 0) {
+        updated = await StockImportModel.addQuantity(stockId, adj);
+      } else {
+        updated = await StockImportModel.deductQuantity(stockId, Math.abs(adj));
+      }
+      const quantityAfter = Number(updated?.quantity || 0);
+
+      await logStockHistory(
+        stock.article,
+        adj,
+        quantityBefore,
+        quantityAfter,
+        'adjustment',
+        `Ajustement ${adj > 0 ? '+' : ''}${adj} par ${req.user?.name || 'system'}`,
+        req.user?.id
+      );
+
+      await recalculateStockAllocation(stock.article);
+      broadcast('stock-updated', { source: 'adjust', article: stock.article, adjustment: adj });
+      broadcast('tasks-updated', { source: 'stock_adjust', article: stock.article });
+
+      res.json({ message: `Stock ajusté de ${adj > 0 ? '+' : ''}${adj}`, stock: updated });
+    } catch (err) {
+      console.error('Stock adjust error:', err);
+      res.status(500).json({ error: "Erreur lors de l'ajustement" });
+    }
+  },
+
+  /**
+   * PATCH /api/stock-import/article/:article/quantity
+   * Set absolute quantity for an article
+   */
+  async setQuantity(req, res) {
+    try {
+      const { article } = req.params;
+      const { quantity } = req.body;
+      const qty = Number(quantity);
+
+      if (!Number.isFinite(qty) || qty < 0) {
+        return res.status(400).json({ error: 'Quantité invalide' });
+      }
+
+      const normalizedArticle = normalizeArticleCode(article);
+      if (!normalizedArticle) {
+        return res.status(400).json({ error: 'Article invalide' });
+      }
+
+      const updated = await StockImportModel.setQuantity(normalizedArticle, qty);
+      if (!updated) {
+        return res.status(404).json({ error: 'Article non trouvé' });
+      }
+
+      await recalculateStockAllocation(normalizedArticle);
+      broadcast('stock-updated', { source: 'set_quantity', article: normalizedArticle, quantity: qty });
+      broadcast('tasks-updated', { source: 'stock_set_quantity', article: normalizedArticle });
+
+      res.json({ message: `Quantité mise à ${qty}`, stock: updated });
+    } catch (err) {
+      console.error('Stock set quantity error:', err);
+      res.status(500).json({ error: 'Erreur lors du calcul' });
     }
   },
 

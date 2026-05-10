@@ -55,3 +55,28 @@ export const TASK_TYPE_CONFIG = {
 
 // Seuil (jours) à partir duquel une date de livraison est considérée urgente dans la colonne Hors stock
 export const WAITING_STOCK_ALERT_DAYS = 2;
+
+// Article category configuration (derived from article code prefix)
+export const ARTICLE_CATEGORY_CONFIG = {
+  CI: { label: 'Carterie', color: '#2563eb', bg: '#dbeafe' },
+  CV: { label: 'Carterie', color: '#7c3aed', bg: '#ede9fe' },
+  DI: { label: 'Divers', color: '#d97706', bg: '#fef3c7' },
+  DV: { label: 'Divers', color: '#ea580c', bg: '#ffedd5' },
+  FC: { label: 'Feraille', color: '#c2410c', bg: '#ffedd5' },
+  FD: { label: 'Feraille', color: '#c2410c', bg: '#ffedd5' },
+  PL: { label: 'Plastique', color: '#15803d', bg: '#dcfce7' },
+};
+
+export function getArticleCategory(itemReference) {
+  if (!itemReference) return null;
+  const prefix = itemReference.toUpperCase().split('-')[0] || itemReference.toUpperCase().slice(0, 2);
+  return ARTICLE_CATEGORY_CONFIG[prefix] || null;
+}
+
+export function getCoveragePercent(task) {
+  if (!task || task.status === 'DONE') return null;
+  const requested = Number(task.quantity || 0);
+  const allocated = Number(task.stock_allocated ?? 0);
+  if (requested <= 0) return null;
+  return Math.round((allocated / requested) * 100);
+}

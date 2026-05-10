@@ -51,6 +51,10 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
   const [searchQuery, setSearchQuery] = useState('');
   const [showAllStockRows, setShowAllStockRows] = useState(false);
 
+  // Stock preview for article reference
+  const [stockPreview, setStockPreview] = useState(null);
+  const [stockPreviewLoading, setStockPreviewLoading] = useState(false);
+
   const isEditing = Boolean(task);
 
   useEffect(() => {
@@ -86,6 +90,33 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
       .catch(() => setStockArticles([]))
       .finally(() => setStockLoading(false));
   }, [isCommMode, isEditing]);
+
+  // Fetch stock preview when article reference changes in edit mode
+  useEffect(() => {
+    if (!isEditing || !form.itemReference) {
+      setStockPreview(null);
+      return;
+    }
+
+    const normalizedRef = normalizeArticleCode(form.itemReference);
+    if (!normalizedRef) {
+      setStockPreview(null);
+      return;
+    }
+
+    setStockPreviewLoading(true);
+    stockImportAPI
+      .getByArticle(normalizedRef)
+      .then((res) => {
+        setStockPreview(res.data || null);
+      })
+      .catch(() => {
+        setStockPreview(null);
+      })
+      .finally(() => {
+        setStockPreviewLoading(false);
+      });
+  }, [isEditing, form.itemReference]);
 
   const assignableUsers = useMemo(
     () =>
@@ -622,6 +653,28 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
           <div className="form-group task-modal-classic__group">
             <label>Référence article</label>
             <input type="text" value={form.itemReference} onChange={updateForm('itemReference')} />
+            {isEditing && (stockPreviewLoading ? (
+              <div className="task-modal-classic__stock-preview task-modal-classic__stock-preview--loading">
+                Chargement...
+              </div>
+            ) : stockPreview ? (
+              <div className={`task-modal-classic__stock-preview ${Number(stockPreview.quantity || 0) > 0 ? 'task-modal-classic__stock-preview--ok' : 'task-modal-classic__stock-preview--empty'}`}>
+                <div className="task-modal-classic__stock-preview-label">Stock disponible</div>
+                <div className="task-modal-classic__stock-preview-value">
+                  {Number(stockPreview.quantity || 0).toLocaleString('fr-FR')} {stockPreview.quantity_unit || 'pcs'}
+                </div>
+                {stockPreview.ready_date && (
+                  <div className="task-modal-classic__stock-preview-date">
+                    Prêt le {formatDate(stockPreview.ready_date)}
+                  </div>
+                )}
+              </div>
+            ) : form.itemReference ? (
+              <div className="task-modal-classic__stock-preview task-modal-classic__stock-preview--empty">
+                <div className="task-modal-classic__stock-preview-label">Stock disponible</div>
+                <div className="task-modal-classic__stock-preview-value">— Pas de stock</div>
+              </div>
+            ) : null)}
           </div>
 
           <div className="form-group task-modal-classic__group">

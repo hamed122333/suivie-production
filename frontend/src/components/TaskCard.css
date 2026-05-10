@@ -229,6 +229,11 @@
   color: #92400e;
 }
 
+.task-card__fact--workspace {
+  background: #f0f9ff;
+  color: #0369a1;
+}
+
 .task-card__fact-icon {
   font-size: 0.6rem;
   line-height: 1;
@@ -366,6 +371,37 @@
   border-radius: 999px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.task-card__category {
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 0.14rem 0.4rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.task-card__quantity--partial {
+  color: #d97706;
+}
+
+.task-card__coverage {
+  margin-left: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+
+.task-card__coverage--ok {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.task-card__coverage--warn {
+  background: #fef3c7;
+  color: #d97706;
 }
 
 

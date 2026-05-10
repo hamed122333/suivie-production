@@ -84,6 +84,7 @@ export const workspaceAPI = {
 
 export const stockImportAPI = {
   getAll: () => api.get('/stock-import'),
+  getByArticle: (article) => api.get(`/stock-import/article/${encodeURIComponent(article)}`),
   upload: (formData) =>
     api.post('/stock-import/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

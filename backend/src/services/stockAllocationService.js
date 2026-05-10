@@ -14,16 +14,30 @@ const { broadcast } = require('./sseService');
  * 5. Auto-demotes TODO/IN_PROGRESS/BLOCKED → WAITING_STOCK if deficit > 0
  * 6. Auto-promotes WAITING_STOCK → TODO if fully covered
  * 7. Logs history for every status change
+ * 8. Broadcasts real-time updates
  *
  * Key rule: allocation is by ARTICLE CODE + QUANTITY only.
  * Client name is irrelevant — two clients ordering the same article compete
  * for the same stock pool.
+ *
+ * Edge cases handled:
+ * - No stock at all → all tasks demoted to WAITING_STOCK
+ * - Partial stock → tasks get partial allocation, deficit calculated
+ * - Stock increases → waiting tasks promoted to TODO
+ * - Stock decreases → tasks demoted to WAITING_STOCK
+ * - Multiple tasks with same planned_date → sorted by ID (oldest first)
+ * - Tasks with no dates → treated as latest priority (9999-12-31)
+ * - Stock deleted → all tasks for that article recalculated
+ * - Task deleted → stock freed, queue shifts up
+ * - Task quantity changed → reallocate, may affect other tasks
  */
 async function recalculateStockAllocation(itemReference) {
   if (!itemReference) return [];
 
+  const normalizedRef = itemReference.toUpperCase().trim();
+
   // 1. Total stock available for this article (global)
-  const availableStock = await StockImportModel.getStockQuantity(itemReference);
+  const availableStock = Math.max(0, await StockImportModel.getStockQuantity(normalizedRef));
 
   // 2. All active tasks for this article, any workspace, any client
   const allTasks = await TaskModel.getAll({

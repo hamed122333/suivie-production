@@ -1,5 +1,13 @@
 import React from 'react';
-import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, TASK_TYPE_CONFIG, WAITING_STOCK_ALERT_DAYS, getTaskKey } from '../constants/task';
+import {
+  TASK_PRIORITY_CONFIG,
+  TASK_STATUS_CONFIG,
+  TASK_TYPE_CONFIG,
+  WAITING_STOCK_ALERT_DAYS,
+  getTaskKey,
+  getArticleCategory,
+  getCoveragePercent,
+} from '../constants/task';
 import { formatDate, formatRelativeDate, getInitials } from '../utils/formatters';
 import StockAllocationBadge from './StockAllocationBadge';
 import './TaskCard.css';
@@ -95,6 +103,10 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
   const isPredictive = task.task_type === 'PREDICTIVE';
   const typeConfig = isPredictive ? TASK_TYPE_CONFIG.PREDICTIVE : null;
 
+  const articleCategory = getArticleCategory(task.item_reference);
+  const coveragePercent = getCoveragePercent(task);
+  const isPartialCoverage = coveragePercent !== null && coveragePercent < 100 && task.status !== 'WAITING_STOCK';
+
   // Urgence J-2 / J-1 (toutes les tâches actives sauf DONE)
   const daysLeft = task.status !== 'DONE' ? getDaysUntilPlannedDate(task) : null;
   const isDeadlineAlert = daysLeft !== null && daysLeft <= WAITING_STOCK_ALERT_DAYS;
@@ -112,6 +124,7 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
   const facts = [];
   if (showReference) facts.push({ key: 'ref', label: task.item_reference });
   if (task.production_line) facts.push({ key: 'line', label: task.production_line });
+  if (task.workspace_name) facts.push({ key: 'workspace', label: task.workspace_name, icon: '🏢' });
   if (task.planned_date) facts.push({ key: 'delivery', label: `${formatDate(task.planned_date)}`, icon: '📦' });
   if (task.due_date && task.due_date !== task.planned_date) facts.push({ key: 'due', label: `${formatDate(task.due_date)}`, icon: '📅' });
 
@@ -127,6 +140,15 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
       <div className="task-card__top">
         <div className="task-card__meta">
           <span className="task-card__key">{getTaskKey(task)}</span>
+          {articleCategory && (
+            <span
+              className="task-card__category"
+              style={{ background: articleCategory.bg, color: articleCategory.color }}
+              title={`Catégorie: ${articleCategory.label}`}
+            >
+              {articleCategory.label}
+            </span>
+          )}
           {typeConfig ? (
             <span className="task-card__type-badge" style={{ background: typeConfig.bg, color: typeConfig.color }}>
               {typeConfig.badge}
@@ -199,8 +221,13 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
         <div className="task-card__footer-copy">
           <span className="task-card__time">{when}</span>
           {!hideFooterQuantity && task.quantity != null && (
-            <span className="task-card__quantity">
+            <span className={`task-card__quantity ${isPartialCoverage ? 'task-card__quantity--partial' : ''}`}>
               {task.quantity} {task.quantity_unit || 'pcs'}
+              {coveragePercent !== null && task.status !== 'WAITING_STOCK' && (
+                <span className={`task-card__coverage ${isPartialCoverage ? 'task-card__coverage--warn' : 'task-card__coverage--ok'}`}>
+                  {coveragePercent}%
+                </span>
+              )}
             </span>
           )}
         </div>

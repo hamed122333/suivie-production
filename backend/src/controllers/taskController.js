@@ -13,6 +13,14 @@ const { normalizeCommentBody, normalizeTaskBatch, normalizeTaskDraft, normalizeT
 const ExcelJS = require('exceljs'); // Add ExcelJS import for exports
 const { normalizeArticleCode, isValidArticleCode } = require('../utils/articleCode');
 
+function formatDateFR(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return '—';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
 const fieldLabels = {
   title: 'Titre',
   description: 'Description',
@@ -154,8 +162,13 @@ function parseExcelQuantity(rawValue) {
   return Number.parseFloat(normalized);
 }
 
-function resolveWorkspaceNameFromTask(taskLike) {
-  const anchor = taskLike?.plannedDate || taskLike?.dueDate || new Date().toISOString().slice(0, 10);
+function buildWorkspaceName(dateOrTask) {
+  let anchor;
+  if (dateOrTask && (dateOrTask.plannedDate !== undefined || dateOrTask.dueDate !== undefined)) {
+    anchor = dateOrTask.plannedDate || dateOrTask.dueDate || new Date().toISOString().slice(0, 10);
+  } else {
+    anchor = dateOrTask || new Date().toISOString().slice(0, 10);
+  }
   const [year, month, day] = `${anchor}`.slice(0, 10).split('-');
   return `CMD ${day}-${month}-${year}`;
 }
@@ -177,11 +190,6 @@ function pickHeaderColumn(headers, predicates) {
     }
   }
   return null;
-}
-
-function buildWorkspaceNameFromOrderDate(orderDate) {
-  const [year, month, day] = `${orderDate}`.slice(0, 10).split('-');
-  return `CMD ${day}-${month}-${year}`;
 }
 
 function isUrgentDate(dateString) {
@@ -403,7 +411,7 @@ const taskController = {
         quantity: t.quantity ? `${t.quantity} ${t.quantity_unit || 'pcs'}` : '',
         description: t.description || '',
         workspaceName: t.workspace_name || '',
-        createdAt: new Date(t.created_at).toLocaleDateString()
+        createdAt: formatDateFR(t.created_at)
       })));
 
       // Styling headers
@@ -466,7 +474,7 @@ const taskController = {
       const resolved = await resolveCreationTarget(taskInput);
       ensurePlannedDateForWaitingStock(resolved);
       if (!workspaceId) {
-        const workspace = await WorkspaceModel.findOrCreateByName(resolveWorkspaceNameFromTask(resolved));
+        const workspace = await WorkspaceModel.findOrCreateByName(buildWorkspaceName(resolved));
         workspaceId = workspace.id;
       }
 
@@ -524,7 +532,7 @@ const taskController = {
 
       const grouped = new Map();
       for (const resolved of resolvedTasks) {
-        const workspaceKey = explicitWorkspaceId ? `ID:${explicitWorkspaceId}` : resolveWorkspaceNameFromTask(resolved);
+        const workspaceKey = explicitWorkspaceId ? `ID:${explicitWorkspaceId}` : buildWorkspaceName(resolved);
         if (!grouped.has(workspaceKey)) grouped.set(workspaceKey, []);
         grouped.get(workspaceKey).push({
           ...resolved,
@@ -680,7 +688,7 @@ const taskController = {
           return;
         }
 
-        const workspaceKey = buildWorkspaceNameFromOrderDate(orderDate);
+        const workspaceKey = buildWorkspaceName(orderDate);
         if (!groupedByWorkspace.has(workspaceKey)) {
           groupedByWorkspace.set(workspaceKey, []);
         }
@@ -855,13 +863,24 @@ const taskController = {
       }
 
       // Recalculate stock allocation if article, quantity or date changed
-      const articleChanged = payload.itemReference && payload.itemReference !== previousTask.item_reference;
+      const oldArticle = previousTask.item_reference;
+      const newArticle = task.item_reference;
+      const articleChanged = newArticle !== oldArticle;
       const quantityChanged = payload.quantity && payload.quantity !== previousTask.quantity;
       const dateChanged = (payload.plannedDate && payload.plannedDate !== previousTask.planned_date) ||
                          (payload.dueDate && payload.dueDate !== previousTask.due_date);
 
-      if (task.item_reference && (articleChanged || quantityChanged || dateChanged)) {
-        await recalculateStockAllocation(task.item_reference);
+      if (articleChanged) {
+        // Recalculate OLD article (task no longer needs it)
+        if (oldArticle) {
+          await recalculateStockAllocation(oldArticle);
+        }
+        // Recalculate NEW article (task now needs it)
+        if (newArticle) {
+          await recalculateStockAllocation(newArticle);
+        }
+      } else if (newArticle && (quantityChanged || dateChanged)) {
+        await recalculateStockAllocation(newArticle);
       }
 
       // Notify all commercials when a privileged user changes dates

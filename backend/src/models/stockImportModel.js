@@ -206,6 +206,9 @@ async getAll() {
     const now = new Date();
     const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).toString().padStart(2, '0');
     return result.rows.map(row => {
+      const importDate = row.created_at 
+        ? `${pad(new Date(row.created_at).getDate())}/${pad(new Date(row.created_at).getMonth() + 1)}/${new Date(row.created_at).getFullYear()}`
+        : null;
       const rDate = row.ready_date instanceof Date
         ? row.ready_date.getFullYear() + '-' + String(row.ready_date.getMonth() + 1).padStart(2, '0') + '-' + String(row.ready_date.getDate()).toString().padStart(2, '0')
         : String(row.ready_date).slice(0, 10);
@@ -235,6 +238,7 @@ async getAll() {
 
       return {
         ...row,
+        date_import: importDate,
         is_ready: rDate <= today,
         total_reserved: totalReserved,
         available_quantity: availableQty,
@@ -330,6 +334,66 @@ async getAll() {
        )
        RETURNING *`,
       [normalizedArticle, quantityToAdd]
+    );
+    return result.rows[0] || null;
+  },
+
+  async updateById(id, updates) {
+    const allowedFields = ['article', 'quantity', 'ready_date', 'designation', 'client_code', 'client_name', 'is_used'];
+    const setClauses = [];
+    const values = [];
+    let paramIndex = 1;
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (allowedFields.includes(key)) {
+        setClauses.push(`${key} = $${paramIndex}`);
+        values.push(value);
+        paramIndex++;
+      }
+    }
+
+    if (setClauses.length === 0) return null;
+
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE stock_import SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+      values
+    );
+    return result.rows[0] || null;
+  },
+
+  async deleteById(id) {
+    const result = await pool.query(
+      `DELETE FROM stock_import WHERE id = $1 RETURNING article`,
+      [id]
+    );
+    return result.rows[0] || null;
+  },
+
+  async deleteByArticle(article) {
+    const normalizedArticle = normalizeArticleCode(article);
+    if (!normalizedArticle) return null;
+    const result = await pool.query(
+      `DELETE FROM stock_import WHERE UPPER(article) = UPPER($1) RETURNING article`,
+      [normalizedArticle]
+    );
+    return result.rows[0] || null;
+  },
+
+  async setQuantity(article, newQuantity) {
+    const normalizedArticle = normalizeArticleCode(article);
+    if (!normalizedArticle) return null;
+    const result = await pool.query(
+      `UPDATE stock_import
+       SET quantity = $2,
+           is_used = CASE WHEN $2 <= 0 THEN TRUE ELSE FALSE END
+       WHERE id = (
+         SELECT id FROM stock_import
+         WHERE UPPER(article) = UPPER($1)
+         ORDER BY id DESC LIMIT 1
+       )
+       RETURNING *`,
+      [normalizedArticle, newQuantity]
     );
     return result.rows[0] || null;
   },
