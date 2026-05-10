@@ -9,18 +9,26 @@ import { useNavigate } from 'react-router-dom';
 import useServerEvents from '../hooks/useServerEvents';
 import './DashboardPage.css';
 
-const MetricTile = ({ label, value, tone = 'blue', helper }) => (
-  <div className={`dashboard-tile dashboard-tile--${tone}`}>
-    <strong>{value}</strong>
-    <span>{label}</span>
-    {helper ? <small>{helper}</small> : null}
-  </div>
-);
+const MetricTile = ({ label, value, tone = 'blue', helper, onClick }) => {
+  const content = (
+    <div className={`dashboard-tile dashboard-tile--${tone}`}>
+      <strong>{value}</strong>
+      <span>{label}</span>
+      {helper ? <small>{helper}</small> : null}
+    </div>
+  );
+  if (onClick) {
+    return (
+      <div className="dashboard-tile-action" role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => e.key === 'Enter' && onClick()}>
+        {content}
+      </div>
+    );
+  }
+  return content;
+};
 
 const DashboardPage = () => {
   const navigate = useNavigate();
-
-  // ─── 1. TOUS LES HOOKS EN PREMIER ────────────────────────────────────────
   const [stats, setStats] = useState(null);
   const [recentTasks, setRecentTasks] = useState([]);
   const [allTasks, setAllTasks] = useState([]);
@@ -29,8 +37,7 @@ const DashboardPage = () => {
   const [importBanner, setImportBanner] = useState(null);
 
   const { workspaceId, loadingWorkspaces, workspaces, refreshWorkspaces, selectWorkspace } = useWorkspace();
-  const { user, isCommercial } = useAuth();
-
+  const { isCommercial } = useAuth();
   const importInputRef = useRef(null);
 
   const activeWorkspace = workspaces?.find((workspace) => String(workspace.id) === String(workspaceId));
@@ -41,22 +48,16 @@ const DashboardPage = () => {
     try {
       const apiWorkspaceId = workspaceId !== 'all' ? workspaceId : null;
       const taskParams = apiWorkspaceId ? { workspaceId: apiWorkspaceId } : {};
-
       const [statsResponse, tasksResponse] = await Promise.all([
         dashboardAPI.getStats(apiWorkspaceId),
         taskAPI.getAll(taskParams),
       ]);
-
       setStats(statsResponse.data);
       setAllTasks(tasksResponse.data || []);
       setRecentTasks(
         [...tasksResponse.data]
-          .sort((left, right) => {
-            const leftDate = new Date(left.updated_at || left.created_at).getTime();
-            const rightDate = new Date(right.updated_at || right.created_at).getTime();
-            return rightDate - leftDate;
-          })
-          .slice(0, 8)
+          .sort((left, right) => new Date(right.updated_at || right.created_at).getTime() - new Date(left.updated_at || left.created_at).getTime())
+          .slice(0, 6)
       );
     } catch (err) {
       console.error('Failed to load dashboard data', err);
@@ -66,22 +67,18 @@ const DashboardPage = () => {
   }, [workspaceId]);
 
   useEffect(() => {
-    if (loadingWorkspaces) return;
-    if (workspaceId === null) return;
+    if (loadingWorkspaces || workspaceId === null) return;
     fetchData(true);
   }, [workspaceId, loadingWorkspaces, fetchData]);
 
-  // Real-time: refresh dashboard when stock or tasks change
   useServerEvents({
     'stock-updated': () => fetchData(false),
     'tasks-updated': () => fetchData(false),
   });
 
-  // ─── 2. CALCULS ET useMemo — AVANT TOUT RETURN ANTICIPÉ ──────────────────
   const counts = stats?.counts || {};
   const totalTasks = counts.totalTasks || 0;
   const completionRate = totalTasks > 0 ? Math.round(((counts.totalDone || 0) / totalTasks) * 100) : 0;
-
   const todayISO = new Date().toISOString().slice(0, 10);
 
   const dayPlus7 = useMemo(() => {
@@ -95,80 +92,30 @@ const DashboardPage = () => {
     const orderCodes = tasks.map((t) => t.order_code).filter(Boolean);
     const uniqueOrders = new Set(orderCodes);
     const waiting = tasks.filter((t) => t.status === 'WAITING_STOCK');
-    const waitingUnconfirmed = waiting.filter((t) => t.date_negotiation_status !== 'ACCEPTED');
-    const waitingModified = waiting.filter(
-      (t) =>
-        t.date_negotiation_status === 'PENDING_COMMERCIAL_REVIEW' &&
-        `${t.proposed_by_role || ''}`.toLowerCase() === 'planner'
-    );
 
     const overdue = tasks.filter(
       (t) => t.status !== 'DONE' && t.planned_date && String(t.planned_date).slice(0, 10) < todayISO
     ).sort((a, b) => String(a.planned_date || '').localeCompare(String(b.planned_date || '')));
-    const upcoming = tasks
-      .filter(
-        (t) =>
-          t.status !== 'DONE' &&
-          t.planned_date &&
-          String(t.planned_date).slice(0, 10) >= todayISO &&
-          String(t.planned_date).slice(0, 10) <= dayPlus7
-      )
-      .sort((a, b) => String(a.planned_date).localeCompare(String(b.planned_date)))
-      .slice(0, 10);
 
-    const totalQuantity = tasks.reduce((sum, t) => sum + Number(t.quantity || 0), 0);
-    const doneQuantity = tasks.filter((t) => t.status === 'DONE').reduce((sum, t) => sum + Number(t.quantity || 0), 0);
+    const upcoming = tasks
+      .filter((t) => t.status !== 'DONE' && t.planned_date && String(t.planned_date).slice(0, 10) >= todayISO && String(t.planned_date).slice(0, 10) <= dayPlus7)
+      .sort((a, b) => String(a.planned_date).localeCompare(String(b.planned_date)))
+      .slice(0, 8);
 
     return {
       totalLines: tasks.length,
       totalOrders: uniqueOrders.size,
       waitingCount: waiting.length,
-      waitingUnconfirmedCount: waitingUnconfirmed.length,
-      waitingModifiedCount: waitingModified.length,
       overdueCount: overdue.length,
-      overdueTasks: overdue.slice(0, 10),
+      overdueTasks: overdue.slice(0, 5),
       upcomingTasks: upcoming,
-      totalQuantity,
-      doneQuantity,
     };
   }, [allTasks, todayISO, dayPlus7]);
 
-  const analytics = stats?.analytics || {};
-  const stockSummary = analytics.stockSummary || {};
+  const stockSummary = stats?.analytics?.stockSummary || {};
 
   const canImportOrders = Boolean(isCommercial);
-const attentionItems = [
-    {
-      label: 'Retards',
-      value: derived.overdueCount,
-      helper: 'Depassees',
-      tone: 'red',
-      onClick: () => navigate('/kanban'),
-    },
-    {
-      label: 'Hors stock',
-      value: derived.waitingCount,
-      helper: 'En attente',
-      tone: 'amber',
-      onClick: () => navigate('/kanban?status=WAITING_STOCK'),
-    },
-    {
-      label: "Today",
-      value: counts.dueToday || 0,
-      helper: "Echeance",
-      tone: 'blue',
-      onClick: () => navigate('/kanban'),
-    },
-  ];
 
-  // ─── 3. RETURN ANTICIPÉ — APRÈS TOUS LES HOOKS ───────────────────────────
-  if (loading) {
-    return (
-      <Spinner message="Chargement des indicateurs de production..." />
-    );
-  }
-
-  // ─── 4. HANDLERS ─────────────────────────────────────────────────────────
   const handleImportOrders = async (file) => {
     if (!file || !canImportOrders) return;
     setImporting(true);
@@ -179,271 +126,189 @@ const attentionItems = [
       const response = await taskAPI.importOrders(formData);
       const importedWorkspaces = response?.data?.workspaces || [];
       const importedCount = response?.data?.imported ?? '?';
-      const skippedCount = (response?.data?.skipped ?? 0) + (response?.data?.skippedExisting ?? 0);
       await refreshWorkspaces();
-      if (importedWorkspaces.length > 0) {
-        selectWorkspace(importedWorkspaces[0].id);
-      }
-      const skippedNote = skippedCount > 0 ? ` • ${skippedCount} ligne(s) ignorée(s).` : '';
-      setImportBanner({ type: 'success', message: `${importedCount} ligne(s) importée(s).${skippedNote} Accédez au Kanban pour voir les commandes.` });
-      setTimeout(() => setImportBanner(null), 8000);
+      if (importedWorkspaces.length > 0) selectWorkspace(importedWorkspaces[0].id);
+      await fetchData(false);
+      setImportBanner({ type: 'success', message: `${importedCount} ligne(s) importee(s)` });
+      setTimeout(() => setImportBanner(null), 5000);
     } catch (err) {
-      setImportBanner({ type: 'error', message: err?.response?.data?.error || 'Echec import commandes client.' });
+      setImportBanner({ type: 'error', message: err?.response?.data?.error || 'Erreur import' });
     } finally {
       setImporting(false);
     }
   };
 
-  // ─── 5. RENDU ─────────────────────────────────────────────────────────────
+  if (loading) return <Spinner message="Chargement..." />;
+
   return (
     <div className="dashboard">
       {importBanner && (
-        <div style={{
-          padding: '0.7rem 1.5rem',
-          background: importBanner.type === 'success' ? '#ecfdf5' : '#fef2f2',
-          color: importBanner.type === 'success' ? '#065f46' : '#991b1b',
-          borderBottom: `1px solid ${importBanner.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
-          fontSize: '0.875rem',
-          fontWeight: 600,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-        }}>
+        <div className={`dashboard-banner dashboard-banner--${importBanner.type}`}>
           <span>{importBanner.type === 'success' ? '✓' : '⚠'} {importBanner.message}</span>
           {importBanner.type === 'success' && (
-            <button type="button" className="btn btn-primary" style={{ padding: '0.3rem 0.8rem', fontSize: '0.8rem' }} onClick={() => navigate('/kanban')}>
-              Voir le Kanban
-            </button>
+            <button className="dashboard-banner__btn" onClick={() => navigate('/kanban')}>Voir</button>
           )}
-          <button type="button" onClick={() => setImportBanner(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: 'inherit' }}>✕</button>
+          <button className="dashboard-banner__close" onClick={() => setImportBanner(null)}>✕</button>
         </div>
       )}
+
       <header className="dashboard__header">
-        <div>
-          <h1 className="dashboard__title">Tableau de bord operationnel</h1>
-          <p className="dashboard__subtitle">
-            {workspaceName ? <span className="dashboard__workspace-badge">{workspaceName}</span> : null}
-            Priorités de production, stock PF et suivi des dates.
-          </p>
+        <div className="dashboard__header-left">
+          <h1 className="dashboard__title">Dashboard</h1>
+          {workspaceName && <span className="dashboard__workspace-badge">{workspaceName}</span>}
+          <span className="dashboard__date">{formatLongDate()}</span>
         </div>
-        <div className="dashboard__meta">
-          <span className="dashboard__date">
-            {formatLongDate()}
-          </span>
-          {user ? <span className="dashboard__user">Responsable: {user.name}</span> : null}
-          <div className="dashboard__actions">
-            {canImportOrders && (
-              <>
-                <input
-                  ref={importInputRef}
-                  type="file"
-                  accept=".xlsx,.xls"
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = '';
-                    handleImportOrders(file);
-                  }}
-                />
-                <button
-                  type="button"
-                  className="dashboard__action-btn dashboard__action-btn--primary"
-                  onClick={() => importInputRef.current?.click()}
-                  disabled={importing}
-                >
-                  {importing ? 'Import…' : 'Importer commandes'}
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              className="dashboard__action-btn dashboard__action-btn--secondary"
-              onClick={() => navigate('/kanban')}
-            >
-              Kanban
-            </button>
-            <button
-              type="button"
-              className="dashboard__action-btn dashboard__action-btn--secondary"
-              onClick={() => navigate('/stock')}
-            >
-              Stock
-            </button>
-          </div>
+        <div className="dashboard__header-right">
+          {canImportOrders && (
+            <>
+              <input ref={importInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={(e) => { handleImportOrders(e.target.files?.[0]); e.target.value = ''; }} />
+              <button className="dashboard__btn dashboard__btn--primary" onClick={() => importInputRef.current?.click()} disabled={importing}>
+                {importing ? '...' : '+ Import'}
+              </button>
+            </>
+          )}
+          <button className="dashboard__btn" onClick={() => navigate('/kanban')}>Kanban</button>
+          <button className="dashboard__btn" onClick={() => navigate('/stock')}>Stock</button>
         </div>
       </header>
 
-      <section className="dashboard__attention" aria-label="Points d attention">
-        {attentionItems.map((item) => (
-          <button
-            type="button"
-            key={item.label}
-            className={`dashboard-alert dashboard-alert--${item.tone}`}
-            onClick={item.onClick}
-          >
-            <strong>{item.value}</strong>
-            <span>{item.label}</span>
-            <small>{item.helper}</small>
-          </button>
-        ))}
+      <section className="dashboard__metrics-grid">
+        <MetricTile label="Total" value={derived.totalLines} tone="blue" onClick={() => navigate('/kanban')} />
+        <MetricTile label="Commandes" value={derived.totalOrders} tone="sky" />
+        <MetricTile label="Hors stock" value={derived.waitingCount} tone="amber" onClick={() => navigate('/kanban?status=WAITING_STOCK')} />
+        <MetricTile label="Retards" value={derived.overdueCount} tone="red" onClick={() => navigate('/kanban')} />
+        <MetricTile label="Termine" value={`${completionRate}%`} tone="green" helper={`${counts.totalDone || 0}/${totalTasks}`} />
       </section>
 
-<section className="dashboard__overview">
-        <div className="dashboard__metrics">
-          <div
-            className="dashboard-tile-action"
-            role="button"
-            tabIndex={0}
-            onClick={() => navigate('/kanban')}
-            onKeyDown={(e) => e.key === 'Enter' && navigate('/kanban')}
-          >
-            <MetricTile label="Total lignes" value={derived.totalLines} tone="blue" />
+      <section className="dashboard__main-grid">
+        <div className="dashboard__column dashboard__column--main">
+          <div className="dashboard-card">
+            <div className="dashboard-card__header">
+              <h3>Aujourd'hui & 7 jours</h3>
+              <span className="dashboard-card__badge">{derived.upcomingTasks.length}</span>
+            </div>
+            <div className="dashboard-list">
+              {derived.upcomingTasks.length > 0 ? (
+                derived.upcomingTasks.map((task) => {
+                  const isToday = task.planned_date === todayISO;
+                  return (
+                    <div key={task.id} className="dashboard-list__item" onClick={() => navigate(`/kanban?taskId=${task.id}`)}>
+                      <div className="dashboard-list__item-content">
+                        <span className="dashboard-list__item-title">{task.client_name || task.order_code || '—'}</span>
+                        <span className="dashboard-list__item-subtitle">{task.item_reference} × {task.quantity}</span>
+                      </div>
+                      <span className={`dashboard-list__item-date ${isToday ? 'dashboard-list__item-date--today' : ''}`}>
+                        {formatDate(task.planned_date)}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="dashboard-list__empty">Aucune tache cette semaine</div>
+              )}
+            </div>
           </div>
-          <MetricTile label="Commandes" value={derived.totalOrders} tone="sky" />
-          <div
-            className="dashboard-tile-action"
-            role="button"
-            tabIndex={0}
-            onClick={() => navigate('/kanban?status=WAITING_STOCK')}
-            onKeyDown={(e) => e.key === 'Enter' && navigate('/kanban?status=WAITING_STOCK')}
-          >
-            <MetricTile label="Hors stock" value={derived.waitingCount} tone="amber" />
+
+          <div className="dashboard-card">
+            <div className="dashboard-card__header">
+              <h3>Activite recente</h3>
+            </div>
+            <div className="dashboard-table">
+              {recentTasks.length > 0 ? (
+                <table>
+                  <thead>
+                    <tr><th>ID</th><th>Client</th><th>Statut</th><th>Date</th></tr>
+                  </thead>
+                  <tbody>
+                    {recentTasks.map((task) => {
+                      const status = TASK_STATUS_CONFIG[task.status] || TASK_STATUS_CONFIG.TODO;
+                      return (
+                        <tr key={task.id} onClick={() => navigate(`/kanban?taskId=${task.id}`)}>
+                          <td><strong>SP-{task.id}</strong></td>
+                          <td>{task.client_name || '—'}</td>
+                          <td><span className="dashboard-pill" style={{ background: status.bg, color: status.color }}>{status.shortLabel}</span></td>
+                          <td>{formatDate(task.planned_date)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="dashboard-list__empty">Aucune activite</div>
+              )}
+            </div>
           </div>
-          <MetricTile label="Terminees" value={`${completionRate}%`} tone="green" helper={`${counts.totalDone || 0} / ${totalTasks}`} />
         </div>
-      </section>
 
-<section className="dashboard__grid">
-        <article className="dashboard-panel dashboard-panel--wide">
-          <div className="dashboard-panel__head">
-            <h3>7 prochains jours</h3>
-            <span>{derived.upcomingTasks.length} taches</span>
+        <div className="dashboard__column dashboard__column--side">
+          <div className="dashboard-card dashboard-card--highlight">
+            <div className="dashboard-card__header">
+              <h3>Stock</h3>
+              <button className="dashboard-link" onClick={() => navigate('/stock')}>Voir →</button>
+            </div>
+            <div className="stock-summary">
+              <div className="stock-summary__row">
+                <span>Articles</span>
+                <strong>{stockSummary.totalArticles || 0}</strong>
+              </div>
+              <div className="stock-summary__row stock-summary__row--success">
+                <span>Disponible</span>
+                <strong>{stockSummary.availableQuantity?.toLocaleString('fr-FR') || 0}</strong>
+              </div>
+              <div className="stock-summary__row stock-summary__row--warning">
+                <span>Reserve</span>
+                <strong>{stockSummary.reservedQuantity?.toLocaleString('fr-FR') || 0}</strong>
+              </div>
+              <div className="stock-summary__row stock-summary__row--danger">
+                <span>Faible</span>
+                <strong>{stockSummary.lowStockCount || 0}</strong>
+              </div>
+            </div>
           </div>
-          <div className="dashboard-list">
-            {derived.upcomingTasks.length ? (
-              derived.upcomingTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="dashboard-list__item"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => navigate(`/kanban?taskId=${task.id}`)}
-                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/kanban?taskId=${task.id}`)}
-                >
-                  <div>
-                    <strong>{task.client_name || task.order_code || '—'}</strong>
-                    <p>{task.item_reference ? `${task.item_reference} x${task.quantity}` : task.title}</p>
+
+          <div className="dashboard-card">
+            <div className="dashboard-card__header">
+              <h3>Hors stock</h3>
+              <span className="dashboard-card__badge dashboard-card__badge--amber">{derived.waitingCount}</span>
+            </div>
+            <div className="dashboard-list">
+              {allTasks.filter((t) => t.status === 'WAITING_STOCK').slice(0, 5).length > 0 ? (
+                allTasks.filter((t) => t.status === 'WAITING_STOCK').slice(0, 5).map((task) => (
+                  <div key={task.id} className="dashboard-list__item dashboard-list__item--warning" onClick={() => navigate(`/kanban?taskId=${task.id}`)}>
+                    <div className="dashboard-list__item-content">
+                      <span className="dashboard-list__item-title">{task.client_name || task.order_code || '—'}</span>
+                      <span className="dashboard-list__item-subtitle">{task.item_reference} · {task.quantity} pcs</span>
+                    </div>
+                    <span className="dashboard-list__item-deficit">-{task.stock_deficit}</span>
                   </div>
-                  <span className={task.planned_date === todayISO ? 'date-today' : ''}>
-                    {formatDate(task.planned_date)}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <div className="dashboard__empty">Aucune echeance cette semaine</div>
-            )}
+                ))
+              ) : (
+                <div className="dashboard-list__empty">Tout est OK</div>
+              )}
+            </div>
           </div>
-        </article>
 
-        <article className="dashboard-panel">
-          <div className="dashboard-panel__head">
-            <h3>Hors stock</h3>
-            <span>{derived.waitingCount} taches</span>
-          </div>
-          <div className="dashboard-list">
-            {allTasks.filter((t) => t.status === 'WAITING_STOCK').slice(0, 6).length ? (
-              allTasks
-                .filter((t) => t.status === 'WAITING_STOCK')
-                .sort((a, b) => String(a.planned_date || '').localeCompare(String(b.planned_date || '')))
-                .slice(0, 6)
-                .map((task) => (
-                  <div
-                    key={task.id}
-                    className="dashboard-list__item dashboard-list__item--danger"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate(`/kanban?taskId=${task.id}`)}
-                    onKeyDown={(e) => e.key === 'Enter' && navigate(`/kanban?taskId=${task.id}`)}
-                  >
-                    <div>
-                      <strong>{task.client_name || task.order_code || '—'}</strong>
-                      <p>{task.item_reference} ({task.stock_deficit} manquant)</p>
+          <div className="dashboard-card">
+            <div className="dashboard-card__header">
+              <h3>Retards</h3>
+              <span className="dashboard-card__badge dashboard-card__badge--red">{derived.overdueCount}</span>
+            </div>
+            <div className="dashboard-list">
+              {derived.overdueTasks.length > 0 ? (
+                derived.overdueTasks.map((task) => (
+                  <div key={task.id} className="dashboard-list__item dashboard-list__item--danger" onClick={() => navigate(`/kanban?taskId=${task.id}`)}>
+                    <div className="dashboard-list__item-content">
+                      <span className="dashboard-list__item-title">{task.client_name || task.order_code || '—'}</span>
+                      <span className="dashboard-list__item-subtitle">{formatDate(task.planned_date)}</span>
                     </div>
                   </div>
                 ))
-            ) : (
-              <div className="dashboard__empty">Aucun hors stock</div>
-            )}
-          </div>
-        </article>
-
-        <article className="dashboard-panel">
-          <div className="dashboard-panel__head">
-            <h3>Stock</h3>
-            <button type="button" className="btn-link" onClick={() => navigate('/stock')}>Voir tout →</button>
-          </div>
-          <div className="stock-summary-compact">
-            <div className="stock-stat-row">
-              <span>Articles</span>
-              <strong>{stockSummary.totalArticles || 0}</strong>
-            </div>
-            <div className="stock-stat-row stock-stat-row--success">
-              <span>Disponible</span>
-              <strong>{stockSummary.availableQuantity?.toLocaleString('fr-FR') || 0}</strong>
-            </div>
-            <div className="stock-stat-row stock-stat-row--warning">
-              <span>Reserve</span>
-              <strong>{stockSummary.reservedQuantity?.toLocaleString('fr-FR') || 0}</strong>
-            </div>
-            <div className="stock-stat-row stock-stat-row--danger">
-              <span>Stock faible</span>
-              <strong>{stockSummary.lowStockCount || 0}</strong>
+              ) : (
+                <div className="dashboard-list__empty">Aucun retard</div>
+              )}
             </div>
           </div>
-        </article>
-
-        <article className="dashboard-panel dashboard-panel--wide">
-          <div className="dashboard-panel__head">
-            <h3>Activite recente</h3>
-          </div>
-          <div className="dashboard-table">
-            {recentTasks.length === 0 ? (
-              <div className="dashboard__empty">Aucune activite recente</div>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Ligne</th>
-                    <th>Client</th>
-                    <th>Statut</th>
-                    <th>Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentTasks.map((task) => {
-                    const status = TASK_STATUS_CONFIG[task.status] || TASK_STATUS_CONFIG.TODO;
-                    return (
-                      <tr
-                        key={task.id}
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => navigate(`/kanban?taskId=${task.id}`)}
-                      >
-                        <td><strong>SP-{task.id}</strong></td>
-                        <td>{task.client_name || task.order_code || '—'}</td>
-                        <td>
-                          <span className="dashboard-table__pill" style={{ background: status.bg, color: status.color }}>
-                            {status.shortLabel}
-                          </span>
-                        </td>
-                        <td>{formatDate(task.planned_date)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </article>
+        </div>
       </section>
     </div>
   );
