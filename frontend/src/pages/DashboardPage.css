@@ -1,11 +1,14 @@
 .dashboard {
-  padding: 1.15rem 1.35rem 1.75rem;
-  max-width: 1440px;
+  padding: 1rem;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .dashboard__header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
@@ -14,7 +17,7 @@
 
 .dashboard__title {
   margin: 0;
-  font-size: 1.55rem;
+  font-size: 1.35rem;
   line-height: 1.1;
   letter-spacing: -0.02em;
   color: #0f172a;
@@ -26,7 +29,7 @@
   gap: 0.55rem;
   margin-top: 0.55rem;
   color: #475569;
-  font-size: 0.92rem;
+  font-size: 0.85rem;
 }
 
 .dashboard__workspace-badge {
@@ -155,9 +158,15 @@
 
 .dashboard__overview {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+  grid-template-columns: 1fr 0.8fr;
   gap: 1rem;
   margin-bottom: 1rem;
+}
+
+@media (max-width: 1200px) {
+  .dashboard__overview {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dashboard__metrics {
@@ -291,16 +300,25 @@
 
 .dashboard__grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
 }
 
 .dashboard-panel {
-  padding: 0.95rem;
+  padding: 0.75rem;
 }
 
 .dashboard-panel--wide {
   grid-column: span 3;
+}
+
+@media (max-width: 1200px) {
+  .dashboard__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dashboard-panel--wide {
+    grid-column: span 2;
+  }
 }
 
 .dashboard-panel__head {
@@ -511,7 +529,7 @@
 
 @media (max-width: 900px) {
   .dashboard {
-    padding-inline: 0.9rem;
+    padding: 0.75rem;
   }
 
   .dashboard__header {
@@ -520,13 +538,22 @@
 
   .dashboard__meta {
     align-items: flex-start;
+    width: 100%;
   }
 
   .dashboard__actions {
     justify-content: flex-start;
+    width: 100%;
   }
 
-  .dashboard__metrics,
+  .dashboard__overview {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard__metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .dashboard__workflow-grid {
     grid-template-columns: 1fr;
   }
@@ -537,6 +564,49 @@
 
   .dashboard__completion {
     text-align: left;
+  }
+
+  .dashboard__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-panel--wide {
+    grid-column: span 1;
+  }
+
+  .analytics-stock {
+    flex-direction: column;
+  }
+
+  .stock-metric {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard__title {
+    font-size: 1.15rem;
+  }
+
+  .dashboard__subtitle {
+    font-size: 0.8rem;
+  }
+
+  .dashboard__metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-tile strong {
+    font-size: 1.25rem;
+  }
+
+  .dashboard-tile span {
+    font-size: 0.75rem;
+  }
+
+  .dashboard__action-btn {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.75rem;
   }
 }
 
