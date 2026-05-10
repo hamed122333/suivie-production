@@ -174,6 +174,8 @@ const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filte
         });
       }, [tasks, deferredQuery, filterPriority, filterCategory, filterCriticalDeficit, filterPredictiveOnly]);
 
+      const visibleTaskIds = useMemo(() => new Set(visibleTasks.map((t) => t.id)), [visibleTasks]);
+
   const getTasksByStatus = useCallback(
     (status) => tasks.filter((task) => task.status === status).sort(sortInColumn).filter((task) => visibleTaskIds.has(task.id)),
     [tasks, visibleTaskIds]
