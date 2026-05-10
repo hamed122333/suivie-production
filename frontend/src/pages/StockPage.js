@@ -22,6 +22,8 @@ const StockPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const inputRef = useRef(null);
 
   const fetchStock = async () => {
@@ -71,15 +73,34 @@ const StockPage = () => {
   };
 
   const filteredStock = useMemo(() => {
-    if (!searchTerm) return safeArray;
-    const q = searchTerm.toLowerCase();
-    return safeArray.filter((item) =>
-      (item.article || '').toLowerCase().includes(q) ||
-      (item.designation || '').toLowerCase().includes(q) ||
-      (item.client_name || '').toLowerCase().includes(q) ||
-      (item.client_code || '').toLowerCase().includes(q)
-    );
-  }, [safeArray, searchTerm]);
+    let items = safeArray;
+    
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase();
+      items = items.filter((item) =>
+        (item.article || '').toLowerCase().includes(q) ||
+        (item.designation || '').toLowerCase().includes(q) ||
+        (item.client_name || '').toLowerCase().includes(q) ||
+        (item.client_code || '').toLowerCase().includes(q)
+      );
+    }
+    
+    if (categoryFilter) {
+      items = items.filter((item) => item.article_prefix === categoryFilter);
+    }
+    
+    if (statusFilter) {
+      if (statusFilter === 'READY') {
+        items = items.filter((item) => item.is_ready === true);
+      } else if (statusFilter === 'PENDING') {
+        items = items.filter((item) => item.is_ready === false);
+      } else if (statusFilter === 'LOW_STOCK') {
+        items = items.filter((item) => item.coverage_percent < 100);
+      }
+    }
+    
+    return items;
+  }, [safeArray, searchTerm, categoryFilter, statusFilter]);
 
   const sortedStock = useMemo(() => {
     const sortableItems = [...filteredStock];
@@ -127,6 +148,11 @@ const StockPage = () => {
   const filteredQty = useMemo(() => filteredStock.reduce((sum, i) => sum + Number(i.quantity || 0), 0), [filteredStock]);
   const uniqueArticleCount = useMemo(() => new Set(safeArray.map(i => i.article).filter(Boolean)).size, [safeArray]);
   const filteredArticleCount = useMemo(() => new Set(filteredStock.map(i => i.article).filter(Boolean)).size, [filteredStock]);
+  const totalAvailable = useMemo(() => safeArray.reduce((sum, i) => sum + Number(i.available_quantity || 0), 0), [safeArray]);
+  const totalReserved = useMemo(() => safeArray.reduce((sum, i) => sum + Number(i.total_reserved || 0), 0), [safeArray]);
+  const lowStockCount = useMemo(() => safeArray.filter(i => i.coverage_percent < 100).length, [safeArray]);
+  const readyCount = useMemo(() => safeArray.filter(i => i.is_ready === true).length, [safeArray]);
+  const pendingCount = useMemo(() => safeArray.filter(i => i.is_ready === false).length, [safeArray]);
 
   const requestSort = (key) => {
     let direction = 'asc';
@@ -177,6 +203,32 @@ const StockPage = () => {
               Rechercher
             </button>
           </div>
+          <div className="stock-filters">
+            <select
+              className="filter-select"
+              value={categoryFilter}
+              onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="">Toutes catégories</option>
+              <option value="CI">Carterie (CI)</option>
+              <option value="CV">Carterie (CV)</option>
+              <option value="DI">Divers (DI)</option>
+              <option value="DV">Divers (DV)</option>
+              <option value="FC">Feraille (FC)</option>
+              <option value="FD">Feraille (FD)</option>
+              <option value="PL">Plastique (PL)</option>
+            </select>
+            <select
+              className="filter-select"
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+            >
+              <option value="">Tous statuts</option>
+              <option value="READY">Disponible</option>
+              <option value="PENDING">En attente</option>
+              <option value="LOW_STOCK">Stock insuffisant</option>
+            </select>
+          </div>
 
           {isPlanner && (
             <div className="buttons-group">
@@ -192,19 +244,40 @@ const StockPage = () => {
         <div className="stock-stats-strip">
           <div className="stock-stat">
             <strong>{isFiltered ? filteredArticleCount : uniqueArticleCount}</strong>
-            <span>{isFiltered ? `référence${filteredArticleCount > 1 ? 's' : ''} trouvée${filteredArticleCount > 1 ? 's' : ''}` : `référence${uniqueArticleCount > 1 ? 's' : ''}`}</span>
+            <span>{isFiltered ? `réf.` : 'réf.'}</span>
           </div>
-          <div className="stock-stat">
-            <strong>{isFiltered ? filteredStock.length : safeArray.length}</strong>
-            <span>{isFiltered ? 'ligne(s) filtrée(s)' : 'lignes totales'}</span>
+          <div className="stock-stat stock-stat--success">
+            <strong>{readyCount}</strong>
+            <span>disponible{readyCount !== 1 ? 's' : ''}</span>
           </div>
+          <div className="stock-stat stock-stat--warning">
+            <strong>{pendingCount}</strong>
+            <span>en attente</span>
+          </div>
+          <div className="stock-stat stock-stat--danger">
+            <strong>{lowStockCount}</strong>
+            <span>stock faible</span>
+          </div>
+          <div className="stock-stat stock-stat--divider"></div>
           <div className="stock-stat">
             <strong>{(isFiltered ? filteredQty : totalQty).toLocaleString('fr-FR')}</strong>
-            <span>unités{isFiltered ? ' filtrées' : ' en stock'}</span>
+            <span>unités</span>
           </div>
-          {isFiltered && (
-            <button type="button" className="stock-stats-strip__clear" onClick={clearSearch}>
-              ✕ Effacer le filtre «&nbsp;{searchTerm}&nbsp;»
+          <div className="stock-stat">
+            <strong>{totalAvailable.toLocaleString('fr-FR')}</strong>
+            <span>dispo.</span>
+          </div>
+          <div className="stock-stat">
+            <strong>{totalReserved.toLocaleString('fr-FR')}</strong>
+            <span>réservé</span>
+          </div>
+          {(isFiltered || categoryFilter || statusFilter) && (
+            <button 
+              type="button" 
+              className="stock-stats-strip__clear" 
+              onClick={() => { clearSearch(); setCategoryFilter(''); setStatusFilter(''); }}
+            >
+              ✕ Effacer les filtres
             </button>
           )}
         </div>
@@ -228,8 +301,9 @@ const StockPage = () => {
                 <thead>
                   <tr>
                     <th onClick={() => requestSort('article')} className="sortable-header">
-                      Code Article {getSortIcon('article')}
+                      Article {getSortIcon('article')}
                     </th>
+                    <th>Catégorie</th>
                     <th onClick={() => requestSort('designation')} className="sortable-header">
                       Désignation {getSortIcon('designation')}
                     </th>
@@ -237,33 +311,50 @@ const StockPage = () => {
                       Client {getSortIcon('client')}
                     </th>
                     <th onClick={() => requestSort('quantity')} className="sortable-header text-center">
-                      Quantité {getSortIcon('quantity')}
+                      Stock {getSortIcon('quantity')}
                     </th>
+                    <th className="text-center">Réservé</th>
+                    <th className="text-center">Dispo.</th>
+                    <th className="text-center">Couverture</th>
+                    <th className="text-center">Tâches</th>
                     <th onClick={() => requestSort('date')} className="sortable-header text-right">
-                      Disponibilité {getSortIcon('date')}
+                      Prêt {getSortIcon('date')}
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {currentItems.map((item, index) => (
+                  {currentItems.map((item, index) => {
+                    const stockStatus = item.stock_status;
+                    const statusClass = stockStatus === 'EMPTY' ? 'status-empty' : stockStatus === 'PARTIAL' ? 'status-partial' : 'status-full';
+                    const coverageColor = item.coverage_percent >= 100 ? '#22c55e' : item.coverage_percent >= 50 ? '#f59e0b' : '#ef4444';
+                    
+                    return (
                     <tr key={item.id || index}>
                       <td>
                         <div className="item-article">
-                          <div className="article-icon">📦</div>
+                          <div className={`article-badge article-badge--${item.article_prefix?.toLowerCase() || 'default'}`}>
+                            {item.article_prefix || '??'}
+                          </div>
                           <div className="article-info">
                             <span className="article-name">
                               {isFiltered && searchTerm
                                 ? highlightMatch(item.article, searchTerm)
                                 : item.article}
                             </span>
+                            {item.is_ready && (
+                              <span className="status-pill status-pill--ready">✓ Prêt</span>
+                            )}
                           </div>
                         </div>
+                      </td>
+                      <td>
+                        <span className="category-badge">{item.article_category || 'Autre'}</span>
                       </td>
                       <td>
                         <span className="item-designation text-sm text-gray">
                           {item.designation
                             ? (isFiltered ? highlightMatch(item.designation, searchTerm) : item.designation)
-                            : <span className="text-muted italic">Spécifiée par référence</span>}
+                            : <span className="text-muted italic">—</span>}
                         </span>
                       </td>
                       <td>
@@ -273,28 +364,64 @@ const StockPage = () => {
                               {isFiltered ? highlightMatch(item.client_name, searchTerm) : item.client_name}
                             </span>
                           ) : (
-                            <span className="text-muted italic">Non spécifié</span>
-                          )}
-                          {item.client_code && (
-                            <span className="client-code text-xs text-gray ml-2">({item.client_code})</span>
+                            <span className="text-muted italic">—</span>
                           )}
                         </div>
                       </td>
                       <td className="item-quantity text-center">
-                        <span className="qty-badge">{item.quantity}</span>
+                        <span className={`qty-badge ${statusClass}`}>{item.quantity}</span>
                       </td>
-                      <td className="item-date text-right">
-                        <div className="date-wrapper">
-                          <span className="date-icon">📅</span>
-                          <span className="date-text">
-                            {item.ready_date || item.date_import
-                              ? formatDate(item.ready_date || item.date_import)
-                              : 'N/A'}
+                      <td className="text-center">
+                        <span className="qty-reserved">{item.total_reserved || 0}</span>
+                      </td>
+                      <td className="text-center">
+                        <span className={`qty-available ${item.available_quantity > 0 ? '' : 'empty'}`}>
+                          {item.available_quantity}
+                        </span>
+                      </td>
+                      <td className="text-center">
+                        <div className="coverage-wrapper">
+                          <div className="coverage-bar">
+                            <div 
+                              className="coverage-fill" 
+                              style={{ 
+                                width: `${Math.min(100, item.coverage_percent)}%`,
+                                backgroundColor: coverageColor
+                              }}
+                            />
+                          </div>
+                          <span className="coverage-text" style={{ color: coverageColor }}>
+                            {item.coverage_percent}%
                           </span>
                         </div>
                       </td>
+                      <td className="text-center">
+                        <span className={`task-count ${item.task_count > 0 ? 'has-tasks' : ''}`}>
+                          {item.task_count || 0}
+                          {item.waiting_count > 0 && <span className="waiting-badge">{item.waiting_count}</span>}
+                        </span>
+                      </td>
+                      <td className="item-date text-right">
+                        <div className="date-wrapper">
+                          {item.is_ready ? (
+                            <span className="date-text date-ready">✓ Disponible</span>
+                          ) : (
+                            <>
+                              <span className="date-icon">📅</span>
+                              <span className="date-text">
+                                {item.ready_date || item.date_import
+                                  ? formatDate(item.ready_date || item.date_import)
+                                  : '—'}
+                              </span>
+                              {item.days_until_ready !== null && item.days_until_ready > 0 && (
+                                <span className="days-badge">+{item.days_until_ready}j</span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>

@@ -179,40 +179,74 @@ const StockImportModel = {
     }
   },
 
-  async getAll() {
-    // Main stock data + sum of quantities already reserved by active tasks per article
+async getAll() {
     const result = await pool.query(
       `SELECT
-         si.*,
-         COALESCE(alloc.total_reserved, 0) AS total_reserved,
-         COALESCE(alloc.task_count, 0) AS task_count
-       FROM stock_import si
-       LEFT JOIN LATERAL (
-         SELECT
-           SUM(t.quantity) AS total_reserved,
-           COUNT(*) AS task_count
-         FROM tasks t
-         WHERE UPPER(t.item_reference) = UPPER(si.article)
-           AND t.status IN ('WAITING_STOCK', 'TODO', 'IN_PROGRESS', 'BLOCKED')
-       ) alloc ON TRUE
-       ORDER BY si.ready_date ASC, si.id ASC`
+          si.*,
+          COALESCE(alloc.total_reserved, 0) AS total_reserved,
+          COALESCE(alloc.task_count, 0) AS task_count,
+          COALESCE(alloc.waiting_count, 0) AS waiting_count,
+          alloc.first_planned_date,
+          alloc.total_demand
+        FROM stock_import si
+        LEFT JOIN LATERAL (
+          SELECT
+            SUM(t.quantity) AS total_reserved,
+            COUNT(*) AS task_count,
+            COUNT(*) FILTER (WHERE t.status = 'WAITING_STOCK') AS waiting_count,
+            MIN(t.planned_date) AS first_planned_date,
+            SUM(t.quantity) FILTER (WHERE t.status IN ('WAITING_STOCK', 'TODO', 'IN_PROGRESS', 'BLOCKED')) AS total_demand
+          FROM tasks t
+          WHERE UPPER(t.item_reference) = UPPER(si.article)
+            AND t.status IN ('WAITING_STOCK', 'TODO', 'IN_PROGRESS', 'BLOCKED')
+        ) alloc ON TRUE
+        ORDER BY si.ready_date ASC, si.id ASC`
     );
 
-    // Evaluate is_ready in JS to avoid DB timezone issues
     const now = new Date();
-    const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).toString().padStart(2, '0');
     return result.rows.map(row => {
       const rDate = row.ready_date instanceof Date
-        ? row.ready_date.getFullYear() + '-' + String(row.ready_date.getMonth() + 1).padStart(2, '0') + '-' + String(row.ready_date.getDate()).padStart(2, '0')
+        ? row.ready_date.getFullYear() + '-' + String(row.ready_date.getMonth() + 1).padStart(2, '0') + '-' + String(row.ready_date.getDate()).toString().padStart(2, '0')
         : String(row.ready_date).slice(0, 10);
       const totalReserved = Number(row.total_reserved || 0);
       const stockQty = Number(row.quantity || 0);
+      const totalDemand = Number(row.total_demand || 0);
+      const availableQty = Math.max(0, stockQty - totalReserved);
+      const coveragePercent = totalDemand > 0 ? Math.round((stockQty / totalDemand) * 100) : 100;
+      
+      let daysUntilReady = null;
+      if (row.ready_date) {
+        const readyDate = new Date(row.ready_date);
+        const todayDate = new Date(today);
+        daysUntilReady = Math.ceil((readyDate - todayDate) / (1000 * 60 * 60 * 24));
+      }
+
+      const articlePrefix = row.article ? row.article.substring(0, 2).toUpperCase() : null;
+      const articleCategory = {
+        'CI': 'Carterie',
+        'CV': 'Carterie',
+        'DI': 'Divers',
+        'DV': 'Divers',
+        'FC': 'Feraille',
+        'FD': 'Feraille',
+        'PL': 'Plastique',
+      }[articlePrefix] || 'Autre';
+
       return {
         ...row,
         is_ready: rDate <= today,
         total_reserved: totalReserved,
-        available_quantity: Math.max(0, stockQty - totalReserved),
+        available_quantity: availableQty,
         task_count: Number(row.task_count || 0),
+        waiting_count: Number(row.waiting_count || 0),
+        total_demand: totalDemand,
+        first_planned_date: row.first_planned_date,
+        coverage_percent: coveragePercent,
+        days_until_ready: daysUntilReady,
+        stock_status: availableQty === 0 ? 'EMPTY' : coveragePercent < 100 ? 'PARTIAL' : 'FULL',
+        article_prefix: articlePrefix,
+        article_category: articleCategory,
       };
     });
   },

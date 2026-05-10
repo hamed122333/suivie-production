@@ -116,6 +116,9 @@ const DashboardPage = () => {
       .sort((a, b) => String(a.planned_date).localeCompare(String(b.planned_date)))
       .slice(0, 10);
 
+    const totalQuantity = tasks.reduce((sum, t) => sum + Number(t.quantity || 0), 0);
+    const doneQuantity = tasks.filter((t) => t.status === 'DONE').reduce((sum, t) => sum + Number(t.quantity || 0), 0);
+
     return {
       totalLines: tasks.length,
       totalOrders: uniqueOrders.size,
@@ -125,8 +128,13 @@ const DashboardPage = () => {
       overdueCount: overdue.length,
       overdueTasks: overdue.slice(0, 10),
       upcomingTasks: upcoming,
+      totalQuantity,
+      doneQuantity,
     };
   }, [allTasks, todayISO, dayPlus7]);
+
+  const analytics = stats?.analytics || {};
+  const stockSummary = analytics.stockSummary || {};
 
   const canImportOrders = Boolean(isCommercial);
   const attentionItems = [
@@ -455,6 +463,72 @@ const DashboardPage = () => {
                 </tbody>
               </table>
             )}
+          </div>
+        </article>
+
+        <article className="dashboard-panel">
+          <div className="dashboard-panel__head">
+            <h3>Stock disponible</h3>
+            <span>{stockSummary.totalArticles || 0} articles</span>
+          </div>
+          <div className="dashboard-list">
+            <div className="analytics-stock">
+              <div className="stock-metric">
+                <span className="stock-metric__value">{stockSummary.totalQuantity?.toLocaleString('fr-FR') || 0}</span>
+                <span className="stock-metric__label">Total unités</span>
+              </div>
+              <div className="stock-metric stock-metric--success">
+                <span className="stock-metric__value">{stockSummary.availableQuantity?.toLocaleString('fr-FR') || 0}</span>
+                <span className="stock-metric__label">Disponible</span>
+              </div>
+              <div className="stock-metric stock-metric--warning">
+                <span className="stock-metric__value">{stockSummary.reservedQuantity?.toLocaleString('fr-FR') || 0}</span>
+                <span className="stock-metric__label">Réservé</span>
+              </div>
+            </div>
+            <button type="button" className="btn-link" onClick={() => navigate('/stock')}>
+              Voir le stock →
+            </button>
+          </div>
+        </article>
+
+        <article className="dashboard-panel">
+          <div className="dashboard-panel__head">
+            <h3>Top Clients</h3>
+          </div>
+          <div className="dashboard-list">
+            {(analytics.topClients || []).length > 0 ? (
+              analytics.topClients.map((client, idx) => (
+                <div key={idx} className="analytics-row">
+                  <span className="analytics-rank">{idx + 1}</span>
+                  <span className="analytics-name">{client.name}</span>
+                  <span className="analytics-count">{client.count} cmd</span>
+                </div>
+              ))
+            ) : (
+              <div className="dashboard__empty">Aucune donnée</div>
+            )}
+          </div>
+        </article>
+
+        <article className="dashboard-panel dashboard-panel--wide">
+          <div className="dashboard-panel__head">
+            <h3>Répartition par catégorie</h3>
+          </div>
+          <div className="category-breakdown">
+            {Object.entries(analytics.categoryBreakdown || {}).map(([cat, count]) => {
+              const colors = { CI: '#3b82f6', CV: '#3b82f6', DI: '#8b5cf6', DV: '#8b5cf6', FC: '#f59e0b', FD: '#f59e0b', PL: '#10b981', OTHER: '#64748b' };
+              const labels = { CI: 'Carterie', CV: 'Carterie', DI: 'Divers', DV: 'Divers', FC: 'Feraille', FD: 'Feraille', PL: 'Plastique', OTHER: 'Autre' };
+              if (count === 0) return null;
+              return (
+                <div key={cat} className="category-item">
+                  <div className="category-bar" style={{ background: colors[cat] || '#64748b', width: `${Math.min(100, count * 5)}%` }}>
+                    <span className="category-label">{labels[cat] || cat}</span>
+                    <span className="category-count">{count}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </article>
       </section>

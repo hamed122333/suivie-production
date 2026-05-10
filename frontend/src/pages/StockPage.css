@@ -165,6 +165,40 @@
   color: #64748b;
 }
 
+.stock-stat--success strong { color: #22c55e; }
+.stock-stat--warning strong { color: #f59e0b; }
+.stock-stat--danger strong { color: #ef4444; }
+.stock-stat--divider {
+  width: 1px;
+  height: 24px;
+  background: #e2e8f0;
+}
+
+/* Filters */
+.stock-filters {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.filter-select {
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: white;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
 .stock-stats-strip__clear {
   margin-left: auto;
   border: none;
@@ -329,6 +363,123 @@
   font-size: 0.9rem;
   min-width: 60px;
   border: 1px solid #bfdbfe;
+}
+
+.qty-badge.status-empty { background: #fef2f2; color: #ef4444; border-color: #fecaca; }
+.qty-badge.status-partial { background: #fefce8; color: #ca8a04; border-color: #fef08a; }
+.qty-badge.status-full { background: #f0fdf4; color: #22c55e; border-color: #bbf7d0; }
+
+.qty-reserved { color: #f59e0b; font-weight: 600; font-size: 0.85rem; }
+.qty-available { color: #22c55e; font-weight: 700; }
+.qty-available.empty { color: #ef4444; }
+
+/* Article badge */
+.article-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: white;
+}
+
+.article-badge--ci, .article-badge--cv { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+.article-badge--di, .article-badge--dv { background: linear-gradient(135deg, #8b5cf6, #6d28d9); }
+.article-badge--fc, .article-badge--fd { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.article-badge--pl { background: linear-gradient(135deg, #10b981, #059669); }
+.article-badge--default { background: linear-gradient(135deg, #64748b, #475569); }
+
+/* Category badge */
+.category-badge {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Status pill */
+.status-pill {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  margin-left: 0.5rem;
+}
+
+.status-pill--ready {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+/* Coverage bar */
+.coverage-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.coverage-bar {
+  width: 50px;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.coverage-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.coverage-text {
+  font-size: 0.75rem;
+  font-weight: 700;
+  min-width: 35px;
+}
+
+/* Task count */
+.task-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.task-count.has-tasks {
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.waiting-badge {
+  background: #fef2f2;
+  color: #ef4444;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 9999px;
+  font-weight: 700;
+}
+
+/* Date enhancements */
+.date-ready {
+  color: #22c55e !important;
+  font-weight: 600;
+}
+
+.days-badge {
+  font-size: 0.7rem;
+  background: #fef3c7;
+  color: #d97706;
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  margin-left: 0.35rem;
+  font-weight: 600;
 }
 
 .date-wrapper {
