@@ -1,5 +1,12 @@
 const pool = require('../config/db');
 
+let broadcast;
+try {
+  broadcast = require('../services/sseService').broadcast;
+} catch (e) {
+  broadcast = () => {};
+}
+
 const WorkspaceModel = {
   async findByName(name) {
     const result = await pool.query(
@@ -37,6 +44,7 @@ const WorkspaceModel = {
        RETURNING id, name, created_at`,
       [name]
     );
+    broadcast('workspaces-updated', { action: 'created', name });
     return result.rows[0];
   },
 
@@ -45,7 +53,9 @@ const WorkspaceModel = {
     if (!trimmed) throw new Error('Workspace name is required');
     const existing = await this.findByName(trimmed);
     if (existing) return existing;
-    return this.create({ name: trimmed });
+    const created = await this.create({ name: trimmed });
+    broadcast('workspaces-updated', { action: 'created', name: trimmed });
+    return created;
   },
 };
 

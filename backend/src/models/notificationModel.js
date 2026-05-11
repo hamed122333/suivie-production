@@ -1,6 +1,13 @@
 const pool = require('../config/db');
 const MAX_NOTIFICATIONS_PER_PAGE = 100;
 
+let broadcast;
+try {
+  broadcast = require('../services/sseService').broadcast;
+} catch (e) {
+  broadcast = () => {};
+}
+
 function formatDateFR(dateStr) {
   if (!dateStr) return 'non définie';
   const s = `${dateStr}`.slice(0, 10);
@@ -38,6 +45,7 @@ const NotificationModel = {
       `,
       values
     );
+    broadcast('notifications-updated', { type: 'task_created', count: taskIds.length });
   },
 
   async listByRecipient({ recipientUserId, page = 1, perPage = 20 }) {
@@ -120,6 +128,7 @@ const NotificationModel = {
         `${changedByName || 'Un planificateur'} a modifié la ${fieldLabel} de SP-${taskId} : ${oldFmt} → ${newFmt}`,
       ]
     );
+    broadcast('notifications-updated', { type: 'date_updated' });
   },
 
   async createDateNegotiationNotification({ taskId, recipientUserId, actorName, action, proposedDate }) {
@@ -146,6 +155,7 @@ const NotificationModel = {
         bodyMap[action] || `Négociation de date sur SP-${taskId}`,
       ]
     );
+    broadcast('notifications-updated', { type: 'date_negotiation' });
   },
 
   async createStatusChangedNotification({ taskId, recipientUserId, changedByName, oldStatusLabel, newStatusLabel }) {
@@ -161,6 +171,7 @@ const NotificationModel = {
         `${changedByName || 'Un planificateur'} a fait passer SP-${taskId} de "${oldStatusLabel}" à "${newStatusLabel}"`,
       ]
     );
+    broadcast('notifications-updated', { type: 'status_updated' });
   },
 };
 

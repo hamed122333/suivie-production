@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { notificationAPI } from '../services/api';
 import { formatRelativeDate, getInitials } from '../utils/formatters';
+import useServerEvents from '../hooks/useServerEvents';
 import logo from '../assets/logo.png';
 import './Header.css';
 
@@ -69,6 +70,11 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
       window.removeEventListener('focus', onFocus);
     };
   }, [canViewNotifications, loadNotifications]);
+
+  // Real-time notifications via SSE
+  useServerEvents({
+    'notifications-updated': () => loadNotifications(),
+  });
 
   const handleMarkAllRead = async () => {
     try {

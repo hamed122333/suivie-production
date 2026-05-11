@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { workspaceAPI } from '../services/api';
+import useServerEvents from '../hooks/useServerEvents';
 
 const WorkspaceContext = createContext(null);
 
@@ -53,6 +54,11 @@ export const WorkspaceProvider = ({ children }) => {
     }
     refreshWorkspaces();
   }, [authLoading, user, refreshWorkspaces]);
+
+  // Real-time workspace updates via SSE
+  useServerEvents({
+    'workspaces-updated': () => refreshWorkspaces(),
+  });
 
   // Ajout de la vue globale pour super_admin et planificateur
   const workspacesWithAll = useMemo(() => {
