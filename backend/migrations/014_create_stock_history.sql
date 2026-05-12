@@ -13,6 +13,6 @@ CREATE TABLE IF NOT EXISTS stock_history (
     created_by INTEGER REFERENCES users(id)
 );
 
-CREATE INDEX idx_stock_history_article ON stock_history(article);
-CREATE INDEX idx_stock_history_created_at ON stock_history(created_at DESC);
-CREATE INDEX idx_stock_history_article_date ON stock_history(article, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_stock_history_article ON stock_history(article);
+CREATE INDEX IF NOT EXISTS idx_stock_history_created_at ON stock_history(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_stock_history_article_date ON stock_history(article, created_at DESC);
