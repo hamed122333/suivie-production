@@ -8,7 +8,8 @@ const inventoryScanService = {
         formData.append('image', file);
         
         const response = await axios.post(`${API_URL}/scan/inventory/upload`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 180000
         });
         
         return response.data;
@@ -23,6 +24,26 @@ const inventoryScanService = {
 
     async getStats() {
         const response = await axios.get(`${API_URL}/scan/inventory/stats`);
+        return response.data;
+    },
+
+    async getCodeConfigs() {
+        const response = await axios.get(`${API_URL}/scan/inventory/config`);
+        return response.data;
+    },
+
+    async updateCodeConfig(id, data) {
+        const response = await axios.put(`${API_URL}/scan/inventory/config/${id}`, data);
+        return response.data;
+    },
+
+    async toggleCodeConfig(id, isActive) {
+        const response = await axios.patch(`${API_URL}/scan/inventory/config/${id}/toggle`, { isActive });
+        return response.data;
+    },
+
+    async checkOllamaStatus() {
+        const response = await axios.get(`${API_URL}/scan/inventory/status/ollama`);
         return response.data;
     },
 

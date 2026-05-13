@@ -1,8 +1,8 @@
 const path = require('path');
 const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
-const ocrService = require('../services/ocrService');
+const aiService = require('../services/aiService');
 const scanInventoryModel = require('../models/scanInventoryModel');
+const articleCodeConfigModel = require('../models/articleCodeConfigModel');
 
 const UPLOAD_DIR = path.join(__dirname, '../../uploads/scan-inventory');
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -17,22 +17,22 @@ const scanInventoryController = {
             }
 
             const imagePath = req.file.path;
-            const originalName = req.file.originalname;
             
-            const ocrResult = await ocrService.processImage(imagePath);
+            const aiResult = await aiService.analyzeImage(imagePath);
 
-            if (!ocrResult.success) {
-                return res.status(500).json({ 
-                    error: 'OCR processing failed',
-                    details: ocrResult.error 
-                });
+            let codes = aiResult.codes;
+            
+            if (!aiResult.success || codes.length === 0) {
+                console.log('Ollama failed, falling back to regex patterns...');
+                const config = await articleCodeConfigModel.getActive();
+                codes = this.extractCodesWithConfig(aiResult.rawResponse || '', config);
             }
 
             const imageUrl = `/uploads/scan-inventory/${req.file.filename}`;
             
             const savedScan = await scanInventoryModel.create({
                 imageUrl,
-                codes: ocrResult.codes,
+                codes,
                 createdBy: req.user?.id
             });
 
@@ -45,15 +45,100 @@ const scanInventoryController = {
                 scan: {
                     id: savedScan.id,
                     imageUrl,
-                    codes: ocrResult.codes,
-                    totalCodes: ocrResult.codes.length,
-                    confidence: ocrResult.confidence,
-                    processingTime: ocrResult.processingTime
-                }
+                    codes,
+                    totalCodes: codes.length,
+                    processingTime: aiResult.processingTime,
+                    method: aiResult.method
+                },
+                rawResponse: aiResult.rawResponse
             });
         } catch (error) {
             console.error('Scan upload error:', error);
+            res.status(500).json({ error: 'Internal server error', details: error.message });
+        }
+    },
+
+    extractCodesWithConfig(text, configPatterns) {
+        const codes = [];
+        
+        for (const config of configPatterns) {
+            try {
+                const regex = new RegExp(config.pattern_regex, 'gi');
+                const matches = text.match(regex) || [];
+                
+                for (const match of matches) {
+                    const cleanCode = match.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+                    if (cleanCode.length >= 5) {
+                        codes.push({
+                            code: cleanCode,
+                            type: config.label,
+                            confidence: 70,
+                            configId: config.id
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error('Regex error for config:', config.name, e.message);
+            }
+        }
+        
+        const uniqueCodes = [];
+        const seen = new Set();
+        for (const code of codes) {
+            if (!seen.has(code.code)) {
+                seen.add(code.code);
+                uniqueCodes.push(code);
+            }
+        }
+        
+        return uniqueCodes;
+    },
+
+    async getCodeConfigs(req, res) {
+        try {
+            const configs = await articleCodeConfigModel.getAll();
+            res.json({ configs });
+        } catch (error) {
+            console.error('Get configs error:', error);
             res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+
+    async updateCodeConfig(req, res) {
+        try {
+            const { id } = req.params;
+            const updated = await articleCodeConfigModel.update(id, req.body);
+            
+            if (!updated) {
+                return res.status(404).json({ error: 'Config not found' });
+            }
+            
+            res.json({ config: updated });
+        } catch (error) {
+            console.error('Update config error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+
+    async toggleCodeConfig(req, res) {
+        try {
+            const { id } = req.params;
+            const { isActive } = req.body;
+            const updated = await articleCodeConfigModel.toggleActive(id, isActive);
+            
+            res.json({ config: updated });
+        } catch (error) {
+            console.error('Toggle config error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+
+    async checkOllamaStatus(req, res) {
+        try {
+            const status = await aiService.checkConnection();
+            res.json(status);
+        } catch (error) {
+            res.json({ connected: false, error: error.message });
         }
     },
 
@@ -117,11 +202,17 @@ const scanInventoryController = {
         try {
             const scans = await scanInventoryModel.getAllForExport();
             
-            let csv = 'ID,Date,Codes,Image URL\n';
+            let csv = 'ID,Date,Code,Type,Confidence\n';
             
             scans.forEach(scan => {
-                const codes = JSON.stringify(scan.codes).replace(/"/g, '""');
-                csv += `${scan.id},${scan.scanned_at},${codes},${scan.image_url || ''}\n`;
+                const codes = scan.codes || [];
+                if (codes.length === 0) {
+                    csv += `${scan.id},${scan.scanned_at},,,\n`;
+                } else {
+                    codes.forEach(c => {
+                        csv += `${scan.id},${scan.scanned_at},${c.code},${c.type || ''},${c.confidence || ''}\n`;
+                    });
+                }
             });
             
             res.setHeader('Content-Type', 'text/csv');

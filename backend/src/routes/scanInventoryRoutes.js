@@ -34,6 +34,10 @@ router.post('/upload', upload.single('image'), scanInventoryController.uploadAnd
 router.get('/history', scanInventoryController.getHistory);
 router.get('/stats', scanInventoryController.getStats);
 router.get('/export', scanInventoryController.exportCSV);
+router.get('/config', scanInventoryController.getCodeConfigs);
+router.put('/config/:id', scanInventoryController.updateCodeConfig);
+router.patch('/config/:id/toggle', scanInventoryController.toggleCodeConfig);
+router.get('/status/ollama', scanInventoryController.checkOllamaStatus);
 router.get('/:id', scanInventoryController.getScan);
 router.delete('/:id', scanInventoryController.deleteScan);
 
