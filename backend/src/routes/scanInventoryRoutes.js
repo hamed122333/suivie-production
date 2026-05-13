@@ -38,6 +38,9 @@ router.get('/config', scanInventoryController.getCodeConfigs);
 router.put('/config/:id', scanInventoryController.updateCodeConfig);
 router.patch('/config/:id/toggle', scanInventoryController.toggleCodeConfig);
 router.get('/status/ollama', scanInventoryController.checkOllamaStatus);
+router.post('/learn', scanInventoryController.learnFromCorrection);
+router.delete('/learn', scanInventoryController.clearLearning);
+router.get('/learn/status', scanInventoryController.getLearningStatus);
 router.get('/:id', scanInventoryController.getScan);
 router.delete('/:id', scanInventoryController.deleteScan);
 

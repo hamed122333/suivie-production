@@ -6,34 +6,80 @@ const OLLAMA_HOST = process.env.OLLAMA_HOST || 'localhost';
 const OLLAMA_PORT = process.env.OLLAMA_PORT || 11434;
 const MODEL_NAME = process.env.OLLAMA_MODEL || 'llava:latest';
 
-const PROMPT_TEMPLATE = `You are an expert at reading labels on paper rolls/bobines. Analyze this image and extract ALL article codes and numbers you see.
+let learnedCodes = [];
+let learningMode = false;
 
-Look for these types of codes:
-1. Bobine codes (6-12 digits): like 426856004
-2. Lot codes (letters+numbers): like GA25-1462, LOT 2
-3. Barcodes (12+ digits): like 911152050267411096
-4. Reference numbers (mixed): like 925071950503
+const aiService = {
+    setLearnedCodes(codes) {
+        if (codes && codes.length > 0) {
+            learnedCodes = codes.map(c => c.code);
+            learningMode = true;
+            console.log('AI learned codes:', learnedCodes);
+        }
+    },
 
-Extract ONLY the codes/numbers. Format your response EXACTLY as:
+    getLearnedCodes() {
+        return learnedCodes;
+    },
+
+    clearLearnedCodes() {
+        learnedCodes = [];
+        learningMode = false;
+        console.log('Learned codes cleared');
+    },
+
+    getPrompt() {
+        let basePrompt = `You are an expert at reading labels on paper rolls/bobines in industrial factories.
+
+Your task is to extract ALL numbers and codes you see in this image.
+
+CRITICAL INSTRUCTIONS:
+1. Look carefully at EVERY number on the label
+2. Numbers can be: 6-12 digits long (like 426856004)
+3. Codes can have letters: like GA25-1462, LOT 2
+4. Barcodes are 12+ digits: like 911152050267411096
+5. Ignore common text like "MONDI", "TOP", "PLY", addresses, phone numbers
+
+Extract ONLY the codes/numbers. Format your response like this (one per line):
 CODE|TYPE|CONFIDENCE
 
-Example output:
+Example valid outputs:
 426856004|Bobine Code|95
 GA25-1462|Lot Code|90
 911152050267411096|Barcode|85
+925071950503|Lot Code|85
+7.5|Weight|80
+205.0|Dimension|75
+2,674|Area|70
 
-If you find multiple codes of the same type, list them all.
-Only output the codes, nothing else.`;
+Look at the image and extract ALL numbers you find:`;
 
-const aiService = {
+        if (learningMode && learnedCodes.length > 0) {
+            basePrompt += `\n\nIMPORTANT: The following codes are known to appear on similar labels. Look especially for these patterns:
+${learnedCodes.map(code => `- ${code}`).join('\n')}`;
+        }
+
+        return basePrompt;
+    },
+
     async analyzeImage(imagePath) {
         const startTime = Date.now();
         
         try {
-            const imageBase64 = fs.readFileSync(imagePath, { encoding: 'base64' });
-            const imageDataUrl = `data:image/jpeg;base64,${imageBase64}`;
+            const imageBuffer = fs.readFileSync(imagePath);
+            const imageBase64 = imageBuffer.toString('base64');
+            
+            const ext = path.extname(imagePath).toLowerCase();
+            let mimeType = 'image/jpeg';
+            if (ext === '.png') mimeType = 'image/png';
+            if (ext === '.webp') mimeType = 'image/webp';
+            if (ext === '.gif') mimeType = 'image/gif';
+            
+            const imageDataUrl = `data:${mimeType};base64,${imageBase64}`;
             
             const result = await this.callOllamaVision(imageDataUrl);
+            
+            console.log('AI Raw Response:', result);
             
             const codes = this.parseResponse(result);
             
@@ -44,7 +90,8 @@ const aiService = {
                 codes,
                 rawResponse: result,
                 processingTime,
-                method: 'ollama_vision'
+                method: 'ollama_vision',
+                learningMode
             };
         } catch (error) {
             console.error('Ollama AI error:', error.message);
@@ -61,14 +108,17 @@ const aiService = {
 
     async callOllamaVision(imageDataUrl) {
         return new Promise((resolve, reject) => {
+            const prompt = this.getPrompt();
+            
             const postData = JSON.stringify({
                 model: MODEL_NAME,
-                prompt: PROMPT_TEMPLATE,
+                prompt: prompt,
                 images: [imageDataUrl],
                 stream: false,
                 options: {
                     temperature: 0.1,
-                    top_p: 0.9
+                    top_p: 0.9,
+                    num_predict: 512
                 }
             });
 
@@ -81,7 +131,7 @@ const aiService = {
                     'Content-Type': 'application/json',
                     'Content-Length': Buffer.byteLength(postData)
                 },
-                timeout: 120000
+                timeout: 180000
             };
 
             const req = http.request(options, (res) => {
@@ -96,7 +146,8 @@ const aiService = {
                         const response = JSON.parse(data);
                         resolve(response.response || '');
                     } catch (e) {
-                        reject(new Error('Failed to parse Ollama response'));
+                        console.error('Parse error:', e.message);
+                        resolve('');
                     }
                 });
             });
@@ -107,7 +158,7 @@ const aiService = {
 
             req.on('timeout', () => {
                 req.destroy();
-                reject(new Error('Ollama request timeout'));
+                reject(new Error('Ollama request timeout (180s)'));
             });
 
             req.write(postData);
@@ -117,52 +168,70 @@ const aiService = {
 
     parseResponse(text) {
         const codes = [];
+        
+        if (!text || text.trim().length === 0) {
+            console.log('Empty response from AI');
+            return codes;
+        }
+        
         const lines = text.split('\n').filter(line => line.trim());
         
         for (const line of lines) {
             const parts = line.split('|').map(p => p.trim()).filter(p => p);
             
             if (parts.length >= 1) {
-                const codeValue = parts[0];
+                const codeValue = parts[0].replace(/[^A-Z0-9.,-]/gi, '');
                 const codeType = parts[1] || 'Unknown';
-                const confidence = parts[2] ? parseInt(parts[2]) : 80;
+                const confidence = parts[2] ? parseInt(parts[2].replace(/[^0-9]/g, '')) : 80;
                 
                 if (this.isValidCode(codeValue)) {
                     codes.push({
                         code: codeValue.toUpperCase(),
                         type: codeType,
-                        confidence: Math.min(100, Math.max(50, confidence))
+                        confidence: Math.min(100, Math.max(50, confidence || 80))
                     });
                 }
             }
         }
         
         if (codes.length === 0 && text.trim()) {
-            const numericMatches = text.match(/\d{6,}/g);
+            console.log('No codes parsed, trying numeric extraction...');
+            const numericMatches = text.match(/\d{5,}/g);
             if (numericMatches) {
                 numericMatches.forEach(match => {
-                    codes.push({
-                        code: match,
-                        type: 'Numeric Code',
-                        confidence: 75
-                    });
+                    const cleanMatch = match.replace(/[,.]/g, '');
+                    if (cleanMatch.length >= 6 && this.isValidCode(cleanMatch)) {
+                        codes.push({
+                            code: cleanMatch,
+                            type: 'Numeric Code',
+                            confidence: 75
+                        });
+                    }
                 });
             }
         }
         
-        return codes;
+        const seen = new Set();
+        const uniqueCodes = codes.filter(c => {
+            if (seen.has(c.code)) return false;
+            seen.add(c.code);
+            return true;
+        });
+        
+        return uniqueCodes;
     },
 
     isValidCode(code) {
         if (!code || code.length < 5) return false;
         
-        const noise = ['THE', 'AND', 'FOR', 'TOP', 'LOT', 'MONDI', 'TELE', 'TEL', 'SLOVAKIA', 'RUZOMBEROK'];
+        const noise = ['THE', 'AND', 'FOR', 'TOP', 'LOT', 'MONDI', 'TELE', 'TEL', 
+                       'SLOVAKIA', 'RUZOMBEROK', 'CELLS', 'THIS', 'THAT', 'WHICH'];
         if (noise.includes(code.toUpperCase())) return false;
         
         const hasValidChar = /[A-Z0-9]/i.test(code);
         const hasNumber = /\d/.test(code);
         
-        return hasValidChar && (hasNumber || code.length >= 6);
+        return hasValidChar && (hasNumber || code.length >= 8);
     },
 
     async checkConnection() {

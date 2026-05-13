@@ -52,6 +52,21 @@ const inventoryScanService = {
         return response.data;
     },
 
+    async getLearningStatus() {
+        const response = await axios.get(`${API_URL}/scan/inventory/learn/status`);
+        return response.data;
+    },
+
+    async learnCodes(codes) {
+        const response = await axios.post(`${API_URL}/scan/inventory/learn`, { codes });
+        return response.data;
+    },
+
+    async clearLearning() {
+        const response = await axios.delete(`${API_URL}/scan/inventory/learn`);
+        return response.data;
+    },
+
     exportCSV() {
         window.open(`${API_URL}/scan/inventory/export`, '_blank');
     }

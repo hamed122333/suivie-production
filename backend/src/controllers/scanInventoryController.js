@@ -98,6 +98,43 @@ const scanInventoryController = {
         }
     },
 
+    async learnFromCorrection(req, res) {
+        try {
+            const { codes } = req.body;
+            if (codes && codes.length > 0) {
+                aiService.setLearnedCodes(codes);
+                res.json({ success: true, learnedCodes: codes, message: 'AI will use these codes as reference' });
+            } else {
+                res.status(400).json({ error: 'No codes provided' });
+            }
+        } catch (error) {
+            console.error('Learn error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+
+    async clearLearning(req, res) {
+        try {
+            aiService.clearLearnedCodes();
+            res.json({ success: true, message: 'Learning cleared' });
+        } catch (error) {
+            console.error('Clear learning error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+
+    async getLearningStatus(req, res) {
+        try {
+            const learnedCodes = aiService.getLearnedCodes();
+            res.json({ 
+                learning: learnedCodes.length > 0,
+                learnedCodes 
+            });
+        } catch (error) {
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+
     async getCodeConfigs(req, res) {
         try {
             const configs = await articleCodeConfigModel.getAll();

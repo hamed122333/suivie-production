@@ -7,27 +7,33 @@ const InventoryScanPage = () => {
     const [preview, setPreview] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [result, setResult] = useState(null);
+    const [rawResponse, setRawResponse] = useState('');
     const [history, setHistory] = useState([]);
     const [stats, setStats] = useState(null);
     const [configs, setConfigs] = useState([]);
     const [ollamaStatus, setOllamaStatus] = useState(null);
+    const [learningStatus, setLearningStatus] = useState({ learning: false, learnedCodes: [] });
     const [dragActive, setDragActive] = useState(false);
     const [activeTab, setActiveTab] = useState('scan');
+    const [showCorrectionModal, setShowCorrectionModal] = useState(false);
+    const [correctedCodes, setCorrectedCodes] = useState('');
     const fileInputRef = useRef(null);
 
     const loadData = async () => {
         try {
-            const [historyRes, statsRes, configsRes, ollamaRes] = await Promise.all([
+            const [historyRes, statsRes, configsRes, ollamaRes, learningRes] = await Promise.all([
                 inventoryScanService.getHistory(),
                 inventoryScanService.getStats(),
                 inventoryScanService.getCodeConfigs(),
-                inventoryScanService.checkOllamaStatus()
+                inventoryScanService.checkOllamaStatus(),
+                inventoryScanService.getLearningStatus()
             ]);
             
             setHistory(historyRes.scans || []);
             setStats(statsRes.stats);
             setConfigs(configsRes.configs || []);
             setOllamaStatus(ollamaRes);
+            setLearningStatus(learningRes);
         } catch (error) {
             console.error('Load data error:', error);
         }
@@ -47,7 +53,6 @@ const InventoryScanPage = () => {
         }
     };
 
-    // eslint-disable-next-line no-unused-vars
     const handleDrop = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -73,6 +78,7 @@ const InventoryScanPage = () => {
         setImage(file);
         setPreview(URL.createObjectURL(file));
         setResult(null);
+        setRawResponse('');
     };
 
     const handleScan = async () => {
@@ -84,12 +90,43 @@ const InventoryScanPage = () => {
         try {
             const response = await inventoryScanService.uploadAndScan(image);
             setResult(response.scan);
+            setRawResponse(response.rawResponse || '');
             await loadData();
         } catch (error) {
             console.error('Scan error:', error);
             alert('Erreur lors du scan: ' + (error.response?.data?.error || error.message));
         } finally {
             setIsProcessing(false);
+        }
+    };
+
+    const handleSaveCorrection = async () => {
+        if (!correctedCodes.trim()) return;
+        
+        const codes = correctedCodes.split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0);
+        
+        if (codes.length === 0) return;
+        
+        try {
+            await inventoryScanService.learnCodes(codes);
+            await loadData();
+            setShowCorrectionModal(false);
+            setCorrectedCodes('');
+            alert(`L'IA a appris ${codes.length} code(s). Les prochaines images utiliseront ces codes comme référence.`);
+        } catch (error) {
+            console.error('Learn error:', error);
+            alert('Erreur lors de l\'apprentissage');
+        }
+    };
+
+    const handleClearLearning = async () => {
+        try {
+            await inventoryScanService.clearLearning();
+            await loadData();
+        } catch (error) {
+            console.error('Clear learning error:', error);
         }
     };
 
@@ -106,6 +143,7 @@ const InventoryScanPage = () => {
         setImage(null);
         setPreview(null);
         setResult(null);
+        setRawResponse('');
     };
 
     const handleDelete = async (id) => {
@@ -133,11 +171,24 @@ const InventoryScanPage = () => {
         inventoryScanService.exportCSV();
     };
 
+    const openCorrectionModal = () => {
+        const detectedCodes = result?.codes?.map(c => c.code).join('\n') || '';
+        setCorrectedCodes(detectedCodes);
+        setShowCorrectionModal(true);
+    };
+
     return (
         <div className="inventory-scan-page">
             <div className="scan-header">
                 <h1>Inventaire - Scan Image</h1>
                 <div className="header-actions">
+                    {learningStatus.learning && (
+                        <div className="learning-indicator">
+                            <span className="learning-dot"></span>
+                            AI Apprendra: {learningStatus.learnedCodes.length} code(s)
+                            <button onClick={handleClearLearning}>✕</button>
+                        </div>
+                    )}
                     <div className={`ollama-status ${ollamaStatus?.connected ? 'connected' : 'disconnected'}`}>
                         <span className="status-dot"></span>
                         {ollamaStatus?.connected ? 'IA Connectée' : 'IA Non Connectée'}
@@ -171,6 +222,7 @@ const InventoryScanPage = () => {
                             onDragEnter={handleDrag}
                             onDragLeave={handleDrag}
                             onDragOver={handleDrag}
+                            onDrop={handleDrop}
                             onClick={() => fileInputRef.current?.click()}
                         >
                             <input 
@@ -236,19 +288,30 @@ const InventoryScanPage = () => {
                             <div className="result-section">
                                 <div className="result-header">
                                     <h3>Codes détectés ({result.totalCodes})</h3>
-                                    {result.totalCodes > 0 && (
-                                        <button className="btn-copy-all" onClick={copyAllCodes}>
-                                            Copier tous les codes
+                                    <div className="result-actions">
+                                        {result.totalCodes > 0 && (
+                                            <button className="btn-copy-all" onClick={copyAllCodes}>
+                                                Copier tous
+                                            </button>
+                                        )}
+                                        <button className="btn-correct" onClick={openCorrectionModal}>
+                                            Corriger si incomplet
                                         </button>
-                                    )}
+                                    </div>
                                 </div>
                                 
                                 {result.totalCodes === 0 ? (
                                     <div className="no-codes">
-                                        <p>Aucun code détecté. Vérifiez la configuration des patterns.</p>
-                                        <button onClick={() => setActiveTab('config')}>
-                                            Voir la configuration
+                                        <p>Aucun code détecté automatiquement.</p>
+                                        <button onClick={openCorrectionModal}>
+                                            Saisir les codes manuellement
                                         </button>
+                                        {rawResponse && (
+                                            <details className="raw-response">
+                                                <summary>Voir la réponse brute de l'IA</summary>
+                                                <pre>{rawResponse}</pre>
+                                            </details>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="codes-list">
@@ -277,6 +340,9 @@ const InventoryScanPage = () => {
                                 <div className="result-meta">
                                     <span>Temps: {result.processingTime}ms</span>
                                     <span>Méthode: {result.method || 'regex'}</span>
+                                    {learningStatus.learning && (
+                                        <span className="meta-learning">Mode apprentissage actif</span>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -371,6 +437,35 @@ const InventoryScanPage = () => {
                                 </div>
                             </div>
                         ))}
+                    </div>
+                </div>
+            )}
+
+            {showCorrectionModal && (
+                <div className="modal-overlay" onClick={() => setShowCorrectionModal(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2>Corrections des Codes</h2>
+                            <button className="modal-close" onClick={() => setShowCorrectionModal(false)}>✕</button>
+                        </div>
+                        <div className="modal-body">
+                            <p>Saisissez les codes corrects (un par ligne). Ces codes seront utilisés pour améliorer la détection des prochaines images.</p>
+                            <textarea
+                                value={correctedCodes}
+                                onChange={e => setCorrectedCodes(e.target.value)}
+                                placeholder="426856004&#10;GA25-1462&#10;911152050267411096"
+                                rows={10}
+                            />
+                            <p className="modal-hint">L'IA utilisera ces codes comme référence pour les prochaines analyses.</p>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn-cancel" onClick={() => setShowCorrectionModal(false)}>
+                                Annuler
+                            </button>
+                            <button className="btn-save" onClick={handleSaveCorrection}>
+                                Enregistrer et Apprendre
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
