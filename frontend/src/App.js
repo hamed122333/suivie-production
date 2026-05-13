@@ -8,6 +8,7 @@ import DashboardPage from "./pages/DashboardPage";
 import KanbanPage from "./pages/KanbanPage";
 import UsersPage from "./pages/UsersPage";
 import StockPage from "./pages/StockPage";
+import StockScanPage from "./pages/StockScanPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -136,6 +137,16 @@ const AppRoutes = () => {
           <ProtectedRoute>
             <Layout>
               <StockPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/stock-scan"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <StockScanPage />
             </Layout>
           </ProtectedRoute>
         }
