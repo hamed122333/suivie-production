@@ -97,7 +97,7 @@ const InventoryScanPage = () => {
     };
 
     const handleDelete = async (id) => {
-        if (!confirm('Supprimer ce scan ?')) return;
+        if (!window.confirm('Supprimer ce scan ?')) return;
         
         try {
             await inventoryScanService.deleteScan(id);

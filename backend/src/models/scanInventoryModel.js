@@ -1,4 +1,4 @@
-const db = require('../config/database');
+const pool = require('../config/db');
 
 const scanInventoryModel = {
     async create({ imageUrl, codes, createdBy }) {
@@ -7,7 +7,7 @@ const scanInventoryModel = {
             VALUES ($1, $2, $3, $4)
             RETURNING *
         `;
-        const result = await db.query(query, [
+        const result = await pool.query(query, [
             imageUrl,
             JSON.stringify(codes),
             codes.length,
@@ -24,7 +24,7 @@ const scanInventoryModel = {
             ORDER BY si.scanned_at DESC
             LIMIT $1 OFFSET $2
         `;
-        const result = await db.query(query, [limit, offset]);
+        const result = await pool.query(query, [limit, offset]);
         return result.rows;
     },
 
@@ -35,13 +35,13 @@ const scanInventoryModel = {
             LEFT JOIN users u ON si.created_by = u.id
             WHERE si.id = $1
         `;
-        const result = await db.query(query, [id]);
+        const result = await pool.query(query, [id]);
         return result.rows[0];
     },
 
     async delete(id) {
         const query = 'DELETE FROM scan_inventory WHERE id = $1 RETURNING *';
-        const result = await db.query(query, [id]);
+        const result = await pool.query(query, [id]);
         return result.rows[0];
     },
 
@@ -53,7 +53,7 @@ const scanInventoryModel = {
                 COUNT(DISTINCT scanned_at::date) as scan_days
             FROM scan_inventory
         `;
-        const result = await db.query(query);
+        const result = await pool.query(query);
         return result.rows[0];
     },
 
@@ -63,7 +63,7 @@ const scanInventoryModel = {
             FROM scan_inventory
             ORDER BY scanned_at DESC
         `;
-        const result = await db.query(query);
+        const result = await pool.query(query);
         return result.rows;
     }
 };
