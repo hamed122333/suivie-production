@@ -1,0 +1,88 @@
+.bbox-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  height: 100%;
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.canvas-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #ecf0f1;
+  overflow: auto;
+  min-height: 350px;
+}
+
+.konva-stage {
+  border-radius: 4px;
+}
+
+.bbox-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  padding: 1rem;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #ecf0f1;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: #2c3e50;
+}
+
+.legend-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.bbox-info {
+  padding: 0.75rem 1rem;
+  background: #e8f4f8;
+  border-left: 3px solid #3498db;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.bbox-info p {
+  margin: 0.25rem 0;
+  color: #2c3e50;
+}
+
+.bbox-info strong {
+  color: #3498db;
+  font-weight: 600;
+}
+
+.info-hint {
+  color: #7f8c8d;
+  font-size: 0.85rem;
+  margin-top: 0.5rem !important;
+}
+
+@media (max-width: 768px) {
+  .bbox-viewer {
+    padding: 0.75rem;
+  }
+
+  .bbox-legend {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .canvas-container {
+    min-height: 300px;
+  }
+}
