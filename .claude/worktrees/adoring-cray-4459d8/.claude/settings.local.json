@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /c/Users/hamed/.codex/worktrees/68a3/Suivi-Production && pwd && ls -la)"
+    ]
+  }
+}
