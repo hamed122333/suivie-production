@@ -77,6 +77,9 @@ const Sidebar = ({ closeSidebar }) => {
         <NavLink to="/stock" onClick={closeSidebar} className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
           <span>▦</span> Stock
         </NavLink>
+        <NavLink to="/scan" onClick={closeSidebar} className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
+          <span>◎</span> Scan Inventaire
+        </NavLink>
         {isSuperAdmin && (
           <NavLink to="/users" onClick={closeSidebar} className={({ isActive }) => `sidebar__nav-link ${isActive ? 'sidebar__nav-link--active' : ''}`}>
             <span>👥</span> Utilisateurs

@@ -10,6 +10,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const workspaceRoutes = require('./routes/workspaceRoutes');
 const stockImportRoutes = require('./routes/stockImportRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const scanInventoryRoutes = require('./routes/scanInventoryRoutes');
 const { addClient } = require('./services/sseService');
 
 const app = express();
@@ -48,6 +49,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/stock-import', stockImportRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/scan/inventory', scanInventoryRoutes);
 
 // SSE endpoint — real-time push to frontend
 app.get('/api/events', (req, res) => {
