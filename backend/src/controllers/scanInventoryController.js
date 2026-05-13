@@ -10,54 +10,6 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 }
 
 const scanInventoryController = {
-    async uploadAndScan(req, res) {
-        try {
-            if (!req.file) {
-                return res.status(400).json({ error: 'No image file provided' });
-            }
-
-            const imagePath = req.file.path;
-            
-            const aiResult = await aiService.analyzeImage(imagePath);
-
-            let codes = aiResult.codes;
-            
-            if (!aiResult.success || codes.length === 0) {
-                console.log('Ollama failed, falling back to regex patterns...');
-                const config = await articleCodeConfigModel.getActive();
-                codes = this.extractCodesWithConfig(aiResult.rawResponse || '', config);
-            }
-
-            const imageUrl = `/uploads/scan-inventory/${req.file.filename}`;
-            
-            const savedScan = await scanInventoryModel.create({
-                imageUrl,
-                codes,
-                createdBy: req.user?.id
-            });
-
-            fs.unlink(imagePath, (err) => {
-                if (err) console.error('Failed to delete temp file:', err);
-            });
-
-            res.json({
-                success: true,
-                scan: {
-                    id: savedScan.id,
-                    imageUrl,
-                    codes,
-                    totalCodes: codes.length,
-                    processingTime: aiResult.processingTime,
-                    method: aiResult.method
-                },
-                rawResponse: aiResult.rawResponse
-            });
-        } catch (error) {
-            console.error('Scan upload error:', error);
-            res.status(500).json({ error: 'Internal server error', details: error.message });
-        }
-    },
-
     extractCodesWithConfig(text, configPatterns) {
         const codes = [];
         
@@ -92,6 +44,58 @@ const scanInventoryController = {
         }
         
         return uniqueCodes;
+    },
+
+    async uploadAndScan(req, res) {
+        try {
+            if (!req.file) {
+                return res.status(400).json({ error: 'No image file provided' });
+            }
+
+            const imagePath = req.file.path;
+            
+            const aiResult = await aiService.analyzeImage(imagePath);
+
+            let codes = aiResult.codes || [];
+            
+            if (!aiResult.success || codes.length === 0) {
+                console.log('Ollama failed, falling back to regex patterns...');
+                try {
+                    const config = await articleCodeConfigModel.getActive();
+                    codes = scanInventoryController.extractCodesWithConfig(aiResult.rawResponse || '', config);
+                } catch (e) {
+                    console.error('Fallback error:', e.message);
+                }
+            }
+
+            const imageUrl = `/uploads/scan-inventory/${req.file.filename}`;
+            
+            const savedScan = await scanInventoryModel.create({
+                imageUrl,
+                codes,
+                createdBy: req.user?.id
+            });
+
+            fs.unlink(imagePath, (err) => {
+                if (err) console.error('Failed to delete temp file:', err);
+            });
+
+            res.json({
+                success: true,
+                scan: {
+                    id: savedScan.id,
+                    imageUrl,
+                    codes,
+                    totalCodes: codes.length,
+                    processingTime: aiResult.processingTime || 0,
+                    method: aiResult.method || 'fallback'
+                },
+                rawResponse: aiResult.rawResponse || ''
+            });
+        } catch (error) {
+            console.error('Scan upload error:', error);
+            res.status(500).json({ error: 'Internal server error', details: error.message });
+        }
     },
 
     async getCodeConfigs(req, res) {

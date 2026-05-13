@@ -47,6 +47,7 @@ const InventoryScanPage = () => {
         }
     };
 
+    // eslint-disable-next-line no-unused-vars
     const handleDrop = (e) => {
         e.preventDefault();
         e.stopPropagation();
