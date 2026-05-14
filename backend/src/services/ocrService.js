@@ -47,7 +47,10 @@ class OCRService {
       //    de positionnement puissent être appliquées correctement.
       const words = (data.words || []).map(w => ({
         text: w.text,
-        confidence: (w.confidence || 0) / 100, // Tesseract: 0-100 → normaliser 0-1
+        // Tesseract retourne confidence entre 0-100 ; normaliser en 0-1.
+        // Les mots non reconnus peuvent avoir confidence=undefined → défaut 0
+        // (signifie que la confiance est inconnue, non que la valeur est fausse).
+        confidence: typeof w.confidence === 'number' ? w.confidence / 100 : 0,
         bbox: w.bbox ? {
           left: w.bbox.x0,
           top: w.bbox.y0,

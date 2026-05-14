@@ -39,6 +39,9 @@ class NormalizationService {
     //    littéralement à 'O', '|', ou 'o'. La forme correcte est [Oo].
     //    Boucle jusqu'à stabilisation pour gérer les runs consécutifs
     //    (ex : "1OO" → "10O" → "100").
+    //    La condition while garantit la sortie dès qu'une itération n'apporte
+    //    aucun changement (pas de boucle infinie, convergence assurée en ≤ N passes
+    //    où N est le nombre de O/o consécutifs max dans le texte).
     let prevNorm;
     do {
       prevNorm = normalized;

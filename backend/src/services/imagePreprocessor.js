@@ -35,6 +35,9 @@ class ImagePreprocessor {
         // Égalisation adaptative du contraste (CLAHE) :
         // améliore le contraste localement pour gérer les ombres et
         // l'éclairage non uniforme des photos prises en conditions réelles.
+        // Paramètres : grille 4×4 tuiles (compromise entre précision locale et
+        // stabilité globale pour une étiquette industrielle standard 10-30 cm),
+        // maxSlope:3 limite l'amplification du bruit de fond.
         .clahe({ width: 4, height: 4, maxSlope: 3 })
         // Accentuation légère pour renforcer les bords du texte.
         .sharpen({ sigma: 1.0 })
