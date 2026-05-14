@@ -7,10 +7,11 @@ class ImagePreprocessor {
   async preprocess(imageBuffer) {
     try {
       return await sharp(imageBuffer)
-        .grayscale() // Convertir en noir et blanc
-        .normalize() // Améliorer le contraste
-        .sharpen()   // Accentuer les contours
-        .threshold(150) // Binarisation (optionnel, dépend de la qualité de l'image)
+        .resize(1600, null, { withoutEnlargement: true }) // Redimensionner pour une meilleure détection OCR
+        .grayscale()
+        .normalize()
+        .sharpen({ sigma: 1.5 }) // Accentuation plus forte
+        .threshold(160) // Seuil de binarisation ajusté
         .toBuffer();
     } catch (error) {
       console.error('Image Preprocessing Error:', error);
@@ -20,4 +21,3 @@ class ImagePreprocessor {
 }
 
 module.exports = new ImagePreprocessor();
-

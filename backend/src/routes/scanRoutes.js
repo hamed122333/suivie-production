@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const scanController = require('../controllers/scanController');
-const { requireAuth } = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
 
 // Configuration de multer pour stocker l'image temporairement en mémoire
 const upload = multer({
@@ -22,7 +22,6 @@ const upload = multer({
  * @desc Analyser une image d'étiquette de bobine
  * @access Private
  */
-router.post('/label', requireAuth, upload.single('image'), scanController.scanLabel);
+router.post('/label', authenticate, upload.single('image'), scanController.scanLabel);
 
 module.exports = router;
-

@@ -16,7 +16,7 @@ cd frontend && npm run build  # verify no warnings
 
 ## Key Constraints
 
-- **Branch**: Currently on `add-logique-for-tow-commands-with-same-ref` — most work happens here
+- **Branch**: Currently on `dev-with-copilot` — most work happens here
 - **Date format**: Always use `DD/MM/YYYY` via `formatters.js`, never `toLocaleDateString()`
 - **CSS**: BEM naming only (`.task-card__title`, `.task-card__priority--high`)
 - **Article codes**: Only `CI`, `CV`, `DI`, `DV`, `FC`, `FD`, `PL` prefixes valid (regex in `articleCode.js`)
@@ -30,6 +30,7 @@ cd frontend && npm run build  # verify no warnings
 | Role-based access | `backend/src/utils/taskScope.js` |
 | JWT auth (hardened) | `backend/src/middleware/auth.js` |
 | Real-time updates | SSE at `/api/events`, consumed in `useServerEvents` hook |
+| Article validation | `backend/src/utils/articleCode.js` |
 
 ## Fixes Already Applied
 
@@ -38,6 +39,8 @@ These are already committed — don't revert:
 - File upload validation added (`taskRoutes.js`)
 - Database indexes added (`migrations/013_add_performance_indexes.sql`)
 - React error boundary added (`frontend/src/components/ErrorBoundary.js`)
+- Stock history tracking implemented (`migrations/014_create_stock_history.sql`)
+- Kanban category filtering added for article types (`KanbanBoard.js`)
 
 ## Quirks
 
@@ -45,6 +48,8 @@ These are already committed — don't revert:
 - **Workspaces auto-create**: Named `CMD DD-MM-YYYY` from order date
 - **Notifications poll**: 30s interval in `Header.js` (SSE exists but not used for notifications)
 - **Task history**: All changes logged via `TaskHistoryModel.log()`
+- **Stock Deduplication**: Two-phase (exact row → aggregated by article)
+- **Responsive Layouts**: Dashboard and Stock pages use flexible 2-column grids
 
 ## Required Order
 
