@@ -3,7 +3,7 @@ const ConfidenceScorer = require('./confidenceScorer');
 
 class SmartParser {
   constructor() {
-    this.threshold = 0.55;
+    this.threshold = 0.5;
     this.fieldConfig = {
       supplier: { keywords: ['SCA', 'SAICA', 'DS SMITH', 'SOTIPAPIER', 'MODERN KARTON', 'HAMBURGER', 'ARLANDUO', 'PRINZHORN', 'EUROKRAFT', 'LINERPAC'] },
       reel_serial_number: { keywords: ['REEL', 'BOBINA', 'BOBINE', 'ROLL', 'SERIAL', 'N°', 'NO', 'CODE', 'PRODUCT'] },
@@ -29,11 +29,20 @@ class SmartParser {
 
     const debug = { normalizationApplied: true, linesCount: lines.length, fieldDebug: {} };
 
-    const supplier = this._parseSupplier(normalizedText, lines, debug);
-    const reel = this._parseSerial(normalizedText, lines, debug);
-    const weight = this._parseNumericContext(normalizedText, lines, 'weight_kg', debug);
-    const width = this._parseNumericContext(normalizedText, lines, 'width_mm', debug);
-    const grammage = this._parseNumericContext(normalizedText, lines, 'grammage', debug);
+    let supplier = this._parseSupplier(normalizedText, lines, debug);
+    let reel = this._parseSerial(normalizedText, lines, debug);
+    let weight = this._parseNumericContext(normalizedText, lines, 'weight_kg', debug);
+    let width = this._parseNumericContext(normalizedText, lines, 'width_mm', debug);
+    let grammage = this._parseNumericContext(normalizedText, lines, 'grammage', debug);
+
+    // Fallback label-centric parsing for real photos where OCR misses unit tokens
+    // on first pass (e.g. "g/m²", "mm", "kg" partially fragmented).
+    const fallback = this._parseLabelStyleFallback(normalizedText);
+    if (!supplier.value && fallback.supplier) supplier = fallback.supplier;
+    if (!reel.value && fallback.reel_serial_number) reel = fallback.reel_serial_number;
+    if (!weight.value && fallback.weight_kg) weight = fallback.weight_kg;
+    if (!width.value && fallback.width_mm) width = fallback.width_mm;
+    if (!grammage.value && fallback.grammage) grammage = fallback.grammage;
 
     return {
       supplier,
@@ -67,6 +76,11 @@ class SmartParser {
       }
     }
 
+    // Fuzzy supplier normalization (SAICA often OCR'd with 5/1/l confusion).
+    if (!candidates.length && /\b(?:HIDROSAICA|S[5S][A4][I1L]CA|SA[1IL]CA)\b/i.test(U)) {
+      candidates.push({ value: 'SAICA', confidence: 0.9, source: 'fuzzy', reason: 'fuzzy supplier match' });
+    }
+
     return this._selectBest('supplier', candidates, debug);
   }
 
@@ -90,6 +104,19 @@ class SmartParser {
     for (const m of matches) {
       const s = this._score({ value: m, type: 'reel_serial_number', text: normalizedText, line: null });
       candidates.push({ value: m, confidence: s, source: 'fullText', reason: 'numeric match full text', bbox: null });
+    }
+
+    // Handle split serials like "25 16091328" -> "2516091328".
+    const grouped = [
+      ...((normalizedText || '').match(/\b(?:\d{1,4}[\s-]){1,4}\d{4,10}\b/g) || []),
+      ...((normalizedText || '').match(/(?:\d[\s-]?){8,14}/g) || []),
+    ];
+    for (const g of grouped) {
+      const digits = String(g).replace(/\D/g, '');
+      if (digits.length < 8 || digits.length > 14) continue;
+      const s = this._score({ value: digits, type: 'reel_serial_number', text: normalizedText, line: null });
+      const lenBoost = (digits.length >= 9 && digits.length <= 12) ? 0.16 : 0.08;
+      candidates.push({ value: digits, confidence: Math.min(1, s + lenBoost), source: 'groupedDigits', reason: 'grouped digits normalized', bbox: null });
     }
 
     return this._selectBest('reel_serial_number', candidates, debug);
@@ -148,18 +175,18 @@ class SmartParser {
     switch (field) {
       case 'weight_kg':
         return [
-          /(\d{3,5})\s*(?:kg|kgs|peso|weight|poids|\[kg\])/i,
-          /(?:kg|kgs|peso|weight|poids|\[kg\])\s*[:\s]*([0-9][0-9.,]{2,6})/i,
+          /(\d{3,5})\s*(?:k\s*g|kg|kgs|ko|peso|weight|poids|\[kg\])/i,
+          /(?:k\s*g|kg|kgs|ko|peso|weight|poids|\[kg\])\s*[:\s]*([0-9][0-9.,]{2,6})/i,
         ];
       case 'width_mm':
         return [
-          /(\d{3,5}(?:[.,]\d+)?)\s*(?:mm|cm|width|ancho|laize|largeur|eni|\[mm\]|\[cm\])/i,
-          /(?:mm|cm|width|ancho|laize|largeur|eni|\[mm\]|\[cm\])\s*[:\s]*([0-9][0-9.,]{2,6})/i,
+          /(\d{3,5}(?:[.,]\d+)?)\s*(?:m\s*m|mm|cm|width|ancho|laize|largeur|eni|\[mm\]|\[cm\])/i,
+          /(?:m\s*m|mm|cm|width|ancho|laize|largeur|eni|\[mm\]|\[cm\])\s*[:\s]*([0-9][0-9.,]{2,6})/i,
         ];
       case 'grammage':
         return [
-          /(\d{2,4})\s*(?:g\/m²|g\/m2|grammage|substance|basis weight|gr)\b/i,
-          /(?:g\/m²|g\/m2|grammage|substance|basis weight|gr)\s*[:\s]*([0-9]{2,4})/i,
+          /(\d{2,4})\s*(?:g\s*\/\s*m[²2]?|g\s*\/\s*rn2|gsm|grammage|substance|basis weight|gr)\b/i,
+          /(?:g\s*\/\s*m[²2]?|g\s*\/\s*rn2|gsm|grammage|substance|basis weight|gr)\s*[:\s]*([0-9]{2,4})/i,
         ];
       default:
         return [];
@@ -225,19 +252,20 @@ class SmartParser {
     const digits = String(value).replace(/\D/g, '').length;
     let b = 0;
     if (type === 'reel_serial_number' && digits >= 6) b += 0.12;
+    if (type === 'reel_serial_number' && digits >= 9 && digits <= 12) b += 0.22;
     if (type === 'weight_kg' && digits >= 3) b += 0.08;
     if (type === 'width_mm' && digits >= 3) b += 0.08;
     if (type === 'grammage' && digits <= 4) b += 0.06;
-    return Math.min(b, 0.2);
+    return type === 'reel_serial_number' ? Math.min(b, 0.34) : Math.min(b, 0.2);
   }
 
   _contextBoost(text, type) {
     let b = 0;
     const t = (text || '').toLowerCase();
     if (type === 'reel_serial_number' && t.match(/reel|bobin|bobine|roll|serial|n°|no|code|product/)) b += 0.16;
-    if (type === 'weight_kg' && t.match(/kg|peso|weight|poids/)) b += 0.16;
-    if (type === 'width_mm' && t.match(/mm|cm|width|ancho|laize|largeur|eni/)) b += 0.16;
-    if (type === 'grammage' && t.match(/g\/m|grammage|substance|basis weight|gr/)) b += 0.16;
+    if (type === 'weight_kg' && t.match(/kg|k g|peso|weight|poids|ko/)) b += 0.16;
+    if (type === 'width_mm' && t.match(/mm|m m|cm|width|ancho|laize|largeur|eni/)) b += 0.16;
+    if (type === 'grammage' && t.match(/g\/m|g\s*\/\s*m|gsm|grammage|substance|basis weight|gr/)) b += 0.16;
     return Math.min(b, 0.18);
   }
 
@@ -349,10 +377,59 @@ class SmartParser {
     const n = Number(s);
     return Number.isFinite(n) ? n : null;
   }
+
+  _candidate(value, confidence, source, reason) {
+    return {
+      value: String(value || '').trim(),
+      confidence: Number(confidence || 0),
+      source,
+      reason,
+      candidates: [],
+    };
+  }
+
+  _parseLabelStyleFallback(normalizedText = '') {
+    const text = String(normalizedText || '');
+    const upper = text.toUpperCase();
+    const out = {};
+
+    if (/\b(?:SAICA|HIDROSAICA|S[5S][A4][I1L]CA)\b/i.test(upper)) {
+      out.supplier = this._candidate('SAICA', 0.9, 'fallback', 'supplier fallback pattern');
+    }
+
+    // Grammage: e.g. "105 g/m²"
+    const grammageMatch = upper.match(/\b([7-9]\d|[1-3]\d{2})\s*(?:G\s*\/\s*(?:M[²2]|RN2)|GSM)\b/i);
+    if (grammageMatch) {
+      out.grammage = this._candidate(grammageMatch[1], 0.86, 'fallback', 'grammage fallback pattern');
+    }
+
+    // Width in mm: e.g. "1920 mm"
+    const widthMatch = upper.match(/\b([5-9]\d{2}|[1-2]\d{3})\s*(?:M\s*M|MM)\b/i);
+    if (widthMatch) {
+      out.width_mm = this._candidate(widthMatch[1], 0.86, 'fallback', 'width fallback pattern');
+    }
+
+    // Weight in kg: e.g. "2200 kg"
+    const weightMatch = upper.match(/\b([5-9]\d{2}|[1-4]\d{3}|5000)\s*(?:K\s*G|KG|KGS)\b/i);
+    if (weightMatch) {
+      out.weight_kg = this._candidate(weightMatch[1], 0.86, 'fallback', 'weight fallback pattern');
+    }
+
+    // Serial: choose longest plausible id (9-12 digits) not equal to known dimensions.
+    const serialCands = [
+      ...(upper.match(/\b\d{8,14}\b/g) || []),
+      ...(upper.match(/\b(?:\d{1,4}[\s-]){1,4}\d{4,10}\b/g) || []),
+    ]
+      .map((v) => String(v).replace(/\D/g, ''))
+      .filter((v) => v.length >= 9 && v.length <= 12);
+    if (serialCands.length) {
+      serialCands.sort((a, b) => b.length - a.length);
+      out.reel_serial_number = this._candidate(serialCands[0], 0.85, 'fallback', 'serial fallback longest plausible id');
+    }
+
+    return out;
+  }
 }
 
 module.exports = new SmartParser();
-
-
-
 

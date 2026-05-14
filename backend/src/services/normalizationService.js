@@ -16,12 +16,17 @@ class NormalizationService {
       '2OOO': '2000',
       'I9': '19',
       'SAlCA': 'SAICA',
+      '5AICA': 'SAICA',
+      'SA1CA': 'SAICA',
       'l950': '1950',
       'O64': '064',
       'l0': '10',
       'O1': '01',
       'g/m2': 'g/m²',
       'g/mz': 'g/m²',
+      'g / m2': 'g/m²',
+      'g /m2': 'g/m²',
+      'g/m 2': 'g/m²',
       'g/rn2': 'g/m²',   // 'm' confondu avec 'rn'
       'g/rn²': 'g/m²',
       'KGS': 'KG',        // uniformiser l'unité
@@ -70,4 +75,3 @@ class NormalizationService {
 }
 
 module.exports = new NormalizationService();
-
