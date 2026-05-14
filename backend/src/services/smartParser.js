@@ -14,6 +14,14 @@ class SmartParser {
   }
 
   parse(payload = {}) {
+    // Compatibilité ascendante : accepter un appel avec une chaîne brute.
+    // Normalement, un objet {rawText, normalizedText, words} doit être fourni
+    // (voir ocrService.js) — une chaîne donnera des résultats vides car les
+    // propriétés .rawText/.normalizedText/.words seraient indéfinies.
+    if (typeof payload === 'string') {
+      payload = { rawText: payload };
+    }
+
     const rawText = payload.rawText || '';
     const normalizedText = payload.normalizedText || NormalizationService.normalizeText(rawText);
     const words = Array.isArray(payload.words) ? payload.words : [];
