@@ -1,0 +1,149 @@
+.scan-page {
+  padding: 2rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.scan-page__header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.scan-page__content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.scan-section {
+  background: white;
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+
+/* Capture Section */
+.capture-box {
+  border: 3px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.capture-box:hover {
+  border-color: var(--color-primary);
+}
+
+.capture-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--color-text-light);
+}
+
+.upload-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.capture-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.scan-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: var(--radius-lg);
+}
+
+/* Form Section */
+.scan-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.scan-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.scan-field label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-text-dark);
+}
+
+.scan-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.scan-field input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+}
+
+.scan-field--low-confidence input {
+  border-color: #f59e0b; /* Orange */
+  background-color: #fffbeb;
+}
+
+.confidence-badge {
+  position: absolute;
+  right: 0.75rem;
+  font-size: 0.75rem;
+  background: var(--color-bg-light);
+  padding: 0.2rem 0.5rem;
+  border-radius: 10px;
+  color: var(--color-text-light);
+}
+
+.scan-error {
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  padding: 0.5rem;
+  background: #fef2f2;
+  border-radius: var(--radius-sm);
+}
+
+.scan-actions {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .scan-page__content {
+    grid-template-columns: 1fr;
+  }
+
+  .capture-box {
+    height: 300px;
+  }
+}
+

@@ -83,14 +83,27 @@ export const workspaceAPI = {
 };
 
 export const stockImportAPI = {
+  import: (formData) => api.post('/stock-import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
   getAll: () => api.get('/stock-import'),
-  getByArticle: (article) => api.get(`/stock-import/article/${encodeURIComponent(article)}`),
-  upload: (formData) =>
-    api.post('/stock-import/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
-  createManual: (data) => api.post('/stock-import/manual', data),
-  getActiveTasks: (id) => api.get(`/stock-import/${id}/active-tasks`),
+  getSummary: () => api.get('/stock-import/summary'),
+  delete: (id) => api.delete(`/stock-import/${id}`),
+};
+
+/**
+ * Scan Label API
+ */
+export const scanService = {
+  scanLabel: (imageFile) => {
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    return api.post('/scans/label', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
 };
 
 export default api;

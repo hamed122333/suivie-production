@@ -10,6 +10,7 @@ import UsersPage from "./pages/UsersPage";
 import StockPage from "./pages/StockPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import ScanPage from "./pages/ScanPage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./App.css";
 import { WorkspaceProvider } from "./context/WorkspaceContext";
@@ -140,7 +141,15 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/kanban" replace />} />
+      <Route
+        path="/scan-inventaire"
+        element={
+          <ProtectedRoute>
+            <ScanPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 };
