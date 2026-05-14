@@ -3,7 +3,8 @@ const ConfidenceScorer = require('./confidenceScorer');
 
 class SmartParser {
   constructor() {
-    this.threshold = 0.55;
+    this.threshold = 0.5;
+    this.saicaFuzzyPattern = /\b(?:SAICA|HIDROSAICA|H[1IL]DROS[5S][A4][I1L]CA|S[5S][A4][I1L]CA|SA[1IL]CA)\b/i;
     this.fieldConfig = {
       supplier: { keywords: ['SCA', 'SAICA', 'DS SMITH', 'SOTIPAPIER', 'MODERN KARTON', 'HAMBURGER', 'ARLANDUO', 'PRINZHORN', 'EUROKRAFT', 'LINERPAC'] },
       reel_serial_number: { keywords: ['REEL', 'BOBINA', 'BOBINE', 'ROLL', 'SERIAL', 'N°', 'NO', 'CODE', 'PRODUCT'] },
@@ -14,6 +15,13 @@ class SmartParser {
   }
 
   parse(payload = {}) {
+    // Compatibilité ascendante : accepter un appel avec une chaîne brute.
+    // Le parseur convertit alors vers { rawText } ; la précision reste meilleure
+    // quand { rawText, normalizedText, words } complet est fourni (ocrService.js).
+    if (typeof payload === 'string') {
+      payload = { rawText: payload };
+    }
+
     const rawText = payload.rawText || '';
     const normalizedText = payload.normalizedText || NormalizationService.normalizeText(rawText);
     const words = Array.isArray(payload.words) ? payload.words : [];
@@ -21,11 +29,32 @@ class SmartParser {
 
     const debug = { normalizationApplied: true, linesCount: lines.length, fieldDebug: {} };
 
-    const supplier = this._parseSupplier(normalizedText, lines, debug);
-    const reel = this._parseSerial(normalizedText, lines, debug);
-    const weight = this._parseNumericContext(normalizedText, lines, 'weight_kg', debug);
-    const width = this._parseNumericContext(normalizedText, lines, 'width_mm', debug);
-    const grammage = this._parseNumericContext(normalizedText, lines, 'grammage', debug);
+    let supplier = this._parseSupplier(normalizedText, lines, debug);
+    let reel = this._parseSerial(normalizedText, lines, debug);
+    let weight = this._parseNumericContext(normalizedText, lines, 'weight_kg', debug);
+    let width = this._parseNumericContext(normalizedText, lines, 'width_mm', debug);
+    let grammage = this._parseNumericContext(normalizedText, lines, 'grammage', debug);
+
+    // Fallback label-centric parsing for real photos where OCR misses unit tokens
+    // on first pass (e.g. "g/m²", "mm", "kg" partially fragmented).
+    const fallback = this._parseLabelStyleFallback(normalizedText);
+    if (!supplier.value && fallback.supplier) supplier = fallback.supplier;
+    if (!reel.value && fallback.reel_serial_number) reel = fallback.reel_serial_number;
+    if (!weight.value && fallback.weight_kg) weight = fallback.weight_kg;
+    if (!width.value && fallback.width_mm) width = fallback.width_mm;
+    if (!grammage.value && fallback.grammage) grammage = fallback.grammage;
+
+    // Last fallback: numeric-only extraction when OCR drops units.
+    const numericFallback = this._parseNumericRangeFallback(normalizedText, {
+      reel_serial_number: reel,
+      weight_kg: weight,
+      width_mm: width,
+      grammage,
+    });
+    if (!reel.value && numericFallback.reel_serial_number) reel = numericFallback.reel_serial_number;
+    if (!weight.value && numericFallback.weight_kg) weight = numericFallback.weight_kg;
+    if (!width.value && numericFallback.width_mm) width = numericFallback.width_mm;
+    if (!grammage.value && numericFallback.grammage) grammage = numericFallback.grammage;
 
     return {
       supplier,
@@ -59,6 +88,11 @@ class SmartParser {
       }
     }
 
+    // Fuzzy supplier normalization (SAICA often OCR'd with 5/1/l confusion).
+    if (!candidates.length && this.saicaFuzzyPattern.test(U)) {
+      candidates.push({ value: 'SAICA', confidence: 0.9, source: 'fuzzy', reason: 'fuzzy supplier match' });
+    }
+
     return this._selectBest('supplier', candidates, debug);
   }
 
@@ -75,6 +109,29 @@ class SmartParser {
           const score = this._score({ value: m, type: 'reel_serial_number', text: txt, line: c });
           candidates.push({ value: m, confidence: score, source: `line:${c.index}`, reason: 'numeric match', bbox: c.bbox || null });
         }
+
+        // Rebuild split serials from OCR word tokens when line text keeps separators.
+        if (Array.isArray(c.words) && c.words.length > 1) {
+          const digitsWords = c.words
+            .map((w) => String(w.text || '').replace(/\D/g, ''))
+            .filter(Boolean);
+
+          const joinAll = digitsWords.join('');
+          if (joinAll.length >= 8 && joinAll.length <= 14) {
+            const s = this._score({ value: joinAll, type: 'reel_serial_number', text: txt, line: c });
+            candidates.push({ value: joinAll, confidence: Math.min(1, s + 0.16), source: `lineWords:${c.index}`, reason: 'joined digit words', bbox: c.bbox || null });
+          }
+
+          for (let start = 0; start < digitsWords.length; start++) {
+            let acc = '';
+            for (let end = start; end < Math.min(start + 4, digitsWords.length); end++) {
+              acc += digitsWords[end];
+              if (acc.length < 8 || acc.length > 14) continue;
+              const s = this._score({ value: acc, type: 'reel_serial_number', text: txt, line: c });
+              candidates.push({ value: acc, confidence: Math.min(1, s + 0.14), source: `lineWordsWindow:${c.index}`, reason: 'joined adjacent digit words', bbox: c.bbox || null });
+            }
+          }
+        }
       }
     }
 
@@ -82,6 +139,19 @@ class SmartParser {
     for (const m of matches) {
       const s = this._score({ value: m, type: 'reel_serial_number', text: normalizedText, line: null });
       candidates.push({ value: m, confidence: s, source: 'fullText', reason: 'numeric match full text', bbox: null });
+    }
+
+    // Handle split serials like "25 16091328" -> "2516091328".
+    const grouped = [
+      ...((normalizedText || '').match(/\b(?:\d{1,4}[ \t-]){1,4}\d{4,10}\b/g) || []),
+      ...((normalizedText || '').match(/\b(?:\d[ \t-]?){8,14}\b/g) || []),
+    ];
+    for (const g of grouped) {
+      const digits = String(g).replace(/\D/g, '');
+      if (digits.length < 8 || digits.length > 14) continue;
+      const s = this._score({ value: digits, type: 'reel_serial_number', text: normalizedText, line: null });
+      const lenBoost = (digits.length >= 9 && digits.length <= 12) ? 0.16 : 0.08;
+      candidates.push({ value: digits, confidence: Math.min(1, s + lenBoost), source: 'groupedDigits', reason: 'grouped digits normalized', bbox: null });
     }
 
     return this._selectBest('reel_serial_number', candidates, debug);
@@ -140,18 +210,18 @@ class SmartParser {
     switch (field) {
       case 'weight_kg':
         return [
-          /(\d{3,5})\s*(?:kg|kgs|peso|weight|poids|\[kg\])/i,
-          /(?:kg|kgs|peso|weight|poids|\[kg\])\s*[:\s]*([0-9][0-9.,]{2,6})/i,
+          /(\d{3,5})\s*(?:k\s*g|kg|kgs|ko|peso|weight|poids|\[kg\])/i,
+          /(?:k\s*g|kg|kgs|ko|peso|weight|poids|\[kg\])\s*[:\s]*([0-9][0-9.,]{2,6})/i,
         ];
       case 'width_mm':
         return [
-          /(\d{3,5}(?:[.,]\d+)?)\s*(?:mm|cm|width|ancho|laize|largeur|eni|\[mm\]|\[cm\])/i,
-          /(?:mm|cm|width|ancho|laize|largeur|eni|\[mm\]|\[cm\])\s*[:\s]*([0-9][0-9.,]{2,6})/i,
+          /(\d{3,5}(?:[.,]\d+)?)\s*(?:m\s*m|mm|cm|width|ancho|laize|largeur|eni|\[mm\]|\[cm\])/i,
+          /(?:m\s*m|mm|cm|width|ancho|laize|largeur|eni|\[mm\]|\[cm\])\s*[:\s]*([0-9][0-9.,]{2,6})/i,
         ];
       case 'grammage':
         return [
-          /(\d{2,4})\s*(?:g\/m²|g\/m2|grammage|substance|basis weight|gr)\b/i,
-          /(?:g\/m²|g\/m2|grammage|substance|basis weight|gr)\s*[:\s]*([0-9]{2,4})/i,
+          /(\d{2,4})\s*(?:g\s*\/\s*m[²2]?|g\s*\/\s*rn2|gsm|grammage|substance|basis weight|gr)\b/i,
+          /(?:g\s*\/\s*m[²2]?|g\s*\/\s*rn2|gsm|grammage|substance|basis weight|gr)\s*[:\s]*([0-9]{2,4})/i,
         ];
       default:
         return [];
@@ -217,26 +287,46 @@ class SmartParser {
     const digits = String(value).replace(/\D/g, '').length;
     let b = 0;
     if (type === 'reel_serial_number' && digits >= 6) b += 0.12;
+    if (type === 'reel_serial_number' && digits >= 9 && digits <= 12) b += 0.22;
     if (type === 'weight_kg' && digits >= 3) b += 0.08;
     if (type === 'width_mm' && digits >= 3) b += 0.08;
     if (type === 'grammage' && digits <= 4) b += 0.06;
-    return Math.min(b, 0.2);
+    return type === 'reel_serial_number' ? Math.min(b, 0.34) : Math.min(b, 0.2);
   }
 
   _contextBoost(text, type) {
     let b = 0;
     const t = (text || '').toLowerCase();
     if (type === 'reel_serial_number' && t.match(/reel|bobin|bobine|roll|serial|n°|no|code|product/)) b += 0.16;
-    if (type === 'weight_kg' && t.match(/kg|peso|weight|poids/)) b += 0.16;
-    if (type === 'width_mm' && t.match(/mm|cm|width|ancho|laize|largeur|eni/)) b += 0.16;
-    if (type === 'grammage' && t.match(/g\/m|grammage|substance|basis weight|gr/)) b += 0.16;
+    if (type === 'weight_kg' && t.match(/kg|k g|peso|weight|poids|ko/)) b += 0.16;
+    if (type === 'width_mm' && t.match(/mm|m m|cm|width|ancho|laize|largeur|eni/)) b += 0.16;
+    if (type === 'grammage' && t.match(/g\/m|g\s*\/\s*m|gsm|grammage|substance|basis weight|gr/)) b += 0.16;
     return Math.min(b, 0.18);
   }
 
   _selectBest(field, candidates, debug) {
     let sorted = (candidates || []).sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
 
-    // If reel serials, prefer plausible substrings (avoid accidental leading digits)
+    if (field === 'reel_serial_number') {
+      const reelRank = (c) => {
+        const conf = parseFloat(c?.confidence || 0);
+        const digits = String(c?.value || '').replace(/\D/g, '');
+        const len = digits.length;
+        let bonus = 0;
+        if (len >= 9 && len <= 12) bonus += 0.28;
+        else if (len === 8) bonus += 0.08;
+        else if (len <= 7) bonus -= 0.24;
+
+        const bw = c?.bbox?.width || 0;
+        if (bw >= 170) bonus += 0.12;
+        else if (bw >= 120) bonus += 0.06;
+
+        return conf + bonus;
+      };
+      sorted = sorted.sort((a, b) => reelRank(b) - reelRank(a));
+    }
+
+    // If reel serials, prefer plausible longer IDs over short substrings.
     if (field === 'reel_serial_number' && sorted.length > 1) {
       const normalizeDigits = (v) => (String(v || '').replace(/\D/g, ''));
       // build map of digits -> candidate
@@ -248,16 +338,16 @@ class SmartParser {
           if (!a.d || !b.d) continue;
           // if one is substring of the other
           if (a.d.includes(b.d) || b.d.includes(a.d)) {
-            // prefer shorter reasonable ID if confidences are close
             const aConf = parseFloat(a.c.confidence || 0);
             const bConf = parseFloat(b.c.confidence || 0);
-            if (a.d.length > b.d.length && (bConf + 0.12) >= aConf) {
-              // move b ahead of a
+            const aLongPlausible = a.d.length >= 9 && a.d.length <= 12;
+            const bLongPlausible = b.d.length >= 9 && b.d.length <= 12;
+            if (a.d.length > b.d.length && aLongPlausible && b.d.length < 9 && (aConf + 0.15) >= bConf) {
               sorted = sorted.filter(x => x !== a.c);
-              sorted.unshift(b.c);
-            } else if (b.d.length > a.d.length && (aConf + 0.12) >= bConf) {
-              sorted = sorted.filter(x => x !== b.c);
               sorted.unshift(a.c);
+            } else if (b.d.length > a.d.length && bLongPlausible && a.d.length < 9 && (bConf + 0.15) >= aConf) {
+              sorted = sorted.filter(x => x !== b.c);
+              sorted.unshift(b.c);
             }
           }
         }
@@ -341,10 +431,114 @@ class SmartParser {
     const n = Number(s);
     return Number.isFinite(n) ? n : null;
   }
+
+  _candidate(value, confidence, source, reason) {
+    return {
+      value: String(value || '').trim(),
+      confidence: Number(confidence || 0),
+      source,
+      reason,
+      candidates: [],
+    };
+  }
+
+  _parseLabelStyleFallback(normalizedText = '') {
+    const text = String(normalizedText || '');
+    const upper = text.toUpperCase();
+    const out = {};
+
+    if (this.saicaFuzzyPattern.test(upper)) {
+      out.supplier = this._candidate('SAICA', 0.9, 'fallback', 'supplier fallback pattern');
+    }
+
+    // Grammage: e.g. "105 g/m²"
+    const grammageMatch = upper.match(/\b([7-9]\d|[1-3]\d{2})\s*(?:G\s*\/\s*(?:M[²2]|RN2)|GSM)\b/i);
+    if (grammageMatch) {
+      out.grammage = this._candidate(grammageMatch[1], 0.86, 'fallback', 'grammage fallback pattern');
+    }
+
+    // Width in mm: e.g. "1920 mm"
+    const widthMatch = upper.match(/\b([5-9]\d{2}|[1-2]\d{3})\s*(?:M\s*M|MM)\b/i);
+    if (widthMatch) {
+      out.width_mm = this._candidate(widthMatch[1], 0.86, 'fallback', 'width fallback pattern');
+    }
+
+    // Weight in kg: e.g. "2200 kg"
+    const weightMatch = upper.match(/\b([5-9]\d{2}|[1-4]\d{3}|5000)\s*(?:K\s*G|KG|KGS)\b/i);
+    if (weightMatch) {
+      out.weight_kg = this._candidate(weightMatch[1], 0.86, 'fallback', 'weight fallback pattern');
+    }
+
+    // Serial: choose longest plausible id (9-12 digits) not equal to known dimensions.
+    const serialCands = [
+      ...(upper.match(/\b\d{8,14}\b/g) || []),
+      ...(upper.match(/\b(?:\d{1,4}[ \t-]){1,4}\d{4,10}\b/g) || []),
+    ]
+      .map((v) => String(v).replace(/\D/g, ''))
+      .filter((v) => v.length >= 9 && v.length <= 12);
+    if (serialCands.length) {
+      serialCands.sort((a, b) => b.length - a.length);
+      out.reel_serial_number = this._candidate(serialCands[0], 0.85, 'fallback', 'serial fallback longest plausible id');
+    }
+
+    return out;
+  }
+
+  _parseNumericRangeFallback(normalizedText = '', existing = {}) {
+    const out = {};
+    const upper = String(normalizedText || '').toUpperCase();
+
+    const serialExisting = String(existing?.reel_serial_number?.value || '').trim();
+    const widthExisting = String(existing?.width_mm?.value || '').trim();
+    const weightExisting = String(existing?.weight_kg?.value || '').trim();
+    const grammageExisting = String(existing?.grammage?.value || '').trim();
+
+    const rawGroups = [
+      ...(upper.match(/\b(?:\d{1,4}[ \t-]){1,4}\d{4,10}\b/g) || []),
+      ...(upper.match(/\b\d{2,14}\b/g) || []),
+    ];
+
+    const parsed = rawGroups
+      .map((v) => String(v).replace(/\D/g, ''))
+      .filter(Boolean)
+      .map((digits) => ({ digits, num: Number(digits), len: digits.length }));
+
+    if (!grammageExisting) {
+      const g = parsed
+        .filter((x) => x.len >= 2 && x.len <= 3 && x.num >= 70 && x.num <= 400)
+        .sort((a, b) => Math.abs(a.num - 120) - Math.abs(b.num - 120))[0];
+      if (g) out.grammage = this._candidate(String(g.num), 0.76, 'numeric-fallback', 'grammage numeric range fallback');
+    }
+
+    if (!widthExisting) {
+      const w = parsed
+        .filter((x) => x.len >= 3 && x.len <= 4 && x.num >= 500 && x.num <= 3000)
+        .sort((a, b) => Math.abs(a.num - 1900) - Math.abs(b.num - 1900))[0];
+      if (w) out.width_mm = this._candidate(String(w.num), 0.75, 'numeric-fallback', 'width numeric range fallback');
+    }
+
+    if (!weightExisting) {
+      const wt = parsed
+        .filter((x) => x.len >= 3 && x.len <= 4 && x.num >= 500 && x.num <= 5000)
+        .sort((a, b) => Math.abs(a.num - 2200) - Math.abs(b.num - 2200))[0];
+      if (wt) out.weight_kg = this._candidate(String(wt.num), 0.75, 'numeric-fallback', 'weight numeric range fallback');
+    }
+
+    if (!serialExisting) {
+      const excluded = new Set([
+        String(out.width_mm?.value || widthExisting || ''),
+        String(out.weight_kg?.value || weightExisting || ''),
+        String(out.grammage?.value || grammageExisting || ''),
+      ].filter(Boolean));
+
+      const serial = parsed
+        .filter((x) => x.len >= 9 && x.len <= 12 && !excluded.has(String(x.num)))
+        .sort((a, b) => b.len - a.len || Math.abs(a.num - 2500000000) - Math.abs(b.num - 2500000000))[0];
+      if (serial) out.reel_serial_number = this._candidate(serial.digits, 0.78, 'numeric-fallback', 'serial numeric range fallback');
+    }
+
+    return out;
+  }
 }
 
 module.exports = new SmartParser();
-
-
-
-
