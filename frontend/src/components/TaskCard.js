@@ -73,6 +73,7 @@ function getDateConfirmationBadge(task) {
     };
   }
 
+
   if (negotiationStatus === 'PENDING_COMMERCIAL_REVIEW' && proposedByRole === 'planner') {
     const dateLabel = proposedDate ? formatDate(proposedDate) : '—';
     return { className: 'task-card__date-check--info', icon: '●', text: `Planner → ${dateLabel}` };
