@@ -49,7 +49,21 @@ python run.py
 > La table `roll_scans` est créée/migrée automatiquement au démarrage.
 > Le déploiement « léger » (vision-only) ne nécessite pas `requirements-ocr.txt`.
 
-## 4. Endpoints
+## 4. Garder le service actif (keep-alive — offre gratuite)
+
+L'extraction est « pull » : elle se déclenche aux requêtes (`/health`,
+`GET /api/rolls`, capture). Un service Render gratuit s'endort après 15 min
+d'inactivité — pour que les bobines en attente s'extraient même app fermée :
+
+1. Créer un moniteur gratuit sur **https://uptimerobot.com** (ou cron-job.org)
+2. Type **HTTP(s)**, URL = `https://<ocr-service>.onrender.com/health`
+3. Intervalle = **10 minutes**
+
+Chaque ping réveille le service ET vide la file d'attente d'extraction.
+Si le service s'endort en pleine extraction, la bobine concernée est
+automatiquement reprise au réveil.
+
+## 5. Endpoints
 
 | Méthode | Route | Rôle |
 |---|---|---|

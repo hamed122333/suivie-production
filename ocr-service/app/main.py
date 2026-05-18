@@ -30,16 +30,19 @@ app.include_router(rolls.router, prefix="/api", tags=["rolls"])
 
 @app.on_event("startup")
 def on_startup():
-    """Prépare la base et lance le worker d'extraction en arrière-plan."""
+    """Prépare la base et relance l'extraction des bobines en attente."""
     try:
         database.init_db()
     except Exception as e:
         logger.error(f"Initialisation DB échouée: {e}")
-    worker.start()
+    worker.trigger()
 
 
 @app.get("/health")
 def health_check():
+    # Le ping keep-alive sur /health draine aussi la file d'attente :
+    # les bobines en attente s'extraient même quand personne n'utilise l'app.
+    worker.trigger()
     db_ok = database.check_db_connection()
     return {
         "status": "ok" if db_ok else "degraded",

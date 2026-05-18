@@ -1,21 +1,28 @@
 """
-Worker d'extraction en arrière-plan.
+Worker d'extraction — modèle « pull » (déclenché à la demande).
 
-Tourne dans un thread démon : il prend les bobines en attente une par une,
-les fait extraire par l'IA, puis enregistre le résultat. L'opérateur n'attend
-jamais — il continue à capturer des photos pendant que le worker travaille.
+Pas de thread permanent : l'extraction est lancée par les requêtes de
+l'application elle-même (capture d'une bobine, consultation du tableau,
+ping keep-alive sur /health).
+
+Un verrou garantit qu'une seule vague d'extraction tourne à la fois ;
+cette vague traite TOUTE la file d'attente puis s'arrête.
+
+→ Fonctionne parfaitement sur l'offre gratuite Render : aucun service
+  toujours actif n'est nécessaire. Si le service s'endort en pleine
+  extraction, la bobine restée en 'processing' est remise en 'pending'
+  au prochain démarrage (voir database.init_db).
 """
 
 import base64
 import logging
 import threading
-import time
 
 from app.services import database, extraction
 
 logger = logging.getLogger(__name__)
 
-_POLL_INTERVAL = 4  # secondes entre deux vérifications de la file
+_lock = threading.Lock()
 
 
 def _process_one() -> bool:
@@ -52,18 +59,20 @@ def _process_one() -> bool:
     return True
 
 
-def _loop() -> None:
-    logger.info("Worker d'extraction démarré.")
-    while True:
-        try:
-            worked = _process_one()
-        except Exception as e:
-            logger.error(f"Worker — erreur inattendue: {e}")
-            worked = False
-        if not worked:
-            time.sleep(_POLL_INTERVAL)
+def _drain() -> None:
+    """Traite toute la file d'attente, bobine après bobine, puis s'arrête."""
+    if not _lock.acquire(blocking=False):
+        return  # une vague d'extraction est déjà en cours
+    try:
+        while _process_one():
+            pass
+    finally:
+        _lock.release()
 
 
-def start() -> None:
-    """Lance le worker dans un thread démon."""
-    threading.Thread(target=_loop, name="extraction-worker", daemon=True).start()
+def trigger() -> None:
+    """
+    Déclenche l'extraction des bobines en attente, en arrière-plan.
+    Sans effet si une vague est déjà en cours (verrou non bloquant).
+    """
+    threading.Thread(target=_drain, name="extraction-drain", daemon=True).start()

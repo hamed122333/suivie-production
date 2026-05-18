@@ -16,7 +16,7 @@ from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 from pydantic import BaseModel
 from PIL import Image, ImageOps
 
-from app.services import database
+from app.services import database, worker
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -67,12 +67,17 @@ async def capture_roll(
     location = (storage_location or "").strip() or None
     row = database.create_roll(image_b64, thumb_b64, location)
     logger.info(f"Bobine #{row['id']} capturée (emplacement: {location})")
+    worker.trigger()  # lance l'extraction en arrière-plan
     return row
 
 
 @router.get("/rolls")
 async def list_rolls():
-    """Liste des bobines (sans image) + compteurs de statut."""
+    """Liste des bobines (sans image) + compteurs de statut.
+
+    Déclenche aussi l'extraction des bobines en attente : tant que le
+    tableau est ouvert (rafraîchi toutes les 5 s), la file se vide."""
+    worker.trigger()
     return {"rolls": database.list_rolls(), "stats": database.stats()}
 
 

@@ -79,27 +79,18 @@
   margin: 0.25rem 0 0.6rem;
 }
 
-.capture-locations {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+.capture-loc-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  color: var(--color-text);
   margin-bottom: 1.1rem;
 }
-.capture-loc {
-  min-width: 52px;
-  padding: 0.55rem 0;
-  border: 1px solid var(--color-border);
-  background: var(--color-white);
-  border-radius: var(--radius-md);
-  font-weight: 700;
-  color: var(--color-text);
-  cursor: pointer;
-  transition: var(--transition);
-}
-.capture-loc:hover { border-color: var(--color-primary); }
-.capture-loc--active {
-  background: var(--color-primary);
-  color: var(--color-white);
+.capture-loc-input:focus {
+  outline: none;
   border-color: var(--color-primary);
 }
 

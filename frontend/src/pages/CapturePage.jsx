@@ -11,8 +11,6 @@ import { Link } from 'react-router-dom';
 import { captureRoll } from '../services/rollService';
 import './CapturePage.css';
 
-const LOCATIONS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'];
-
 export default function CapturePage() {
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
@@ -112,20 +110,15 @@ export default function CapturePage() {
       <div className="capture-layout">
         {/* ── Capture ── */}
         <div className="capture-card">
-          {/* Emplacement */}
+          {/* Emplacement — saisie manuelle libre */}
           <label className="capture-label">Emplacement de stockage</label>
-          <div className="capture-locations">
-            {LOCATIONS.map((loc) => (
-              <button
-                key={loc}
-                type="button"
-                className={`capture-loc ${location === loc ? 'capture-loc--active' : ''}`}
-                onClick={() => setLocation(loc)}
-              >
-                {loc}
-              </button>
-            ))}
-          </div>
+          <input
+            type="text"
+            className="capture-loc-input"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="Saisir l'emplacement (ex : S1, Zone A, Allée 3…)"
+          />
 
           {/* Image */}
           <label className="capture-label">Photo de l'étiquette</label>

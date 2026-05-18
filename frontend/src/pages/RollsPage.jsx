@@ -11,8 +11,6 @@ import { Link } from 'react-router-dom';
 import { listRolls, getRoll, updateRoll, deleteRoll } from '../services/rollService';
 import './RollsPage.css';
 
-const LOCATIONS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'];
-
 const STATUS = {
   pending:    { label: 'En attente', cls: 'pending', icon: '⏳' },
   processing: { label: 'En cours',   cls: 'pending', icon: '⏳' },
@@ -273,10 +271,11 @@ function VerifyModal({ rollId, onClose, onSaved }) {
 
               <div className="vmodal__field">
                 <label>Emplacement</label>
-                <select name="storage_location" value={form.storage_location} onChange={change}>
-                  <option value="">— Choisir —</option>
-                  {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
-                </select>
+                <div className="vmodal__input-wrap">
+                  <input type="text" name="storage_location"
+                         value={form.storage_location} onChange={change}
+                         placeholder="Emplacement de la bobine" />
+                </div>
               </div>
 
               {error && <p className="vmodal__error">⚠ {error}</p>}
