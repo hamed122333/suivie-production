@@ -6,7 +6,7 @@
  * en arrière-plan. L'opérateur enchaîne immédiatement la bobine suivante.
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { captureRoll } from '../services/rollService';
 import './CapturePage.css';
@@ -49,12 +49,15 @@ export default function CapturePage() {
     }
   };
 
-  const stopCamera = () => {
+  const stopCamera = useCallback(() => {
     const stream = videoRef.current?.srcObject;
     if (stream) stream.getTracks().forEach((t) => t.stop());
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraActive(false);
-  };
+  }, []);
+
+  // Release the camera if the operator leaves the page mid-capture.
+  useEffect(() => stopCamera, [stopCamera]);
 
   const snapPhoto = () => {
     const video = videoRef.current;

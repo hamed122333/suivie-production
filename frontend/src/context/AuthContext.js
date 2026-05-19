@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { authAPI } from '../services/api';
 import { AUTH_CHANGED_EVENT, clearAuthSession, readStoredAuth, saveAuthSession } from '../utils/authStorage';
 
@@ -59,42 +59,41 @@ export const AuthProvider = ({ children }) => {
     };
   }, [token]);
 
-  const login = (userData, authToken) => {
+  const login = useCallback((userData, authToken) => {
     setUser(userData);
     setToken(authToken);
     setLoading(false);
     saveAuthSession(userData, authToken);
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setUser(null);
     setToken(null);
     clearAuthSession();
-  };
+  }, []);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        login,
-        logout,
-        loading,
-        isSuperAdmin: user?.role === 'super_admin',
-        isPlanner: user?.role === 'planner',
-        isCommercial: user?.role === 'commercial',
-        // Le commercial cree les taches, uniquement dans TODO.
-        canCreateTask: user?.role === 'commercial',
-        canCreateWorkspace: false, // workspaces are now generated automatically each day
-        // Le super_admin et le planner ont une vue globale.
-        canViewAll: user?.role === 'super_admin' || user?.role === 'planner',
-        // Le planificateur gère les mouvements et les statuts.
-        canChangeStatus: user?.role === 'planner',
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      user,
+      token,
+      login,
+      logout,
+      loading,
+      isSuperAdmin: user?.role === 'super_admin',
+      isPlanner: user?.role === 'planner',
+      isCommercial: user?.role === 'commercial',
+      // Le commercial cree les taches, uniquement dans TODO.
+      canCreateTask: user?.role === 'commercial',
+      canCreateWorkspace: false, // workspaces are now generated automatically each day
+      // Le super_admin et le planner ont une vue globale.
+      canViewAll: user?.role === 'super_admin' || user?.role === 'planner',
+      // Le planificateur gère les mouvements et les statuts.
+      canChangeStatus: user?.role === 'planner',
+    }),
+    [user, token, loading, login, logout]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {
