@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: suivi-ocr-service
+    runtime: python
+    rootDir: ocr-service          # relative to repo root
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false               # set manually in Render dashboard (secret)
+      - key: FRONTEND_URL
+        sync: false               # your React app URL on Render
+      - key: NVIDIA_API_KEY
+        sync: false               # secret — never commit the real key
+      - key: VISION_MODEL
+        value: mistralai/mistral-large-3-675b-instruct-2512
+      - key: VISION_ENABLED
+        value: "true"

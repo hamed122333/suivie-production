@@ -100,21 +100,27 @@ export const WorkspaceProvider = ({ children }) => {
     return isNaN(n) ? null : n;
   }, [workspaceId]);
 
-  return (
-    <WorkspaceContext.Provider
-      value={{
-        workspaces: workspacesWithAll,
-        workspaceId: resolvedWorkspaceId,
-        selectWorkspace,
-        createWorkspace,
-        refreshWorkspaces,
-        loadingWorkspaces,
-        setWorkspaceId,
-      }}
-    >
-      {children}
-    </WorkspaceContext.Provider>
+  const value = useMemo(
+    () => ({
+      workspaces: workspacesWithAll,
+      workspaceId: resolvedWorkspaceId,
+      selectWorkspace,
+      createWorkspace,
+      refreshWorkspaces,
+      loadingWorkspaces,
+      setWorkspaceId,
+    }),
+    [
+      workspacesWithAll,
+      resolvedWorkspaceId,
+      selectWorkspace,
+      createWorkspace,
+      refreshWorkspaces,
+      loadingWorkspaces,
+    ]
   );
+
+  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 };
 
 export const useWorkspace = () => {

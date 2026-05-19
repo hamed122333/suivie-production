@@ -1,0 +1,18 @@
+# Secrets — ne JAMAIS committer (contient la clé API NVIDIA)
+.env
+
+# Environnement virtuel Python
+venv/
+.venv/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Modèles OCR téléchargés / cache PaddleOCR
+.paddleocr/
+
+# Fichiers temporaires
+*.log
+*.tmp

@@ -107,3 +107,28 @@ CREATE INDEX IF NOT EXISTS idx_task_history_task_id ON task_history(task_id, cre
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created ON notifications(recipient_user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread ON notifications(recipient_user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_active ON password_reset_tokens(user_id, used_at, expires_at);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Table roll_scans — Cycle de vie des bobines scannées par le service OCR
+-- capture → extraction IA en arrière-plan → vérification opérateur
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS roll_scans (
+    id                  SERIAL          PRIMARY KEY,
+    status              VARCHAR(20)     NOT NULL DEFAULT 'pending',
+    image_data          TEXT,
+    thumbnail           TEXT,
+    storage_location    VARCHAR(30),
+    supplier            VARCHAR(150),
+    reel_serial_number  VARCHAR(80),
+    grammage            NUMERIC(7,1),
+    width_mm            NUMERIC(9,1),
+    weight_kg           NUMERIC(9,1),
+    confidence          JSONB,
+    error_message       TEXT,
+    captured_at         TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    extracted_at        TIMESTAMP,
+    verified_at         TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_roll_scans_status   ON roll_scans(status);
+CREATE INDEX IF NOT EXISTS idx_roll_scans_captured ON roll_scans(captured_at DESC);
