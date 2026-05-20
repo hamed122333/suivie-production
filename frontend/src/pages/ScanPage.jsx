@@ -7,7 +7,6 @@ import './ScanPage.css';
  * Page isolée pour le scan d'inventaire avec OCR.
  */
 function ScanPage() {
-  const [image, setImage] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -25,7 +24,6 @@ function ScanPage() {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setImage(file);
       setPreviewUrl(URL.createObjectURL(file));
       handleScan(file);
     }

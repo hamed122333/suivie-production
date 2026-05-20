@@ -8,6 +8,8 @@ import DashboardPage from "./pages/DashboardPage";
 import KanbanPage from "./pages/KanbanPage";
 import UsersPage from "./pages/UsersPage";
 import StockPage from "./pages/StockPage";
+import CapturePage from "./pages/CapturePage";
+import RollsPage from "./pages/RollsPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ScanPage from "./pages/ScanPage";
@@ -146,6 +148,26 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <ScanPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/scan-roll"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <CapturePage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/bobines"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <RollsPage />
+            </Layout>
           </ProtectedRoute>
         }
       />

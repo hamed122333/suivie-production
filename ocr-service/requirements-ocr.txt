@@ -1,0 +1,12 @@
+# Repli OCR local OPTIONNEL (PaddleOCR).
+#
+# Utilisé UNIQUEMENT si l'IA visuelle est indisponible (pas de clé API,
+# hors-ligne, quota atteint). Paquets volumineux (~plusieurs centaines de Mo)
+# → à installer seulement en local, ou sur un serveur avec assez de mémoire.
+#
+#   pip install -r requirements.txt
+#   pip install -r requirements-ocr.txt   (optionnel)
+
+paddlepaddle==2.6.2
+paddleocr==2.7.3
+numpy>=1.24.0,<2.0.0
