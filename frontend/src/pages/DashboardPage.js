@@ -37,8 +37,9 @@ const DashboardPage = () => {
   const [importBanner, setImportBanner] = useState(null);
 
   const { workspaceId, loadingWorkspaces, workspaces, refreshWorkspaces, selectWorkspace } = useWorkspace();
-  const { isCommercial } = useAuth();
-  const importInputRef = useRef(null);
+  const { isSuperAdmin } = useAuth();
+  const importInputRef  = useRef(null);
+  const bannerTimer     = useRef(null);
 
   const activeWorkspace = workspaces?.find((workspace) => String(workspace.id) === String(workspaceId));
   const workspaceName = workspaceId === 'all' ? 'Tous les espaces' : activeWorkspace?.name || '';
@@ -114,7 +115,7 @@ const DashboardPage = () => {
 
   const stockSummary = stats?.analytics?.stockSummary || {};
 
-  const canImportOrders = Boolean(isCommercial);
+  const canImportOrders = Boolean(isSuperAdmin);
 
   const handleImportOrders = async (file) => {
     if (!file || !canImportOrders) return;
@@ -130,7 +131,8 @@ const DashboardPage = () => {
       if (importedWorkspaces.length > 0) selectWorkspace(importedWorkspaces[0].id);
       await fetchData(false);
       setImportBanner({ type: 'success', message: `${importedCount} ligne(s) importee(s)` });
-      setTimeout(() => setImportBanner(null), 5000);
+      if (bannerTimer.current) clearTimeout(bannerTimer.current);
+      bannerTimer.current = setTimeout(() => setImportBanner(null), 5000);
     } catch (err) {
       setImportBanner({ type: 'error', message: err?.response?.data?.error || 'Erreur import' });
     } finally {

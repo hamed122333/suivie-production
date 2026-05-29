@@ -8,11 +8,19 @@
  */
 
 const clients = new Set();
+const MAX_CLIENTS = 500;
 
 /** Register a new SSE client (Express response object). */
 function addClient(res) {
+  if (clients.size >= MAX_CLIENTS) {
+    // Too many concurrent connections — close gracefully
+    res.end();
+    return;
+  }
   clients.add(res);
-  res.on('close', () => clients.delete(res));
+  const cleanup = () => clients.delete(res);
+  res.on('close', cleanup);
+  res.on('error', cleanup);
 }
 
 /**
@@ -23,7 +31,11 @@ function addClient(res) {
 function broadcast(event, data = {}) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of clients) {
-    client.write(payload);
+    try {
+      client.write(payload);
+    } catch {
+      clients.delete(client);
+    }
   }
 }
 

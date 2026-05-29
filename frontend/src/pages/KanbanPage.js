@@ -22,9 +22,13 @@ const KanbanPage = () => {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [criticalDeficitFilter, setCriticalDeficitFilter] = useState(false);
   const [predictiveOnlyFilter, setPredictiveOnlyFilter] = useState(false);
+  const [commercialFilter, setCommercialFilter] = useState('');
+  const [selectedDayFilter, setSelectedDayFilter] = useState(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isCommercial } = useAuth();
+  const { isSuperAdmin } = useAuth();
   const { workspaceId, loadingWorkspaces, refreshWorkspaces, selectWorkspace } = useWorkspace();
 
   const fetchTasks = useCallback(
@@ -92,7 +96,7 @@ const KanbanPage = () => {
   };
 
   const handleImportOrders = async (file) => {
-    if (!file || !isCommercial) return;
+    if (!file || !isSuperAdmin) return;
     setImporting(true);
     setImportBanner(null);
     try {
@@ -100,8 +104,8 @@ const KanbanPage = () => {
       formData.append('file', file);
       const response = await taskAPI.importOrders(formData);
       const importedWorkspaces = response?.data?.workspaces || [];
-      const importedCount = response?.data?.imported ?? response?.data?.tasks?.length ?? '?';
-      const skippedCount = (response?.data?.skipped ?? 0) + (response?.data?.skippedExisting ?? 0);
+      const importedCount = response?.data?.imported ?? '?';
+      const anomaliesCount = response?.data?.anomalies?.length ?? 0;
       await refreshWorkspaces();
       const targetWsId = importedWorkspaces.length > 0 ? importedWorkspaces[0].id : workspaceId;
       if (importedWorkspaces.length > 0) {
@@ -109,8 +113,8 @@ const KanbanPage = () => {
         selectWorkspace(targetWsId);
       }
       await Promise.all([fetchTasks(targetWsId), fetchStats()]);
-      const skippedNote = skippedCount > 0 ? ` • ${skippedCount} ligne(s) ignorée(s) (référence non reconnue ou doublon).` : '';
-      setImportBanner({ type: 'success', message: `${importedCount} ligne(s) importée(s) avec succès.${skippedNote}` });
+      const anomalyNote = anomaliesCount > 0 ? ` • ${anomaliesCount} ligne(s) avec anomalies signalées.` : '';
+      setImportBanner({ type: 'success', message: `${importedCount} ligne(s) importée(s) avec succès.${anomalyNote}` });
       setTimeout(() => setImportBanner(null), 5000);
     } catch (err) {
       setImportBanner({ type: 'error', message: err?.response?.data?.error || 'Echec import commandes client.' });
@@ -148,6 +152,8 @@ const KanbanPage = () => {
     setLoading(true);
     Promise.all([fetchTasks(workspaceId), fetchStats()]).finally(() => setLoading(false));
   }, [workspaceId, loadingWorkspaces, fetchTasks, fetchStats]);
+
+  const handleDateChange = (from, to) => { setDateFrom(from || ''); setDateTo(to || ''); };
 
   const handleSearchChange = (value) => {
     startTransition(() => {
@@ -194,12 +200,17 @@ const KanbanPage = () => {
         onCriticalDeficitChange={setCriticalDeficitFilter}
         predictiveOnly={predictiveOnlyFilter}
         onPredictiveOnlyChange={setPredictiveOnlyFilter}
-        users={users}
-        stats={stats}
+        commercialFilter={commercialFilter}
+        onCommercialFilterChange={setCommercialFilter}
+        commercials={users.filter(u => u.role === 'commercial' && u.commercial_id)}
+        tasks={tasks}
+        dateFrom={dateFrom}
+        onDateChange={handleDateChange}
+        onDaySelect={setSelectedDayFilter}
         importing={importing}
         onRefresh={() => Promise.all([fetchTasks(workspaceId), fetchStats()])}
         onExport={() => setExportModalOpen(true)}
-        onImportOrders={isCommercial ? handleImportOrders : null}
+        onImportOrders={isSuperAdmin ? handleImportOrders : null}
       />
       <KanbanBoard
         tasks={tasks}
@@ -211,6 +222,8 @@ const KanbanPage = () => {
         filterCategory={categoryFilter}
         filterCriticalDeficit={criticalDeficitFilter}
         filterPredictiveOnly={predictiveOnlyFilter}
+        filterCommercial={commercialFilter}
+        filterDate={selectedDayFilter}
         onTasksChange={() => fetchTasks(workspaceId)}
         onStatsRefresh={fetchStats}
       />

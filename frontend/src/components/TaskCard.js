@@ -40,12 +40,13 @@ function buildShortOpsMessage(task) {
 
   if (status === 'TODO') {
     if (task?.task_type === 'PREDICTIVE') return 'Commande prévisionnelle';
-    return qty > 0 ? `Stock validé — ${qty} pcs` : 'Stock validé';
+    return qty > 0 ? `PF alloué — ${qty} pcs à préparer` : 'PF alloué — à préparer';
   }
 
+  if (status === 'IN_PROGRESS') return 'En cours de préparation / emballage';
+  if (status === 'DONE')        return 'Emballé — prêt pour la livraison ✓';
+  if (status === 'DELIVERED')   return 'Livraison confirmée ✓';
   if (status === 'BLOCKED') return 'Bloquée — action requise';
-  if (status === 'DONE') return 'Terminé';
-  if (status === 'IN_PROGRESS') return 'En production';
   return null;
 }
 
@@ -237,9 +238,19 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
               {getInitials(task.planned_by_name)}
             </span>
           )}
-          <span className="task-card__avatar" title={`Créé par ${task.created_by_name || 'inconnu'}`}>
-            {getInitials(task.created_by_name)}
-          </span>
+          {/* Show commercial avatar when task was imported (created by planner/admin on behalf of commercial) */}
+          {task.commercial_name ? (
+            <span
+              className="task-card__avatar task-card__avatar--commercial"
+              title={`Commercial: ${task.commercial_name}${task.commercial_id ? ` (${task.commercial_id})` : ''}`}
+            >
+              {getInitials(task.commercial_name)}
+            </span>
+          ) : (
+            <span className="task-card__avatar" title={`Créé par ${task.created_by_name || 'inconnu'}`}>
+              {getInitials(task.created_by_name)}
+            </span>
+          )}
         </div>
       </div>
     </article>

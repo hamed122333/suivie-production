@@ -28,6 +28,7 @@ const taskBaseSelect = `
     created.name   AS created_by_name,
     created.role   AS created_by_role,
     blocked.name   AS blocked_by_name,
+    comm_user.name AS commercial_name,
     (
       SELECT u.name
       FROM task_history th
@@ -48,9 +49,10 @@ const taskBaseSelect = `
     ) AS planned_by_role
   FROM tasks t
   LEFT JOIN workspaces w ON w.id = t.workspace_id
-  LEFT JOIN users assigned ON assigned.id = t.assigned_to
-  LEFT JOIN users created  ON created.id  = t.created_by
-  LEFT JOIN users blocked  ON blocked.id  = t.blocked_by
+  LEFT JOIN users assigned   ON assigned.id = t.assigned_to
+  LEFT JOIN users created    ON created.id  = t.created_by
+  LEFT JOIN users blocked    ON blocked.id  = t.blocked_by
+  LEFT JOIN users comm_user  ON comm_user.commercial_id = t.commercial_id AND comm_user.role = 'commercial'
 `;
 
 const createFieldMap = {
@@ -58,6 +60,7 @@ const createFieldMap = {
   title: 'title',
   description: 'description',
   priority: 'priority',
+  assignedTo: 'assigned_to',
   clientName: 'client_name',
   orderCode: 'order_code',
   itemReference: 'item_reference',
@@ -80,6 +83,7 @@ const createFieldMap = {
   stockAvailableAtCreation: 'stock_available_at_creation',
   stockDeficit: 'stock_deficit',
   urgentDatePending: 'urgent_date_pending',
+  commercialId: 'commercial_id',
 };
 
 const updateFieldMap = {
@@ -111,6 +115,7 @@ const updateFieldMap = {
   stockAllocated: 'stock_allocated',
   priorityOrder: 'priority_order',
   urgentDatePending: 'urgent_date_pending',
+  commercialId: 'commercial_id',
 };
 
 function appendFilters(filters, params) {
@@ -139,6 +144,16 @@ function appendFilters(filters, params) {
   if (filters.statusIn && Array.isArray(filters.statusIn) && filters.statusIn.length > 0) {
     params.push(filters.statusIn);
     conditions.push(`t.status = ANY($${params.length}::text[])`);
+  }
+
+  if (filters.statusNotIn && Array.isArray(filters.statusNotIn) && filters.statusNotIn.length > 0) {
+    params.push(filters.statusNotIn);
+    conditions.push(`t.status <> ALL($${params.length}::text[])`);
+  }
+
+  if (filters.commercialId) {
+    params.push(filters.commercialId);
+    conditions.push(`t.commercial_id = $${params.length}`);
   }
 
   if (filters.itemReference) {
@@ -174,6 +189,17 @@ function appendFilters(filters, params) {
   if (filters.dueTo) {
     params.push(filters.dueTo);
     conditions.push(`t.due_date <= $${params.length}`);
+  }
+
+  // Planned date range — used by frontend date filter (replaces workspace selector)
+  if (filters.plannedFrom) {
+    params.push(filters.plannedFrom);
+    conditions.push(`t.planned_date >= $${params.length}`);
+  }
+
+  if (filters.plannedTo) {
+    params.push(filters.plannedTo);
+    conditions.push(`t.planned_date <= $${params.length}`);
   }
 
   return conditions;
@@ -447,7 +473,9 @@ const TaskModel = {
 
       const isSystem = userRole === 'system' || options.systemAutoPromotion;
       const isPrivileged = userRole === 'planner' || userRole === 'super_admin' || isSystem;
-      if (!isPrivileged && currentTask.assigned_to !== userId) {
+      // Livreur can only change DONE → DELIVERED (checked by controller before calling this)
+      const isLivreurDelivery = userRole === 'livreur' && status === 'DELIVERED' && currentTask.status === 'DONE';
+      if (!isPrivileged && !isLivreurDelivery && currentTask.assigned_to !== userId) {
         await client.query('ROLLBACK');
         throw new Error('Not authorized to update this task');
       }
@@ -511,6 +539,29 @@ const TaskModel = {
 
   async delete(id) {
     const result = await pool.query('DELETE FROM tasks WHERE id = $1 RETURNING *', [id]);
+    return result.rows[0] || null;
+  },
+
+  // Promote a PENDING_APPROVAL task directly to TODO or WAITING_STOCK.
+  // Bypasses the normal status permission gate — only called from approveOrders.
+  async approveFromPending(id, targetStatus, stockFields = {}) {
+    const result = await pool.query(
+      `UPDATE tasks
+       SET status = $2,
+           is_known_product = $3,
+           stock_available_at_creation = $4,
+           stock_deficit = $5,
+           updated_at = NOW()
+       WHERE id = $1 AND status = 'PENDING_APPROVAL'
+       RETURNING id`,
+      [
+        id,
+        targetStatus,
+        stockFields.isKnownProduct ?? null,
+        stockFields.stockAvailableAtCreation ?? null,
+        stockFields.stockDeficit ?? null,
+      ]
+    );
     return result.rows[0] || null;
   },
 

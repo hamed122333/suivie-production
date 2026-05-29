@@ -9,10 +9,33 @@ import { useAuth } from '../context/AuthContext';
 import { taskAPI } from '../services/api';
 import './KanbanBoard.css';
 
-const COLUMNS = TASK_STATUS_ORDER.map((status) => ({
+const ALL_COLUMNS = TASK_STATUS_ORDER.map((status) => ({
   id: status,
   ...TASK_STATUS_CONFIG[status],
 }));
+
+// Which columns each role sees on the Kanban board
+const COLUMNS_FOR_ROLE = {
+  planner:     TASK_STATUS_ORDER,
+  super_admin: TASK_STATUS_ORDER,
+  commercial:  ['WAITING_STOCK', 'TODO', 'IN_PROGRESS', 'DONE', 'DELIVERED'],
+  livreur:     ['DONE', 'DELIVERED'],
+  user:        TASK_STATUS_ORDER,
+};
+
+function getColumnSubtitle(columnId, isLivreur) {
+  if (isLivreur) {
+    if (columnId === 'DONE')      return 'Glissez vers "Livré" pour confirmer';
+    if (columnId === 'DELIVERED') return 'Livraisons confirmées ✓';
+  }
+  if (columnId === 'WAITING_STOCK') return 'PF insuffisant — FIFO en attente';
+  if (columnId === 'TODO')          return 'PF alloué — à préparer et emballer';
+  if (columnId === 'IN_PROGRESS')   return 'En cours de préparation / emballage';
+  if (columnId === 'DONE')          return 'Emballé — en attente du livreur';
+  if (columnId === 'BLOCKED')       return 'Intervention requise';
+  if (columnId === 'DELIVERED')     return 'Livré au client ✓';
+  return '';
+}
 
 const DRAG_MIME = 'application/x-suivi-task';
 
@@ -46,7 +69,7 @@ function sortInColumn(a, b) {
 
 function buildColumnOrders(taskList) {
   const columnOrders = {};
-  COLUMNS.forEach((column) => {
+  ALL_COLUMNS.forEach((column) => {
     columnOrders[column.id] = taskList
       .filter((task) => task.status === column.id)
       .sort(sortInColumn)
@@ -81,7 +104,15 @@ function applyMove(taskList, draggedId, targetStatus, insertBeforeId) {
   return TASK_STATUS_ORDER.flatMap((status) => byColumn[status] || []);
 }
 
-function taskMatchesFilters(task, filterQuery, filterPriority, filterCategory, filterCriticalDeficit, filterPredictiveOnly) {
+function localISODate(dateStr) {
+  if (!dateStr) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  const d = new Date(dateStr);
+  if (isNaN(d)) return null;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function taskMatchesFilters(task, filterQuery, filterPriority, filterCategory, filterCriticalDeficit, filterPredictiveOnly, filterCommercial, filterDate) {
   if (filterPriority && task.priority !== filterPriority) return false;
   if (filterCategory && task.item_reference) {
     const prefix = task.item_reference.substring(0, 2).toUpperCase();
@@ -89,6 +120,10 @@ function taskMatchesFilters(task, filterQuery, filterPriority, filterCategory, f
   }
   if (filterCriticalDeficit && (!task.stock_deficit || task.stock_deficit <= 0)) return false;
   if (filterPredictiveOnly && task.task_type !== 'PREDICTIVE') return false;
+  // Filter by commercial code (VL000XXX)
+  if (filterCommercial && task.commercial_id !== filterCommercial) return false;
+  // Filter by specific day (from day bar click)
+  if (filterDate && localISODate(task.planned_date) !== filterDate) return false;
 
   const query = (filterQuery || '').trim().toLowerCase();
   if (!query) return true;
@@ -119,9 +154,17 @@ const KanbanBoard = ({
   filterCategory = '',
   filterCriticalDeficit = false,
   filterPredictiveOnly = false,
+  filterCommercial = '',
+  filterDate = null,
   onStatsRefresh,
 }) => {
-  const { canChangeStatus, canCreateTask, isCommercial, isSuperAdmin } = useAuth();
+  const { canChangeStatus, canCreateTask, isCommercial, isSuperAdmin, isLivreur, canMarkDelivered, user } = useAuth();
+
+  // Build the column list based on the current user's role
+  const COLUMNS = useMemo(() => {
+    const allowedStatuses = COLUMNS_FOR_ROLE[user?.role] || TASK_STATUS_ORDER;
+    return ALL_COLUMNS.filter((col) => allowedStatuses.includes(col.id));
+  }, [user?.role]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
@@ -163,16 +206,13 @@ const KanbanBoard = ({
 
   const isAllWorkspaces = workspaceId === 'all';
   const deferredQuery = useDeferredValue(filterQuery);
-const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filterCategory || filterCriticalDeficit || filterPredictiveOnly);
+  const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filterCategory || filterCriticalDeficit || filterPredictiveOnly || filterCommercial || filterDate);
 
-      const visibleTasks = useMemo(() => {
-        return tasks.filter((task) => {
-          if (taskMatchesFilters(task, deferredQuery, filterPriority, filterCategory, filterCriticalDeficit, filterPredictiveOnly)) {
-            return true;
-          }
-          return false;
-        });
-      }, [tasks, deferredQuery, filterPriority, filterCategory, filterCriticalDeficit, filterPredictiveOnly]);
+  const visibleTasks = useMemo(() => {
+    return tasks.filter((task) =>
+      taskMatchesFilters(task, deferredQuery, filterPriority, filterCategory, filterCriticalDeficit, filterPredictiveOnly, filterCommercial, filterDate)
+    );
+  }, [tasks, deferredQuery, filterPriority, filterCategory, filterCriticalDeficit, filterPredictiveOnly, filterCommercial, filterDate]);
 
       const visibleTaskIds = useMemo(() => new Set(visibleTasks.map((t) => t.id)), [visibleTasks]);
 
@@ -211,9 +251,15 @@ const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filte
   };
 
   const handleDragStart = (event, task) => {
-    if (!canChangeStatus) return;
+    // Planner/super_admin can drag most cards; livreur can drag DONE → DELIVERED only
+    if (!canChangeStatus && !isLivreur) return;
     if (task.status === 'WAITING_STOCK') {
-      setErrorShort('Le statut Hors stock est gere automatiquement par le systeme.');
+      setErrorShort('Le statut Hors stock est géré automatiquement par le système.');
+      event.preventDefault();
+      return;
+    }
+    // Livreur can only drag DONE cards
+    if (isLivreur && task.status !== 'DONE') {
       event.preventDefault();
       return;
     }
@@ -250,7 +296,35 @@ const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filte
     }
 
     if (task.status === 'WAITING_STOCK' || targetStatus === 'WAITING_STOCK') {
-      setErrorShort('Drag & drop interdit sur le statut Hors stock (gestion systeme uniquement).');
+      setErrorShort('Drag & drop interdit sur le statut Hors stock (gestion système uniquement).');
+      clearDragHighlights();
+      return;
+    }
+
+    // Livreur: can only confirm delivery (DONE → DELIVERED)
+    if (targetStatus === 'DELIVERED') {
+      if (!canMarkDelivered) {
+        setErrorShort('Seul le livreur peut confirmer une livraison.');
+        clearDragHighlights();
+        return;
+      }
+      if (task.status !== 'DONE') {
+        setErrorShort('Glissez uniquement les fiches "Prêt à Livrer" vers la colonne Livré.');
+        clearDragHighlights();
+        return;
+      }
+      try {
+        await taskAPI.markDelivered(draggedId);
+        await refreshBoardAndPanels();
+      } catch (err) {
+        setErrorShort(err.response?.data?.error || 'Impossible de confirmer la livraison.');
+      }
+      clearDragHighlights();
+      return;
+    }
+
+    // Livreur cannot perform any other drag
+    if (isLivreur) {
       clearDragHighlights();
       return;
     }
@@ -356,12 +430,16 @@ const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filte
   const roleHint = isAllWorkspaces
     ? 'Vue transverse sur tous les espaces de production.'
     : canChangeStatus
-    ? 'Le planificateur valide le stock et pilote le flux complet.'
+    ? 'Planificateur — préparez les commandes et marquez-les prêtes à livrer.'
+    : isLivreur
+    ? 'Livreur — glissez les fiches "Prêt à Livrer" vers la colonne Livré pour confirmer.'
     : canCreateTask
-    ? 'Le commercial saisit les commandes hors stock avec date prevue.'
+    ? 'Commercial — saisissez les commandes clients avec date de livraison souhaitée.'
     : isSuperAdmin
-    ? 'Le role suivi observe les commandes, les retards et les blocages sans modifier le flux.'
+    ? 'Super Admin — vue complète du flux de distribution.'
     : 'Mode consultation.';
+
+  const readyToDeliverCount = tasks.filter((t) => t.status === 'DONE').length;
 
   return (
     <div className="kanban-board-wrap">
@@ -404,6 +482,13 @@ const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filte
 
       {error && <div className="kanban-board__error">{error}</div>}
 
+      {isLivreur && readyToDeliverCount > 0 && (
+        <div className="kanban-board__alert kanban-board__alert--deliver" role="status">
+          🚚 <strong>{readyToDeliverCount}</strong> commande{readyToDeliverCount > 1 ? 's' : ''} prête{readyToDeliverCount > 1 ? 's' : ''} à livrer
+          — glissez-les vers la colonne <strong>Livré</strong>
+        </div>
+      )}
+
       <div className="kanban-board__grid">
         {COLUMNS.map((column) => {
           const columnTasks = getTasksByStatus(column.id);
@@ -441,13 +526,7 @@ const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filte
                     {column.label}
                   </span>
                   <div className="kanban-column__subtitle">
-                    {column.id === 'WAITING_STOCK'
-                      ? 'Commandes hors stock PF'
-                      : column.id === 'BLOCKED'
-                      ? 'Interventions requises'
-                      : column.id === 'DONE'
-                      ? 'Archive visuelle'
-                      : 'File active'}
+                    {getColumnSubtitle(column.id, isLivreur)}
                   </div>
                 </div>
                 <div className="kanban-column__metrics">
@@ -474,7 +553,7 @@ const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filte
                     <div
                       key={task.id}
                       className={`kanban-card-slot ${selectedTaskId === task.id ? 'kanban-card-slot--selected' : ''}`}
-                      draggable={canChangeStatus && task.status !== 'WAITING_STOCK'}
+                      draggable={(canChangeStatus && task.status !== 'WAITING_STOCK') || (isLivreur && task.status === 'DONE')}
                       onDragStart={(event) => handleDragStart(event, task)}
                       onDragEnd={clearDragHighlights}
                       onDragOver={(event) => {

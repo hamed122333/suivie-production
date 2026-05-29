@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "migrate": "node run-setup.js",
     "migrate:production-core": "node run-production-core-migration.js",
+    "seed:commercials": "node seed-commercials.js",
     "test": "echo \"No tests configured\" && exit 0"
   },
   "dependencies": {

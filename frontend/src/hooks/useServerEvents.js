@@ -1,64 +1,106 @@
+/**
+ * useServerEvents — SSE singleton hub.
+ *
+ * All callers (Header, KanbanPage, DashboardPage, …) share ONE EventSource
+ * per tab instead of opening N connections. Events are dispatched to every
+ * registered callback for that event name.
+ *
+ * JWT token is passed as ?token=<jwt> because EventSource cannot send headers.
+ */
+
 import { useEffect, useRef } from 'react';
 
-// REACT_APP_API_URL may or may not include a trailing /api (axis config
-// expects it WITH /api). EventSource has no baseURL concept, so we strip any
-// trailing /api here and append /api/events ourselves — avoids /api/api/events.
 const RAW_API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const API_URL = RAW_API_URL.replace(/\/api\/?$/, '');
 
+// ── Module-level singleton state ─────────────────────────────────────────────
+
+let singleton  = null;           // the live EventSource
+let retryTimer = null;
+let retryDelay = 3000;
+const MAX_RETRY_DELAY = 30_000;
+
+// eventName → Set<callback>
+const registry  = {};
+// eventName → true (already wired on current ES instance)
+const wiredOn   = new Set();
+
+function wireEvent(name) {
+  if (!singleton || wiredOn.has(name)) return;
+  wiredOn.add(name);
+  singleton.addEventListener(name, (event) => {
+    let data;
+    try { data = JSON.parse(event.data); } catch { data = {}; }
+    const cbs = registry[name];
+    if (cbs) for (const cb of cbs) cb(data);
+  });
+}
+
+function ensureConnected() {
+  if (singleton && singleton.readyState !== EventSource.CLOSED) return;
+
+  clearTimeout(retryTimer);
+  const token = localStorage.getItem('token') || '';
+  const url   = `${API_URL}/api/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+
+  singleton = new EventSource(url);
+  wiredOn.clear();
+
+  singleton.onopen = () => { retryDelay = 3000; };
+
+  // Re-wire all already-registered event names on the new connection
+  for (const name of Object.keys(registry)) {
+    if ((registry[name]?.size ?? 0) > 0) wireEvent(name);
+  }
+
+  singleton.onerror = () => {
+    singleton.close();
+    singleton = null;
+    wiredOn.clear();
+    retryTimer = setTimeout(ensureConnected, retryDelay);
+    retryDelay = Math.min(retryDelay * 1.5, MAX_RETRY_DELAY);
+  };
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────────────
+
 /**
- * Subscribe to Server-Sent Events from the backend.
+ * Subscribe to named SSE events.
  *
  * @param {Record<string, (data: any) => void>} handlers
- *   Map of event names to callbacks, e.g. { 'stock-updated': (d) => refetch() }
+ *   e.g. { 'stock-updated': (d) => refetch(), 'tasks-updated': refresh }
  *
- * Reconnects automatically on disconnect (with 3s backoff).
+ * Handlers object identity is allowed to change each render — latest version
+ * is always called via ref.
  */
 export default function useServerEvents(handlers) {
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
   useEffect(() => {
-    let es;
-    let retryTimer;
-    let retryDelay = 3000;
-    const MAX_RETRY_DELAY = 30000;
+    const names = Object.keys(handlersRef.current);
 
-    function connect() {
-      es = new EventSource(`${API_URL}/api/events`);
+    // Build stable per-event callbacks that delegate to the latest ref
+    const callbacks = {};
+    for (const name of names) {
+      callbacks[name] = (data) => handlersRef.current[name]?.(data);
 
-      // A successful (re)connection resets the backoff window.
-      es.onopen = () => {
-        retryDelay = 3000;
-      };
+      if (!registry[name]) registry[name] = new Set();
+      registry[name].add(callbacks[name]);
 
-      // Wire up each event
-      const names = Object.keys(handlersRef.current);
-      for (const name of names) {
-        es.addEventListener(name, (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            handlersRef.current[name]?.(data);
-          } catch {
-            handlersRef.current[name]?.({});
-          }
-        });
+      // If the singleton is already alive, wire the new event name immediately
+      if (singleton && singleton.readyState !== EventSource.CLOSED) {
+        wireEvent(name);
       }
-
-      es.onerror = () => {
-        es.close();
-        // Exponential backoff (3s → 30s max) so a down/404 endpoint
-        // cannot turn into a request storm that trips the rate limiter.
-        retryTimer = setTimeout(connect, retryDelay);
-        retryDelay = Math.min(retryDelay * 1.5, MAX_RETRY_DELAY);
-      };
     }
 
-    connect();
+    ensureConnected();
 
     return () => {
-      es?.close();
-      clearTimeout(retryTimer);
+      for (const name of names) {
+        registry[name]?.delete(callbacks[name]);
+      }
+      // Leave the singleton open — other components may still be subscribed
     };
   }, []); // stable — handlers tracked via ref
 }

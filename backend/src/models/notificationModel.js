@@ -131,6 +131,37 @@ const NotificationModel = {
     broadcast('notifications-updated', { type: 'date_updated' });
   },
 
+  async createDateNegotiationNotificationBatch({ taskId, recipientUserIds, actorName, action, proposedDate }) {
+    if (!taskId || !Array.isArray(recipientUserIds) || recipientUserIds.length === 0) return;
+    const dateFmt = formatDateFR(proposedDate);
+    const titleMap = {
+      PROPOSE: `${actorName || 'Un planificateur'} — Date proposée`,
+      ACCEPT:  `${actorName || 'Un planificateur'} — Date confirmée`,
+      REJECT:  `${actorName || 'Un planificateur'} — Date refusée`,
+    };
+    const bodyMap = {
+      PROPOSE: `${actorName || 'Un planificateur'} a proposé une date de livraison pour SP-${taskId} : ${dateFmt}`,
+      ACCEPT:  `${actorName || 'Un planificateur'} a confirmé la date de livraison de SP-${taskId} : ${dateFmt}`,
+      REJECT:  `${actorName || 'Un planificateur'} a refusé la date et contre-proposé le ${dateFmt} pour SP-${taskId}`,
+    };
+    const title = titleMap[action] || `${actorName} — Négociation date`;
+    const body  = bodyMap[action]  || `Négociation de date sur SP-${taskId}`;
+    const values = [];
+    const placeholders = [];
+    let index = 1;
+    for (const uid of recipientUserIds) {
+      values.push(uid, taskId, 'date_negotiation', title, body);
+      placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
+      index += 5;
+    }
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ${placeholders.join(', ')}`,
+      values
+    );
+    broadcast('notifications-updated', { type: 'date_negotiation' });
+  },
+
   async createDateNegotiationNotification({ taskId, recipientUserId, actorName, action, proposedDate }) {
     if (!taskId || !recipientUserId) return;
     const dateFmt = formatDateFR(proposedDate);
@@ -158,6 +189,50 @@ const NotificationModel = {
     broadcast('notifications-updated', { type: 'date_negotiation' });
   },
 
+  async createEscalationNotification({ taskId, recipientUserId, commercialName, taskTitle }) {
+    if (!taskId || !recipientUserId) return;
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        recipientUserId,
+        taskId,
+        'escalation',
+        `🔥 Escalade urgente — ${commercialName}`,
+        `${commercialName} a marqué SP-${taskId}${taskTitle ? ` (${taskTitle})` : ''} comme URGENTE hors stock. Action requise.`,
+      ]
+    );
+    broadcast('notifications-updated', { type: 'escalation' });
+  },
+
+  /**
+   * Notify all livreurs that a task is ready to be picked up and delivered.
+   * Called when a task transitions to DONE.
+   */
+  async createReadyToDeliverNotifications({ taskId, recipientUserIds, plannerName, taskTitle }) {
+    if (!Array.isArray(recipientUserIds) || recipientUserIds.length === 0) return;
+    const values = [];
+    const placeholders = [];
+    let index = 1;
+    for (const uid of recipientUserIds) {
+      values.push(
+        uid,
+        taskId,
+        'ready_to_deliver',
+        `🚚 Prêt à livrer — SP-${taskId}`,
+        `${plannerName || 'Le planificateur'} a validé SP-${taskId}${taskTitle ? ` (${taskTitle})` : ''} — commande prête à livrer.`
+      );
+      placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
+      index += 5;
+    }
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ${placeholders.join(', ')}`,
+      values
+    );
+    broadcast('notifications-updated', { type: 'ready_to_deliver', taskId });
+  },
+
   async createStatusChangedNotification({ taskId, recipientUserId, changedByName, oldStatusLabel, newStatusLabel }) {
     if (!taskId || !recipientUserId) return;
     await pool.query(
@@ -170,6 +245,30 @@ const NotificationModel = {
         `${changedByName || 'Un planificateur'} — ${newStatusLabel}`,
         `${changedByName || 'Un planificateur'} a fait passer SP-${taskId} de "${oldStatusLabel}" à "${newStatusLabel}"`,
       ]
+    );
+    broadcast('notifications-updated', { type: 'status_updated' });
+  },
+
+  /**
+   * Batch-insert status-change notifications for multiple recipients.
+   * One SQL statement instead of N individual INSERTs — eliminates N+1.
+   */
+  async createStatusChangedNotificationBatch({ taskId, recipientUserIds, changedByName, oldStatusLabel, newStatusLabel }) {
+    if (!taskId || !Array.isArray(recipientUserIds) || recipientUserIds.length === 0) return;
+    const title = `${changedByName || 'Un planificateur'} — ${newStatusLabel}`;
+    const body  = `${changedByName || 'Un planificateur'} a fait passer SP-${taskId} de "${oldStatusLabel}" à "${newStatusLabel}"`;
+    const values = [];
+    const placeholders = [];
+    let index = 1;
+    for (const uid of recipientUserIds) {
+      values.push(uid, taskId, 'status_updated', title, body);
+      placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
+      index += 5;
+    }
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ${placeholders.join(', ')}`,
+      values
     );
     broadcast('notifications-updated', { type: 'status_updated' });
   },

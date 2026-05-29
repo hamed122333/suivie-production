@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const router = express.Router();
 const taskController = require('../controllers/taskController');
-const { authenticate, requireRoles, requireCommercial, requirePlanner } = require('../middleware/auth');
+const { authenticate, requireRoles, requireSuperAdmin, requireCommercial, requirePlanner, requireLivreur } = require('../middleware/auth');
 
 const ALLOWED_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -24,8 +24,16 @@ const upload = multer({
   fileFilter,
 });
 
-// Réordonner le tableau : planificateur uniquement
-router.patch('/board', authenticate, requirePlanner, taskController.reorderBoard);
+// Réordonner le tableau : planificateur ET commercial (le commercial réordonne ses propres tâches)
+router.patch('/board', authenticate, requireRoles(['planner', 'commercial', 'super_admin']), taskController.reorderBoard);
+
+// ── Commercial review workflow ──────────────────────────────────────────────
+// List tasks waiting for commercial approval
+router.get('/pending-approval', authenticate, requireRoles(['commercial', 'planner', 'super_admin']), taskController.getPendingApproval);
+// Approve selected tasks (commercial/admin → triggers FIFO → TODO or WAITING_STOCK)
+router.post('/approve', authenticate, requireRoles(['commercial', 'planner', 'super_admin']), taskController.approveOrders);
+// Reject (delete) selected pending tasks
+router.post('/reject', authenticate, requireRoles(['commercial', 'planner', 'super_admin']), taskController.rejectOrders);
 
 // Exporter les tches via Excel
 router.get('/export', authenticate, taskController.exportExcel);
@@ -33,7 +41,7 @@ router.get('/export', authenticate, taskController.exportExcel);
 // Lire toutes les tches (tous les utilisateurs authentifis)
 router.get('/', authenticate, taskController.getAll);
 router.post('/bulk', authenticate, requireCommercial, taskController.createBulk);
-router.post('/import-orders', authenticate, requireCommercial, upload.single('file'), taskController.importOrders);
+router.post('/import-orders', authenticate, requireSuperAdmin, upload.single('file'), taskController.importOrders);
 router.get('/:id/details', authenticate, taskController.getDetail);
 router.post('/:id/comments', authenticate, taskController.addComment);
 router.get('/:id', authenticate, taskController.getById);
@@ -53,6 +61,9 @@ router.post('/:id/convert-type', authenticate, requirePlanner, taskController.co
 
 // Changer le statut : planificateur uniquement
 router.put('/:id/status', authenticate, requirePlanner, taskController.updateStatus);
+
+// Marquer comme livré : livreur (et super_admin via hasRole logic)
+router.post('/:id/mark-delivered', authenticate, requireLivreur, taskController.markDelivered);
 
 // Supprimer : planificateur, commercial et super_admin
 router.delete('/:id', authenticate, requireRoles(['planner', 'commercial', 'super_admin']), taskController.delete);

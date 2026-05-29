@@ -4,14 +4,16 @@ export const TASK_STATUS_ORDER = [
   'IN_PROGRESS',
   'BLOCKED',
   'DONE',
+  'DELIVERED',
 ];
 
 export const TASK_STATUS_CONFIG = {
-  TODO: { label: 'A faire', shortLabel: 'A faire', color: '#1d4ed8', bg: '#eff6ff', headerBg: '#dbeafe' },
-  WAITING_STOCK: { label: 'Hors stock PF', shortLabel: 'Hors stock', color: '#7c3aed', bg: '#f5f3ff', headerBg: '#ede9fe' },
-  IN_PROGRESS: { label: 'En cours', shortLabel: 'En cours', color: '#c2410c', bg: '#fff7ed', headerBg: '#ffedd5' },
-  DONE: { label: 'Terminee', shortLabel: 'Terminee', color: '#15803d', bg: '#f0fdf4', headerBg: '#dcfce7' },
-  BLOCKED: { label: 'Bloquee', shortLabel: 'Bloquee', color: '#b91c1c', bg: '#fef2f2', headerBg: '#fee2e2' },
+  WAITING_STOCK: { label: 'Hors Stock PF',  shortLabel: 'Hors stock', color: '#7c3aed', bg: '#f5f3ff', headerBg: '#ede9fe' },
+  TODO:          { label: 'À Préparer',      shortLabel: 'À préparer', color: '#1d4ed8', bg: '#eff6ff', headerBg: '#dbeafe' },
+  IN_PROGRESS:   { label: 'En Préparation',  shortLabel: 'En prép.',   color: '#c2410c', bg: '#fff7ed', headerBg: '#ffedd5' },
+  DONE:          { label: 'Prêt à Livrer',   shortLabel: 'Prêt',       color: '#15803d', bg: '#f0fdf4', headerBg: '#dcfce7' },
+  BLOCKED:       { label: 'Bloquée',         shortLabel: 'Bloquée',    color: '#b91c1c', bg: '#fef2f2', headerBg: '#fee2e2' },
+  DELIVERED:     { label: 'Livré',           shortLabel: 'Livré',      color: '#374151', bg: '#f9fafb', headerBg: '#e5e7eb' },
 };
 
 export const TASK_PRIORITY_CONFIG = {
@@ -34,6 +36,7 @@ export const STATUS_COUNT_FIELDS = {
   IN_PROGRESS: 'totalInProgress',
   BLOCKED: 'totalBlocked',
   DONE: 'totalDone',
+  DELIVERED: 'totalDelivered',
 };
 
 export const TASK_STATUS_OPTIONS = TASK_STATUS_ORDER.map((status) => ({

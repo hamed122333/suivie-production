@@ -1,0 +1,98 @@
+/* PendingOrdersPage — super_admin view for monitoring imported orders */
+
+.por-page-wrap { }
+
+/* ── Stats bar ──────────────────────────────────────────────────────────── */
+.por-stats {
+  display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+}
+.por-stat {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 0.75rem 1.25rem; border-radius: 10px;
+  background: #f8fafc; border: 1px solid #e2e8f0; min-width: 100px;
+}
+.por-stat strong {
+  font-size: 1.4rem; font-weight: 800; color: #1e293b; line-height: 1.2;
+}
+.por-stat span {
+  font-size: 0.72rem; color: #64748b; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.03em; margin-top: 0.15rem;
+}
+.por-stat--warn  strong { color: #d97706; }
+.por-stat--ok    strong { color: #16a34a; }
+.por-stat--alert strong { color: #dc2626; }
+
+/* ── Section (group by commercial) ──────────────────────────────────────── */
+.por-section {
+  margin-bottom: 1.5rem;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+  overflow: hidden;
+}
+.por-section__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+}
+.por-section__head-left {
+  display: flex; align-items: center; gap: 0.6rem;
+}
+.por-section__head h3 {
+  margin: 0; font-size: 0.88rem; font-weight: 700; color: #1e293b;
+}
+.por-commercial-id {
+  font-size: 0.72rem; font-weight: 600; color: #64748b;
+  background: #e2e8f0; padding: 0.15rem 0.5rem; border-radius: 4px;
+}
+.por-badge {
+  font-size: 0.72rem; font-weight: 700; color: #1d4ed8;
+  background: #dbeafe; padding: 0.2rem 0.6rem; border-radius: 999px;
+}
+.por-badge--warn {
+  color: #92400e; background: #fef3c7;
+}
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+.por-table td { padding: 0.65rem 0.85rem; vertical-align: middle; border-bottom: 1px solid #f1f5f9; }
+.por-table th { padding: 0.6rem 0.85rem; font-size: 0.69rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; text-align: left; white-space: nowrap; background: #fafafa; border-bottom: 1px solid #e2e8f0; }
+
+/* ── Row states ─────────────────────────────────────────────────────────── */
+.por-row { transition: background 0.1s; }
+.por-row:hover { background: #f8fafc; }
+.por-row--anomaly { background: #fffbeb; }
+.por-row--anomaly:hover { background: #fef3c7; }
+
+/* ── Commercial tag ─────────────────────────────────────────────────────── */
+.por-commercial-tag {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.8rem; font-weight: 600; color: #b45309;
+  background: #fffbeb; padding: 0.2rem 0.55rem; border-radius: 6px;
+}
+
+/* ── Missing / anomaly tags ─────────────────────────────────────────────── */
+.por-missing {
+  font-size: 0.78rem; color: #dc2626; font-weight: 600;
+  background: #fef2f2; padding: 0.2rem 0.5rem; border-radius: 4px;
+}
+.por-anomaly-tag {
+  display: inline-flex; font-size: 0.7rem; font-weight: 700;
+  padding: 0.15rem 0.5rem; border-radius: 4px; white-space: nowrap;
+}
+.por-anomaly-tag--error {
+  color: #991b1b; background: #fef2f2; border: 1px solid #fecaca;
+}
+.por-anomaly-tag--warning {
+  color: #92400e; background: #fffbeb; border: 1px solid #fde68a;
+}
+
+/* ── Filter dropdown ────────────────────────────────────────────────────── */
+.por-filter {
+  display: flex; align-items: center; margin-left: auto;
+}
+.por-filter select {
+  min-width: 200px;
+}
+
+/* ── Override date-wrapper for the anomalies section ────────────────────── */
+.por-page-wrap .cr-date-wrapper[data-urgency="overdue"]  { background: #fef2f2; border-color: #fecaca; }
+.por-page-wrap .cr-date-wrapper[data-urgency="critical"] { background: #fff7ed; border-color: #fed7aa; }
+.por-page-wrap .cr-date-wrapper[data-urgency="soon"]     { background: #fffbeb; border-color: #fde68a; }

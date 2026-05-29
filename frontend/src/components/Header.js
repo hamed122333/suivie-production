@@ -2,23 +2,26 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { notificationAPI } from '../services/api';
+import { notificationAPI, taskAPI } from '../services/api';
 import { formatRelativeDate, getInitials } from '../utils/formatters';
 import useServerEvents from '../hooks/useServerEvents';
 import logo from '../assets/logo.png';
 import './Header.css';
 
 const ROLE_CONFIG = {
-  super_admin: { label: 'Suivi', icon: '✦', color: '#7c3aed' },
-  planner: { label: 'Planificateur', icon: '⚙', color: '#0052cc' },
-  commercial: { label: 'Commercial', icon: '✉', color: '#b45309' },
-  user: { label: 'Utilisateur', icon: '○', color: '#374151' },
+  super_admin: { label: 'Super Admin', icon: '✦', color: '#7c3aed' },
+  planner:     { label: 'Planificateur', icon: '⚙', color: '#0052cc' },
+  commercial:  { label: 'Commercial', icon: '✉', color: '#b45309' },
+  livreur:     { label: 'Livreur', icon: '🚚', color: '#065f46' },
+  user:        { label: 'Utilisateur', icon: '○', color: '#374151' },
 };
-const NOTIFICATION_POLL_INTERVAL_MS = 30000;
+// SSE handles real-time — polling is only a long-interval safety net (H2 fix: no 429)
+const NOTIFICATION_POLL_INTERVAL_MS = 60000;
 
-const Header = ({ toggleSidebar, isSidebarOpen }) => {
-  const { user, logout, isSuperAdmin, isPlanner, isCommercial } = useAuth();
-  const { workspaceId, workspaces, selectWorkspace } = useWorkspace();
+const Header = () => {
+  const { user, logout, isSuperAdmin, isPlanner, isCommercial, isLivreur } = useAuth();
+  // Keep workspace context imported for notification navigation (selectWorkspace)
+  const { selectWorkspace } = useWorkspace();
   const location = useLocation();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -28,12 +31,11 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
   const [notifLoading, setNotifLoading] = useState(false);
   const menuRef = useRef(null);
   const notifRef = useRef(null);
-  const canViewNotifications = isSuperAdmin || isPlanner || isCommercial;
+  const canViewNotifications = isSuperAdmin || isPlanner || isCommercial || isLivreur;
+  const canViewPending = isCommercial;
+  const [pendingCount, setPendingCount] = useState(0);
 
   const roleInfo = ROLE_CONFIG[user?.role] || ROLE_CONFIG.user;
-
-  const activeWorkspace = workspaces?.find(w => String(w.id) === String(workspaceId));
-  const wsName = workspaceId === 'all' ? 'Tous les espaces' : (activeWorkspace?.name || '');
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -61,15 +63,24 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
   useEffect(() => {
     if (!canViewNotifications) return;
     loadNotifications();
-
+    // Long-interval fallback only — SSE (notifications-updated) handles real-time delivery
     const interval = window.setInterval(loadNotifications, NOTIFICATION_POLL_INTERVAL_MS);
-    const onFocus = () => loadNotifications();
-    window.addEventListener('focus', onFocus);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
-    };
+    return () => window.clearInterval(interval);
   }, [canViewNotifications, loadNotifications]);
+
+  // Pending approval count for nav badge
+  useEffect(() => {
+    if (!canViewPending) return;
+    const load = async () => {
+      try {
+        const res = await taskAPI.getPendingApproval();
+        setPendingCount(res.data?.length || 0);
+      } catch (_) {}
+    };
+    load();
+    const timer = window.setInterval(load, NOTIFICATION_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [canViewPending]);
 
   // Real-time notifications via SSE
   useServerEvents({
@@ -104,17 +115,26 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
     }
 
     setNotifOpen(false);
-    // Switch workspace first (synchronous context update), then navigate
+    // Switch workspace context synchronously before navigating
     if (notification.workspace_id) {
       selectWorkspace(notification.workspace_id);
     }
-    // Use setTimeout(0) to let React flush the workspace state before navigation
-    setTimeout(() => navigate('/kanban'), 0);
+
+    // Route to the most relevant page based on notification type
+    const taskId = notification.task_id;
+    if (notification.type === 'task_created' || notification.type === 'orders_imported') {
+      navigate('/my-orders');
+    } else if (notification.type === 'ready_to_deliver') {
+      // Livreur: go straight to kanban scoped to DONE column
+      navigate(taskId ? `/kanban?taskId=${taskId}` : '/kanban');
+    } else {
+      navigate(taskId ? `/kanban?taskId=${taskId}` : '/kanban');
+    }
   };
 
   const initials = getInitials(user?.name);
 
-  const navItem = (to, label, icon) => {
+  const navItem = (to, label, icon, badge = 0) => {
     const active =
       location.pathname === to ||
       (to === '/kanban' && (location.pathname === '/' || location.pathname === '/kanban'));
@@ -122,6 +142,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
       <Link to={to} className={`header-nav__link ${active ? 'header-nav__link--active' : ''}`}>
         {icon && <span className="header-nav__icon" aria-hidden>{icon}</span>}
         {label}
+        {badge > 0 && <span className="header-nav__badge">{badge > 99 ? '99+' : badge}</span>}
       </Link>
     );
   };
@@ -129,29 +150,6 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
   return (
     <header className="app-header">
       <div className="app-header__top">
-
-        {/* Toggle Sidebar Button (Mobile Only) */}
-        <button
-          className="app-header__hamburger"
-          onClick={toggleSidebar}
-          aria-label="Menu"
-          aria-expanded={isSidebarOpen}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            {isSidebarOpen ? (
-              <>
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </>
-            ) : (
-              <>
-                <line x1="3" y1="12" x2="21" y2="12"></line>
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <line x1="3" y1="18" x2="21" y2="18"></line>
-              </>
-            )}
-          </svg>
-        </button>
 
         {/* Brand */}
         <div className="app-header__brand">
@@ -161,9 +159,6 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
             </span>
             <div className="app-header__brand-text">
               <span className="app-header__title">Suivi Production</span>
-              {wsName && (
-                <span className="app-header__workspace-tag">{wsName}</span>
-              )}
             </div>
           </Link>
         </div>
@@ -276,7 +271,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
                 <div className="app-header__dropdown-divider" />
                 {isSuperAdmin && (
                   <Link to="/users" className="app-header__dropdown-item" onClick={() => setMenuOpen(false)}>
-                    👤 Gestion des utilisateurs
+                    ◉ Gestion des utilisateurs
                   </Link>
                 )}
                 <button
@@ -295,9 +290,11 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
       {/* Navigation */}
       <nav className="header-nav" aria-label="Navigation principale">
         {navItem('/kanban', 'Production', '▤')}
+        {isSuperAdmin && navItem('/pending-orders', 'Commandes importées', '☰', pendingCount)}
+        {canViewPending && navItem('/my-orders', 'Mes commandes', '◈', pendingCount)}
         {navItem('/dashboard', 'Dashboard', '◱')}
         {navItem('/stock', 'Stock', '▦')}
-        {isSuperAdmin && navItem('/users', 'Utilisateurs', '👤')}
+        {isSuperAdmin && navItem('/users', 'Utilisateurs', '◉')}
       </nav>
     </header>
   );

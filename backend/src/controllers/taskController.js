@@ -13,6 +13,13 @@ const { normalizeCommentBody, normalizeTaskBatch, normalizeTaskDraft, normalizeT
 const ExcelJS = require('exceljs'); // Add ExcelJS import for exports
 const { normalizeArticleCode, isValidArticleCode } = require('../utils/articleCode');
 
+let broadcast;
+try {
+  broadcast = require('../services/sseService').broadcast;
+} catch (e) {
+  broadcast = () => {};
+}
+
 function formatDateFR(dateStr) {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
@@ -485,6 +492,7 @@ const taskController = {
         createdBy: req.user.id,
         workspaceId,
         status: resolved.status,
+        assignedTo: req.user.role === 'commercial' ? req.user.id : resolved.assignedTo,
         isKnownProduct: resolved.isKnownProduct,
         stockAvailableAtCreation: resolved.stockAvailableAtCreation,
         stockDeficit: resolved.stockDeficit,
@@ -536,6 +544,7 @@ const taskController = {
         if (!grouped.has(workspaceKey)) grouped.set(workspaceKey, []);
         grouped.get(workspaceKey).push({
           ...resolved,
+          assignedTo: resolved.assignedTo || (req.user.role === 'commercial' ? req.user.id : undefined),
           isKnownProduct: resolved.isKnownProduct,
           stockAvailableAtCreation: resolved.stockAvailableAtCreation,
           stockDeficit: resolved.stockDeficit,
@@ -629,7 +638,6 @@ const taskController = {
 
       const dateCol = pickHeaderColumn(headers, [(h) => h === 'date']);
       const orderCol = pickHeaderColumn(headers, [(h) => h.startsWith('piece n'), (h) => h === 'piece no', (h) => h === 'piece']);
-      const clientCol = pickHeaderColumn(headers, [(h) => h === 'nom', (h) => h.startsWith('client')]);
       const refCol = pickHeaderColumn(headers, [(h) => h === 'reference', (h) => h.includes('reference')]);
       const qtyCol = pickHeaderColumn(headers, [(h) => h === 'quantite', (h) => h.includes('quantite')]);
       const requestedDateCol = pickHeaderColumn(headers, [
@@ -637,64 +645,103 @@ const taskController = {
         (h) => h.includes('delai demand'),
         (h) => h.includes('date liv'),
       ]);
+      // Optional: Désignation / description column
+      const designationCol = pickHeaderColumn(headers, [(h) => h === 'designation', (h) => h.startsWith('designat')]);
+      // Optional: client/Nom column (new format doesn't have it)
+      const clientCol = pickHeaderColumn(headers, [(h) => h === 'nom', (h) => h.startsWith('client')]);
+      // Optional: commercial ID column → sets assigned_to and commercial_id on the task
+      const commercialCol = pickHeaderColumn(headers, [
+        (h) => h === 'commercial',
+        (h) => h === 'commerciale',
+        (h) => h === 'vendeur',
+        (h) => h === 'vendeure',
+        (h) => h === 'commercial 1',
+        (h) => h === 'commercial1',
+        (h) => h.startsWith('commercial'),
+      ]);
 
-      if (!dateCol || !clientCol || !refCol || !qtyCol) {
+      if (!dateCol || !refCol || !qtyCol) {
         return res.status(400).json({
-          error: 'Colonnes requises introuvables. Attendu: Date, Nom, Référence, Quantité (+ optionnel Pièce n°, délai demandé).',
+          error: 'Colonnes requises introuvables. Attendu: Date, Référence, Quantité (+ optionnel Pièce n°, Délai demandé, Nom, Commercial 1).',
         });
       }
 
       const groupedByWorkspace = new Map();
-      let skipped = 0;
+      const anomalies = [];
 
-      // Forward-fill context for "header" fields (Date / Piece no / Nom / Délai demandé).
+      // Forward-fill context for "header" fields.
       // Excel layout: first line of each order group fills all columns; subsequent lines
       // for the same order (same Pièce no) leave those columns empty — only Référence
-      // and Quantité change per line.  requestedDate resets when a new Pièce no appears.
+      // and Quantité change per line.
       const currentOrderContext = {
         orderDate: null,
         orderCode: null,
         clientName: null,
         requestedDate: null,
+        commercialId: null,
+        designation: null,
       };
 
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
 
-        const parsedOrderDate   = parseExcelDate(row.getCell(dateCol).value);
-        const parsedClientName  = `${row.getCell(clientCol).value || ''}`.trim();
-        const parsedOrderCode   = orderCol ? `${row.getCell(orderCol).value || ''}`.trim() : '';
+        const parsedOrderDate     = parseExcelDate(row.getCell(dateCol).value);
+        const parsedClientName    = clientCol ? `${row.getCell(clientCol).value || ''}`.trim() : '';
+        const parsedOrderCode     = orderCol ? `${row.getCell(orderCol).value || ''}`.trim() : '';
         const parsedRequestedDate = requestedDateCol ? parseExcelDate(row.getCell(requestedDateCol).value) : null;
+        const parsedCommercialId  = commercialCol ? `${row.getCell(commercialCol).value || ''}`.trim().toUpperCase() : '';
+        const parsedDesignation   = designationCol ? `${row.getCell(designationCol).value || ''}`.trim() : '';
 
-        // A non-empty Pièce no signals the start of a new order group → reset delivery date.
+        // Reset per-order fields when a new order code starts.
         if (parsedOrderCode && parsedOrderCode !== currentOrderContext.orderCode) {
           currentOrderContext.requestedDate = null;
+          currentOrderContext.commercialId = null;
+          currentOrderContext.clientName = null;
         }
 
-        if (parsedOrderDate)     currentOrderContext.orderDate     = parsedOrderDate;
-        if (parsedClientName)    currentOrderContext.clientName    = parsedClientName;
-        if (parsedOrderCode)     currentOrderContext.orderCode     = parsedOrderCode;
-        if (parsedRequestedDate) currentOrderContext.requestedDate = parsedRequestedDate;
+        if (parsedOrderDate)       currentOrderContext.orderDate      = parsedOrderDate;
+        if (parsedClientName)      currentOrderContext.clientName     = parsedClientName;
+        if (parsedOrderCode)       currentOrderContext.orderCode      = parsedOrderCode;
+        if (parsedRequestedDate)   currentOrderContext.requestedDate  = parsedRequestedDate;
+        if (parsedCommercialId)    currentOrderContext.commercialId   = parsedCommercialId;
+        if (parsedDesignation)     currentOrderContext.designation    = parsedDesignation;
 
-        const orderDate     = currentOrderContext.orderDate;
-        const clientName    = currentOrderContext.clientName;
-        const orderCode     = currentOrderContext.orderCode || null;
-        const requestedDate = currentOrderContext.requestedDate;
-        const itemReference = normalizeArticleCode(row.getCell(refCol).value);
-        const quantity      = parseExcelQuantity(row.getCell(qtyCol).value);
+        const orderDate      = currentOrderContext.orderDate || new Date().toISOString().slice(0, 10);
+        const clientName     = currentOrderContext.clientName;
+        const orderCode      = currentOrderContext.orderCode || null;
+        const requestedDate  = currentOrderContext.requestedDate;
+        const commercialId   = currentOrderContext.commercialId;
+        const designation    = currentOrderContext.designation;
+        const itemReference  = normalizeArticleCode(row.getCell(refCol).value) || 'INCONNU';
+        const quantity       = Number.isFinite(parseExcelQuantity(row.getCell(qtyCol).value)) ? parseExcelQuantity(row.getCell(qtyCol).value) : 0;
 
-        if (!orderDate || !clientName || !itemReference || !isValidArticleCode(itemReference) || !Number.isFinite(quantity) || quantity <= 0) {
-          skipped += 1;
-          return;
+        // Collect anomalies per row — never skip, always import.
+        const rowAnomalies = [];
+        if (!currentOrderContext.orderDate)               rowAnomalies.push('Date manquante');
+        if (!row.getCell(refCol).value)                   rowAnomalies.push('Référence article manquante');
+        else if (!isValidArticleCode(normalizeArticleCode(row.getCell(refCol).value)))
+          rowAnomalies.push(`Référence invalide : "${row.getCell(refCol).value}" (format CI/CV/DI/DV/FC/FD/PL attendu)`);
+        if (!Number.isFinite(parseExcelQuantity(row.getCell(qtyCol).value)) || parseExcelQuantity(row.getCell(qtyCol).value) <= 0)
+          rowAnomalies.push(`Quantité invalide : "${row.getCell(qtyCol).value}"`);
+        if (!parsedCommercialId)                          rowAnomalies.push('Commercial 1 non renseigné');
+
+        if (rowAnomalies.length > 0) {
+          anomalies.push({ row: rowNumber, reference: itemReference, reasons: rowAnomalies });
         }
+
+        const title = clientName
+          ? `${clientName} • ${itemReference}`
+          : orderCode
+            ? `${orderCode} • ${itemReference}`
+            : `${itemReference}`;
 
         const workspaceKey = buildWorkspaceName(orderDate);
         if (!groupedByWorkspace.has(workspaceKey)) {
           groupedByWorkspace.set(workspaceKey, []);
         }
         groupedByWorkspace.get(workspaceKey).push({
-          title: `${clientName} • ${itemReference}`,
-          description: `Import commande client • Quantité ${Number(quantity.toFixed(2))} pcs`,
+          title,
+          description: designation || `Import commande • Quantité ${Number(quantity.toFixed(2))} pcs`,
           priority: 'MEDIUM',
           clientName,
           orderCode: orderCode || null,
@@ -703,121 +750,302 @@ const taskController = {
           quantityUnit: 'pcs',
           plannedDate: requestedDate || orderDate,
           expectedAction: 'EXISTING_PRODUCT_AUTO_STOCK_CHECK',
+          _commercialId: commercialId || null,
         });
       });
 
       if (groupedByWorkspace.size === 0) {
-        return res.status(400).json({ error: 'Aucune ligne valide trouvée dans le fichier' });
+        return res.status(400).json({ error: 'Aucune ligne trouvée dans le fichier' });
+      }
+
+      // Resolve unique commercial IDs → user IDs (one DB lookup per unique ID)
+      const COMMERCIAL_ID_REGEX = /^VL\d{6}$/;
+      const commercialIdCache = new Map(); // commercialId → { userId, commercialId } | null
+      const unresolvedCommercials = new Set();
+      const invalidCommercialFormats = new Set();
+
+      for (const drafts of groupedByWorkspace.values()) {
+        for (const draft of drafts) {
+          if (draft._commercialId && !commercialIdCache.has(draft._commercialId)) {
+            commercialIdCache.set(draft._commercialId, null); // placeholder
+          }
+        }
+      }
+
+      for (const cid of commercialIdCache.keys()) {
+        // Validate format first
+        if (!COMMERCIAL_ID_REGEX.test(cid)) {
+          invalidCommercialFormats.add(cid);
+          commercialIdCache.set(cid, null);
+          continue;
+        }
+
+        const found = await UserModel.findByCommercialId(cid);
+        if (found) {
+          commercialIdCache.set(cid, { userId: found.id, commercialId: found.commercial_id });
+        } else {
+          unresolvedCommercials.add(cid);
+        }
       }
 
       const createdTasks = [];
       const workspacesTouched = [];
-      let skippedExisting = 0;
       for (const [workspaceName, drafts] of groupedByWorkspace.entries()) {
         const workspace = await WorkspaceModel.findOrCreateByName(workspaceName);
         workspacesTouched.push({ id: workspace.id, name: workspace.name });
 
-        const orderCodes = Array.from(new Set(drafts.map((d) => d.orderCode).filter(Boolean)));
-        const existingLines = await TaskModel.listExistingOrderLines({
-          workspaceId: workspace.id,
-          orderCodes,
-        });
-        const existingKeySet = new Set(
-          existingLines
-            .map((row) => `${row.order_code || ''}`.trim() + '||' + `${row.item_reference || ''}`.trim().toUpperCase())
-            .filter((k) => k !== '||')
-        );
-
-        const uniqueDrafts = drafts.filter((draft) => {
-          if (!draft.orderCode || !draft.itemReference) return true;
-          const key = `${draft.orderCode}`.trim() + '||' + `${draft.itemReference}`.trim().toUpperCase();
-          if (existingKeySet.has(key)) {
-            skippedExisting += 1;
-            return false;
-          }
-          return true;
-        });
-
-        if (uniqueDrafts.length === 0) {
-          continue;
-        }
-        const resolvedTasks = [];
-        for (const draft of uniqueDrafts) {
-          const resolved = await resolveCreationTarget(draft);
-          ensurePlannedDateForWaitingStock(resolved);
-          resolvedTasks.push({
-            ...resolved,
-            isKnownProduct: resolved.isKnownProduct,
-            stockAvailableAtCreation: resolved.stockAvailableAtCreation,
-            stockDeficit: resolved.stockDeficit,
-            urgentDatePending: isUrgentDate(resolved.dueDate) || isUrgentDate(resolved.plannedDate),
-            proposedDeliveryDate: resolved.plannedDate || null,
+        // All imported tasks land in PENDING_APPROVAL — commercial must review and approve
+        // before FIFO runs.  We keep commercial metadata but skip stock resolution.
+        const pendingTasks = drafts.map((draft) => {
+          const commercialInfo = draft._commercialId
+            ? (commercialIdCache.get(draft._commercialId) || null)
+            : null;
+          return {
+            title: draft.title,
+            description: draft.description,
+            priority: draft.priority || 'MEDIUM',
+            clientName: draft.clientName || null,
+            orderCode: draft.orderCode || null,
+            itemReference: draft.itemReference,
+            quantity: draft.quantity,
+            quantityUnit: draft.quantityUnit || 'pcs',
+            plannedDate: draft.plannedDate || null,
+            dueDate: draft.plannedDate || null,
+            expectedAction: draft.expectedAction || 'EXISTING_PRODUCT_AUTO_STOCK_CHECK',
+            taskType: 'PRODUCTION_ORDER',
+            assignedTo: commercialInfo?.userId || null,
+            commercialId: commercialInfo?.commercialId || draft._commercialId || null,
+            // No stock fields — FIFO runs only after commercial approval
+            isKnownProduct: null,
+            stockAvailableAtCreation: null,
+            stockDeficit: null,
+            urgentDatePending: false,
+            proposedDeliveryDate: draft.plannedDate || null,
             proposedByRole: 'commercial',
-            dateNegotiationStatus: resolved.plannedDate ? 'PENDING_PLANNER_REVIEW' : null,
+            dateNegotiationStatus: draft.plannedDate ? 'PENDING_PLANNER_REVIEW' : null,
             dateNegotiationComment: null,
-            dateNegotiationUpdatedAt: resolved.plannedDate ? new Date() : null,
-          });
-        }
+            dateNegotiationUpdatedAt: draft.plannedDate ? new Date() : null,
+          };
+        });
 
-        const todoDrafts = resolvedTasks.filter((task) => task.status === 'TODO');
-        const waitingDrafts = resolvedTasks.filter((task) => task.status === 'WAITING_STOCK');
+        const createdPending = await TaskModel.createMany({
+          tasks: pendingTasks,
+          createdBy: req.user.id,
+          workspaceId: workspace.id,
+          status: 'PENDING_APPROVAL',
+        });
 
-        const [createdTodo, createdWaiting] = await Promise.all([
-          todoDrafts.length
-            ? TaskModel.createMany({
-                tasks: todoDrafts,
-                createdBy: req.user.id,
-                workspaceId: workspace.id,
-                status: 'TODO',
-              })
-            : Promise.resolve([]),
-          waitingDrafts.length
-            ? TaskModel.createMany({
-                tasks: waitingDrafts,
-                createdBy: req.user.id,
-                workspaceId: workspace.id,
-                status: 'WAITING_STOCK',
-              })
-            : Promise.resolve([]),
-        ]);
-
-        const createdForWorkspace = [...createdTodo, ...createdWaiting];
-        if (createdForWorkspace.length > 0) {
+        if (createdPending.length > 0) {
           await TaskHistoryModel.logMany(
-            createdForWorkspace.map((task) => ({
+            createdPending.map((task) => ({
               taskId: task.id,
               actorId: req.user.id,
               actionType: 'created',
-              message: 'Tâche créée via import commandes client',
+              message: 'Commande importée — en attente de validation commerciale',
             }))
           );
-          createdTasks.push(...createdForWorkspace);
+          createdTasks.push(...createdPending);
         }
       }
 
-      await notifyTaskCreation(createdTasks, req.user);
-      const seenRefWs = new Set();
-      const allocationPairs = createdTasks
-        .filter((t) => t.item_reference && t.workspace_id)
-        .reduce((acc, t) => {
-          const key = `${t.item_reference}||${t.workspace_id}`;
-          if (!seenRefWs.has(key)) {
-            seenRefWs.add(key);
-            acc.push({ ref: t.item_reference, wsId: t.workspace_id });
-          }
-          return acc;
-        }, []);
-      await Promise.all(allocationPairs.map(({ ref }) => recalculateStockAllocation(ref)));
+      // No FIFO here — it runs when commercial approves each task
+
+      const warnings = [];
+      if (invalidCommercialFormats.size > 0) {
+        warnings.push(`Codes commerciaux invalides (format VL000001 attendu) : ${[...invalidCommercialFormats].join(', ')}`);
+      }
+      if (unresolvedCommercials.size > 0) {
+        warnings.push(`Codes commerciaux non trouvés dans la base (importez-les d'abord) : ${[...unresolvedCommercials].join(', ')}`);
+      }
+
       return res.status(201).json({
         imported: createdTasks.length,
-        skipped,
-        skippedExisting,
+        anomalies,
         workspacesCreatedOrUsed: groupedByWorkspace.size,
         workspaces: workspacesTouched,
+        warnings,
       });
     } catch (err) {
       console.error('Order import failed:', err);
       return res.status(500).json({ error: `Erreur import commandes: ${err.message}` });
+    }
+  },
+
+  // ── Commercial approves a selection of PENDING_APPROVAL tasks ───────────────
+  // Runs FIFO on each approved task → becomes TODO or WAITING_STOCK
+  async approveOrders(req, res) {
+    try {
+      const { taskIds } = req.body;
+      if (!Array.isArray(taskIds) || taskIds.length === 0) {
+        return res.status(400).json({ error: 'Aucune tâche sélectionnée' });
+      }
+
+      const approved = [];
+      const skipped = [];
+
+      for (const id of taskIds) {
+        const task = await TaskModel.getById(id);
+        if (!task) { skipped.push({ id, reason: 'introuvable' }); continue; }
+        if (task.status !== 'PENDING_APPROVAL') { skipped.push({ id, reason: 'statut incorrect' }); continue; }
+
+        // Check access: commercial can only approve their own tasks
+        const role = req.user?.role;
+        if (role === 'commercial') {
+          if (!req.user.commercial_id || task.commercial_id !== req.user.commercial_id) {
+            skipped.push({ id, reason: 'accès refusé' }); continue;
+          }
+        }
+
+        // Determine TODO vs WAITING_STOCK via stock check
+        const resolved = await resolveCreationTarget({
+          itemReference: task.item_reference,
+          quantity: task.quantity,
+          plannedDate: task.planned_date,
+          dueDate: task.due_date,
+          title: task.title,
+        });
+
+        const targetStatus = resolved.status; // 'TODO' or 'WAITING_STOCK'
+
+        const updated = await TaskModel.approveFromPending(id, targetStatus, {
+          isKnownProduct: resolved.isKnownProduct,
+          stockAvailableAtCreation: resolved.stockAvailableAtCreation,
+          stockDeficit: resolved.stockDeficit,
+        });
+
+        if (!updated) { skipped.push({ id, reason: 'mise à jour impossible' }); continue; }
+
+        await TaskHistoryModel.log({
+          taskId: id,
+          actorId: req.user.id,
+          actionType: 'status_changed',
+          fieldName: 'status',
+          oldValue: 'PENDING_APPROVAL',
+          newValue: targetStatus,
+          message: 'Commande validée par le commercial — envoyée en production',
+        });
+
+        if (task.item_reference) {
+          await recalculateStockAllocation(task.item_reference);
+        }
+        approved.push(id);
+      }
+
+      // Notify planners of newly approved tasks
+      if (approved.length > 0) {
+        const approvedTasks = await Promise.all(approved.map((id) => TaskModel.getById(id)));
+        await notifyTaskCreation(approvedTasks.filter(Boolean), req.user);
+      }
+
+      return res.status(200).json({
+        approved: approved.length,
+        skipped: skipped.length,
+        skippedDetails: skipped,
+        message: `${approved.length} commande${approved.length !== 1 ? 's' : ''} validée${approved.length !== 1 ? 's' : ''} et envoyées en production`,
+      });
+    } catch (err) {
+      console.error('Approve orders failed:', err);
+      return res.status(500).json({ error: `Erreur validation commandes: ${err.message}` });
+    }
+  },
+
+  // ── Commercial rejects / removes PENDING_APPROVAL tasks ────────────────────
+  async rejectOrders(req, res) {
+    try {
+      const { taskIds } = req.body;
+      if (!Array.isArray(taskIds) || taskIds.length === 0) {
+        return res.status(400).json({ error: 'Aucune tâche sélectionnée' });
+      }
+
+      let rejected = 0;
+      for (const id of taskIds) {
+        const task = await TaskModel.getById(id);
+        if (!task || task.status !== 'PENDING_APPROVAL') continue;
+
+        const role = req.user?.role;
+        if (role === 'commercial') {
+          if (!req.user.commercial_id || task.commercial_id !== req.user.commercial_id) continue;
+        }
+
+        await TaskModel.delete(id);
+        rejected++;
+      }
+
+      return res.status(200).json({
+        rejected,
+        message: `${rejected} commande${rejected !== 1 ? 's' : ''} supprimée${rejected !== 1 ? 's' : ''}`,
+      });
+    } catch (err) {
+      console.error('Reject orders failed:', err);
+      return res.status(500).json({ error: `Erreur suppression commandes: ${err.message}` });
+    }
+  },
+
+  // ── List PENDING_APPROVAL tasks for commercial review table ─────────────────
+  async getPendingApproval(req, res) {
+    try {
+      const role = req.user?.role;
+      const filters = {};
+
+      if (role === 'commercial') {
+        if (!req.user.commercial_id) {
+          return res.json([]);
+        }
+        filters.commercialId = req.user.commercial_id;
+      } else if (!['super_admin', 'planner'].includes(role)) {
+        return res.status(403).json({ error: 'Accès refusé' });
+      }
+
+      const tasks = await TaskModel.getAll({ ...filters, status: 'PENDING_APPROVAL' });
+
+      // Enrich with stock info — one DB query for all unique references
+      const refs = [...new Set(tasks.map(t => t.item_reference).filter(Boolean))];
+      const stockByRef = {};
+      if (refs.length > 0) {
+        const pool = require('../config/db');
+        const today = new Date().toISOString().slice(0, 10);
+        const stockRows = await pool.query(
+          `SELECT
+            si.article,
+            si.quantity,
+            si.ready_date,
+            si.designation,
+            COALESCE(alloc.total_reserved, 0) AS total_reserved
+           FROM stock_import si
+           LEFT JOIN LATERAL (
+             SELECT SUM(t.quantity) AS total_reserved
+             FROM tasks t
+             WHERE UPPER(t.item_reference) = UPPER(si.article)
+               AND t.status IN ('WAITING_STOCK','TODO','IN_PROGRESS','BLOCKED')
+           ) alloc ON TRUE
+           WHERE UPPER(si.article) = ANY($1::text[])`,
+          [refs.map(r => r.toUpperCase())]
+        );
+        for (const s of stockRows.rows) {
+          const stockQty = Number(s.quantity || 0);
+          const reserved = Number(s.total_reserved || 0);
+          const available = Math.max(0, stockQty - reserved);
+          const rdStr = s.ready_date ? String(s.ready_date).slice(0, 10) : null;
+          stockByRef[s.article.toUpperCase()] = {
+            stockQty,
+            reserved,
+            available,
+            isReady: rdStr ? rdStr <= today : false,
+            readyDate: rdStr,
+            designation: s.designation || null,
+          };
+        }
+      }
+
+      const enriched = tasks.map(t => ({
+        ...t,
+        stock: t.item_reference ? (stockByRef[t.item_reference.toUpperCase()] || null) : null,
+      }));
+
+      return res.json(enriched);
+    } catch (err) {
+      console.error('getPendingApproval failed:', err);
+      return res.status(500).json({ error: err.message });
     }
   },
 
@@ -881,6 +1109,26 @@ const taskController = {
         }
       } else if (newArticle && (quantityChanged || dateChanged)) {
         await recalculateStockAllocation(newArticle);
+      }
+
+      // Commercial escalation: priority → URGENT on WAITING_STOCK → notify planners
+      const priorityChanged = payload.priority && payload.priority !== previousTask.priority;
+      const isEscalation =
+        priorityChanged &&
+        payload.priority === 'URGENT' &&
+        task.status === 'WAITING_STOCK' &&
+        req.user.role === 'commercial';
+
+      if (isEscalation) {
+        const planners = await UserModel.findByRoles(['planner', 'super_admin']);
+        for (const planner of planners) {
+          await NotificationModel.createEscalationNotification({
+            taskId: task.id,
+            recipientUserId: planner.id,
+            commercialName: req.user.name,
+            taskTitle: task.title,
+          });
+        }
       }
 
       // Notify all commercials when a privileged user changes dates
@@ -985,18 +1233,36 @@ const taskController = {
         });
       }
 
-      // Notify all commercials on any status transition
+      // Notify affected users on any status transition (batch inserts — no N+1)
       if (previousTask.status !== task.status) {
+        const oldLabel = TASK_STATUS_LABELS[previousTask.status] || previousTask.status;
+        const newLabel = TASK_STATUS_LABELS[task.status] || task.status;
+
+        // All commercials except the actor
         const commercials = await UserModel.findByRoles(['commercial']);
-        for (const commercial of commercials) {
-          if (commercial.id === req.user.id) continue;
-          await NotificationModel.createStatusChangedNotification({
+        const commercialIds = commercials.map((c) => c.id).filter((id) => id !== req.user.id);
+        if (commercialIds.length > 0) {
+          await NotificationModel.createStatusChangedNotificationBatch({
             taskId: task.id,
-            recipientUserId: commercial.id,
+            recipientUserIds: commercialIds,
             changedByName: req.user.name,
-            oldStatusLabel: TASK_STATUS_LABELS[previousTask.status] || previousTask.status,
-            newStatusLabel: TASK_STATUS_LABELS[task.status] || task.status,
+            oldStatusLabel: oldLabel,
+            newStatusLabel: newLabel,
           });
+        }
+
+        // Notify all livreurs when a task becomes DONE ("Prêt à Livrer")
+        if (task.status === 'DONE') {
+          const livreurs = await UserModel.findByRoles(['livreur']);
+          const livreurIds = livreurs.map((l) => l.id);
+          if (livreurIds.length > 0) {
+            await NotificationModel.createReadyToDeliverNotifications({
+              taskId: task.id,
+              recipientUserIds: livreurIds,
+              plannerName: req.user.name,
+              taskTitle: task.title,
+            });
+          }
         }
       }
 
@@ -1107,30 +1373,25 @@ const taskController = {
         message: historyMessage,
       });
 
-      // Notify the other party of the negotiation
+      // Notify the other party — batch insert (no N+1)
       if (role === 'planner' || role === 'super_admin') {
         // Planner acting → notify all commercials
         const commercials = await UserModel.findByRoles(['commercial']);
-        for (const commercial of commercials) {
-          if (commercial.id === req.user.id) continue;
-          await NotificationModel.createDateNegotiationNotification({
-            taskId: task.id,
-            recipientUserId: commercial.id,
-            actorName: req.user.name,
-            action,
-            proposedDate: historyNewValue,
+        const ids = commercials.map((c) => c.id).filter((id) => id !== req.user.id);
+        if (ids.length > 0) {
+          await NotificationModel.createDateNegotiationNotificationBatch({
+            taskId: task.id, recipientUserIds: ids,
+            actorName: req.user.name, action, proposedDate: historyNewValue,
           });
         }
       } else if (role === 'commercial') {
-        // Commercial acting → notify all planners
+        // Commercial acting → notify all planners / super_admins
         const planners = await UserModel.findByRoles(['planner', 'super_admin']);
-        for (const planner of planners) {
-          await NotificationModel.createDateNegotiationNotification({
-            taskId: task.id,
-            recipientUserId: planner.id,
-            actorName: req.user.name,
-            action,
-            proposedDate: historyNewValue,
+        const ids = planners.map((p) => p.id);
+        if (ids.length > 0) {
+          await NotificationModel.createDateNegotiationNotificationBatch({
+            taskId: task.id, recipientUserIds: ids,
+            actorName: req.user.name, action, proposedDate: historyNewValue,
           });
         }
       }
@@ -1331,6 +1592,57 @@ const taskController = {
       }
       console.error('Type conversion error:', err);
       res.status(500).json({ error: 'Erreur lors de la conversion de type' });
+    }
+  },
+
+  // POST /tasks/:id/mark-delivered — livreur (or super_admin) marks a DONE task as DELIVERED
+  async markDelivered(req, res) {
+    try {
+      const task = await TaskModel.getById(req.params.id);
+      if (!task) return res.status(404).json({ error: 'Tâche introuvable' });
+
+      if (task.status !== 'DONE') {
+        return res.status(400).json({ error: 'Seules les tâches avec le statut "Terminée" peuvent être marquées comme livrées.' });
+      }
+
+      const updatedTask = await TaskModel.updateStatus(req.params.id, 'DELIVERED', null, req.user.id, req.user.role);
+      if (!updatedTask) return res.status(404).json({ error: 'Tâche introuvable' });
+
+      await TaskHistoryModel.log({
+        taskId: updatedTask.id,
+        actorId: req.user.id,
+        actionType: 'status_updated',
+        fieldName: 'status',
+        oldValue: 'DONE',
+        newValue: 'DELIVERED',
+        message: `Statut changé de ${TASK_STATUS_LABELS['DONE']} vers ${TASK_STATUS_LABELS['DELIVERED']}`,
+      });
+
+      // Notify planners + assigned commercial — one batch each (no N+1)
+      const planners = await UserModel.findByRoles(['planner', 'super_admin']);
+      const plannerIds = planners.map((p) => p.id).filter((id) => id !== req.user.id);
+
+      // Collect all commercial recipients: assigned_to + all other commercials
+      const allCommercials = await UserModel.findByRoles(['commercial']);
+      const commercialIds = allCommercials.map((c) => c.id).filter((id) => id !== req.user.id);
+
+      const allRecipients = [...new Set([...plannerIds, ...commercialIds])];
+      if (allRecipients.length > 0) {
+        await NotificationModel.createStatusChangedNotificationBatch({
+          taskId: updatedTask.id,
+          recipientUserIds: allRecipients,
+          changedByName: req.user.name || 'Livreur',
+          oldStatusLabel: TASK_STATUS_LABELS['DONE'],
+          newStatusLabel: TASK_STATUS_LABELS['DELIVERED'],
+        });
+      }
+
+      broadcast('tasks-updated', { source: 'mark_delivered', taskId: updatedTask.id });
+
+      return res.json(updatedTask);
+    } catch (err) {
+      console.error('markDelivered error:', err);
+      return res.status(500).json({ error: 'Erreur serveur' });
     }
   }
 };

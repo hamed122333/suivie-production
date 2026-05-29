@@ -7,6 +7,7 @@ const API_URL =
 
 const api = axios.create({
   baseURL: API_URL,
+  timeout: 20000, // 20 s — prevents hung requests from leaking forever
 });
 
 // Attach token to every request
@@ -18,15 +19,14 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle 401 responses
+// Handle 401 responses — use SPA navigation (no full reload)
+// clearAuthSession dispatches AUTH_CHANGED_EVENT → AuthContext zeros out user
+// → ProtectedRoute redirects to /login via React Router
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      clearAuthSession();
-      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-        window.location.assign('/login');
-      }
+      clearAuthSession(); // clears localStorage + fires AUTH_CHANGED_EVENT
     }
     return Promise.reject(error);
   }
@@ -46,6 +46,9 @@ export const notificationAPI = {
 };
 
 export const taskAPI = {
+  getPendingApproval: () => api.get('/tasks/pending-approval'),
+  approveOrders: (taskIds) => api.post('/tasks/approve', { taskIds }),
+  rejectOrders: (taskIds) => api.post('/tasks/reject', { taskIds }),
   getAll: (params = {}) => api.get('/tasks', { params }),
   exportExcel: (params = {}) => api.get('/tasks/export', { params, responseType: 'blob' }),
   getById: (id) => api.get(`/tasks/${id}`),
@@ -65,12 +68,16 @@ export const taskAPI = {
   confirmPredictive: (id) => api.put(`/tasks/${id}/confirm-predictive`),
 
   convertType: (id, newType) => api.post(`/tasks/${id}/convert-type`, { newType }),
+  markDelivered: (id) => api.post(`/tasks/${id}/mark-delivered`),
 };
 
 export const userAPI = {
   getAll: () => api.get('/users'),
-  create: (data) => api.post('/users', data),
+  create: (data) => api.post('/users', { ...data, commercialId: data.commercialId || undefined }),
   delete: (id) => api.delete(`/users/${id}`),
+  importCommercials: (formData) => api.post('/users/import-commercials', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
 };
 
 export const dashboardAPI = {

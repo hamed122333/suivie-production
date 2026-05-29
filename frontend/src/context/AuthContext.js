@@ -29,9 +29,16 @@ export const AuthProvider = ({ children }) => {
     if (!token) {
       setUser(null);
       setLoading(false);
-      return () => {
-        cancelled = true;
-      };
+      return () => { cancelled = true; };
+    }
+
+    // If the user is already stored for this exact token (e.g. right after login()),
+    // skip the redundant /auth/me round-trip and hydrate from storage directly.
+    const stored = readStoredAuth();
+    if (stored.user && stored.token === token) {
+      setUser(stored.user);
+      setLoading(false);
+      return () => { cancelled = true; };
     }
 
     setLoading(true);
@@ -49,15 +56,11 @@ export const AuthProvider = ({ children }) => {
         setToken(null);
       })
       .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+    return () => { cancelled = true; };
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = (userData, authToken) => {
     setUser(userData);
@@ -83,6 +86,7 @@ export const AuthProvider = ({ children }) => {
         isSuperAdmin: user?.role === 'super_admin',
         isPlanner: user?.role === 'planner',
         isCommercial: user?.role === 'commercial',
+        isLivreur: user?.role === 'livreur',
         // Le commercial cree les taches, uniquement dans TODO.
         canCreateTask: user?.role === 'commercial',
         canCreateWorkspace: false, // workspaces are now generated automatically each day
@@ -90,6 +94,8 @@ export const AuthProvider = ({ children }) => {
         canViewAll: user?.role === 'super_admin' || user?.role === 'planner',
         // Le planificateur gère les mouvements et les statuts.
         canChangeStatus: user?.role === 'planner',
+        // Le livreur (ou super_admin) peut marquer une tâche comme livrée.
+        canMarkDelivered: user?.role === 'livreur' || user?.role === 'super_admin',
       }}
     >
       {children}

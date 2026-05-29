@@ -1,118 +1,74 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from '../constants/task';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ARTICLE_CATEGORY_CONFIG, TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from '../constants/task';
 import { taskAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { formatDate, formatDateTime, formatNumber, formatRelativeDate, getInitials } from '../utils/formatters';
+import { formatDate, formatDateTime, formatNumber, getInitials } from '../utils/formatters';
 import TaskTypeToggle from './TaskTypeToggle';
 import './TaskDetailsPanel.css';
 
-const DETAIL_FIELDS = [
-  { key: 'client_name', label: 'Client', icon: '👤' },
-  { key: 'item_reference', label: 'Article', icon: '📦' },
-  { key: 'planned_date', label: 'Date livraison', icon: '🚚', format: (val) => formatDate(val) },
-  { key: 'due_date', label: 'Échéance', icon: '🗓️', format: (val) => formatDate(val), hideIf: (task) => task.due_date === task.planned_date },
-  {
-    key: 'quantity',
-    label: 'Quantité',
-    icon: '📊',
-    format: (val, task) => `${formatNumber(val)} ${task.quantity_unit || 'pcs'}`,
-  },
-];
+/* ─── pure helpers ───────────────────────────────────────────────────────── */
 
-function buildOperationalSummary(task, history) {
-  if (!task) return 'Aucune donnée.';
-  const qty = Number(task.quantity || 0);
-  const planned = task.planned_date ? formatDate(task.planned_date) : null;
-  const expectedAction = `${task.expected_action || ''}`.toUpperCase();
-  const historyText = (history || []).map((entry) => `${entry.message || ''} ${entry.field_name || ''}`.toLowerCase()).join(' | ');
-  const dateNegotiated = historyText.includes('date') || historyText.includes('planifie');
-
-  if (task.status === 'WAITING_STOCK') {
-    if (expectedAction.includes('NEW_PRODUCT')) {
-      return planned
-        ? `Nouveau produit détecté (réf. ${task.item_reference || '—'}) avec ${qty || '—'} pcs demandés. Le commercial a proposé une livraison au ${planned}. En attente de validation stock/planning.`
-        : `Nouveau produit détecté (réf. ${task.item_reference || '—'}) avec ${qty || '—'} pcs demandés. En attente de date prévue et validation planner.`;
-    }
-    return planned
-      ? `Stock insuffisant pour ${task.item_reference || 'cet article'}: ${qty || '—'} pcs demandés. Livraison prévue au ${planned}. En attente de confirmation stock pour passage en A faire.`
-      : `Stock insuffisant pour ${task.item_reference || 'cet article'}: ${qty || '—'} pcs demandés. En attente d'une date prévue et de confirmation stock.`;
+function fmtVal(v) {
+  if (v == null || v === '') return v;
+  const s = `${v}`.trim();
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
   }
-
-  if (task.status === 'TODO') {
-    if (dateNegotiated) {
-      return planned
-        ? `Stock confirmé. La date de livraison a été négociée puis fixée au ${planned}. La tâche est prête pour lancement production.`
-        : 'Stock confirmé après négociation. La tâche est revenue en A faire pour lancement.';
-    }
-    return planned
-      ? `Stock disponible et validé. Date prévue: ${planned}. Tâche prête pour lancement production.`
-      : 'Stock disponible et validé. Tâche prête pour lancement production.';
-  }
-
-  if (task.status === 'IN_PROGRESS') return 'Ordre de fabrication en cours d’exécution.';
-  if (task.status === 'BLOCKED') return `Tâche bloquée${task.blocked_reason ? `: ${task.blocked_reason}` : '.'}`;
-  if (task.status === 'DONE') return 'Production terminée. Sortie de stock appliquée.';
-  return task.description || 'Suivi en cours.';
+  return s;
 }
 
-function formatHistoryValue(value) {
-  if (value == null || value === '' || value === '—') return value;
-  const str = `${value}`.trim();
-  // Try to parse as a date — covers ISO strings, "Tue Apr 28..." JS date strings, etc.
-  const d = new Date(str);
-  if (!Number.isNaN(d.getTime())) {
-    const day   = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year  = d.getFullYear();
-    return `${day}/${month}/${year}`;
-  }
-  return str;
+function getPrefix(ref) {
+  if (!ref) return '';
+  const u = ref.toUpperCase();
+  const dash = u.indexOf('-');
+  return dash > 0 ? u.slice(0, dash) : u.slice(0, 2);
 }
 
-function buildDateNegotiationSteps(task, history) {
-  const entries = Array.isArray(history) ? [...history].reverse() : [];
-  const steps = [];
-
-  if (task?.planned_date) {
-    steps.push({
-      label: 'Date prévue actuelle',
-      detail: `${formatDate(task.planned_date)}`,
-    });
-  }
-
-  entries.forEach((entry) => {
-    const fieldName = `${entry.field_name || ''}`.toLowerCase();
-    const message = `${entry.message || ''}`.toLowerCase();
-    const actor = entry.actor_name || 'Système';
-    const createdAt = formatDateTime(entry.created_at);
-    const oldValue = entry.old_value ? formatHistoryValue(entry.old_value) : '—';
-    const newValue = entry.new_value ? formatHistoryValue(entry.new_value) : '—';
-
-    if (fieldName.includes('planned') || fieldName.includes('date') || message.includes('date')) {
-      steps.push({
-        label: `${actor} a mis à jour la date`,
-        detail: `${oldValue} → ${newValue} (${createdAt})`,
-      });
-      return;
-    }
-
-    if (entry.action_type === 'stock_confirmed' || message.includes('stock confirme') || message.includes('auto-check stock')) {
-      steps.push({
-        label: 'Validation planner / système',
-        detail: `${entry.message || 'Stock confirmé'} (${createdAt})`,
-      });
-    }
-  });
-
-  return steps;
+function daysFromNow(dateStr) {
+  if (!dateStr) return null;
+  return Math.ceil(
+    (new Date(dateStr).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000
+  );
 }
 
+/* Build a conversation thread from history entries related to date negotiation */
+function buildNegotThread(history) {
+  const isDateRelated = (e) => {
+    const a = (e.action_type || '').toLowerCase();
+    const f = (e.field_name  || '').toLowerCase();
+    const m = (e.message     || '').toLowerCase();
+    return a === 'date_negotiation'
+      || f.includes('proposed_delivery')
+      || f.includes('planned_date')
+      || m.includes('proposé une date')
+      || m.includes('date proposée')
+      || m.includes('date acceptée')
+      || m.includes('date refusée')
+      || m.includes('date négociée')
+      || m.includes('date de livraison');
+  };
+  // Reverse so oldest is first (chat order: top = oldest, bottom = newest)
+  return [...history].filter(isDateRelated).reverse();
+}
+
+/* ─── status config ──────────────────────────────────────────────────────── */
+const NEGOT_CFG = {
+  PENDING_PLANNER_REVIEW:    { label: 'En attente planner',    color: '#7c3aed', bg: '#f5f3ff' },
+  PENDING_COMMERCIAL_REVIEW: { label: 'En attente commercial', color: '#c2410c', bg: '#fff7ed' },
+  ACCEPTED:                  { label: '✓ Date validée',        color: '#15803d', bg: '#f0fdf4' },
+  REJECTED:                  { label: 'Refusée',               color: '#b91c1c', bg: '#fef2f2' },
+};
+
+const HISTORY_PREVIEW = 5;
+
+/* ─── component ──────────────────────────────────────────────────────────── */
 const TaskDetailsPanel = ({
   open,
   taskId,
   refreshSignal = 0,
-  canManage = false,
-  canEdit = false,
+  canManage  = false,
+  canEdit    = false,
   canConfirmPredictive = false,
   onClose,
   onEditTask,
@@ -120,206 +76,178 @@ const TaskDetailsPanel = ({
   onTaskUpdated,
   onConfirmPredictive,
 }) => {
-  const { isPlanner, isCommercial } = useAuth();
-  const [detail, setDetail] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [savingAction, setSavingAction] = useState(false);
-  const [dateProposal, setDateProposal] = useState('');
+  const { isPlanner, isCommercial, canMarkDelivered } = useAuth();
 
+  const [detail,         setDetail]         = useState(null);
+  const [loading,        setLoading]        = useState(false);
+  const [error,          setError]          = useState('');
+  const [savingAction,   setSavingAction]   = useState(false);
+  const [dateProposal,   setDateProposal]   = useState('');
+  const [proposeOpen,    setProposeOpen]    = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
+
+  /* ─ fetch ─ */
   const fetchDetail = useCallback(async () => {
     if (!taskId || !open) return;
-
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
-      const response = await taskAPI.getDetail(taskId);
-      setDetail(response.data);
+      const res = await taskAPI.getDetail(taskId);
+      setDetail(res.data);
     } catch (err) {
       setError(err?.response?.data?.error || 'Impossible de charger la fiche.');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [open, taskId]);
 
-  useEffect(() => {
-    if (open && taskId) {
-      fetchDetail();
-    }
-  }, [open, taskId, refreshSignal, fetchDetail]);
+  useEffect(() => { if (open && taskId) fetchDetail(); }, [open, taskId, refreshSignal, fetchDetail]);
 
   useEffect(() => {
     if (!open) return undefined;
-
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleEscape);
-    return () => {
-      window.removeEventListener('keydown', handleEscape);
-    };
+    const fn = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', fn);
+    return () => window.removeEventListener('keydown', fn);
   }, [open, onClose]);
 
   useEffect(() => {
-    if (!open) {
-      setDetail(null);
-      setError('');
-      setDateProposal('');
-    }
+    if (!open) { setDetail(null); setError(''); setDateProposal(''); setProposeOpen(false); setShowAllHistory(false); }
   }, [open]);
+
+  const task    = detail?.task;
+  // Memoize the raw array so it's a stable reference for downstream useMemo hooks
+  const history = useMemo(() => detail?.history || [], [detail]);
+
+  /* derived — computed before any early return so hook order is stable */
+  const statusCfg   = TASK_STATUS_CONFIG[task?.status]    || TASK_STATUS_CONFIG.TODO;
+  const priorityCfg = TASK_PRIORITY_CONFIG[task?.priority] || TASK_PRIORITY_CONFIG.MEDIUM;
+  const prefix      = getPrefix(task?.item_reference);
+  const catCfg      = ARTICLE_CATEGORY_CONFIG[prefix] || null;
+  const days        = daysFromNow(task?.planned_date);
+  const daysLabel   = days == null ? null : days < 0 ? `${Math.abs(days)}j retard` : days === 0 ? "Aujourd'hui" : `J−${days}`;
+
+  const negStatus = task?.date_negotiation_status;
+  const negCfg    = negStatus ? NEGOT_CFG[negStatus] : null;
+  const plannerCanConfirm    = isPlanner    && negStatus === 'PENDING_PLANNER_REVIEW';
+  const commercialCanConfirm = isCommercial && negStatus === 'PENDING_COMMERCIAL_REVIEW';
+  const myTurnToAct          = plannerCanConfirm || commercialCanConfirm;
+  const canAct               = isCommercial || isPlanner;
+
+  const negotThread    = useMemo(() => buildNegotThread(history), [history]);
+  const visibleHistory = useMemo(
+    () => showAllHistory ? [...history].reverse() : [...history].reverse().slice(0, HISTORY_PREVIEW),
+    [history, showAllHistory]
+  );
 
   if (!open) return null;
 
-  const task = detail?.task;
-  const history = detail?.history || [];
-  const statusConfig = task ? TASK_STATUS_CONFIG[task.status] || TASK_STATUS_CONFIG.TODO : TASK_STATUS_CONFIG.TODO;
-  const priorityConfig = task ? TASK_PRIORITY_CONFIG[task.priority] || TASK_PRIORITY_CONFIG.MEDIUM : TASK_PRIORITY_CONFIG.MEDIUM;
-  const operationalSummary = buildOperationalSummary(task, history);
-  const dateNegotiationSteps = buildDateNegotiationSteps(task, history);
-  const dateNegotiationLabelMap = {
-    PENDING_PLANNER_REVIEW: 'En attente planner',
-    PENDING_COMMERCIAL_REVIEW: 'En attente commercial',
-    ACCEPTED: 'Date validée',
-    REJECTED: 'Refusée',
-  };
-  const plannerCanConfirmCommercialDate =
-    isPlanner && task?.date_negotiation_status === 'PENDING_PLANNER_REVIEW';
-  const commercialCanConfirmPlannerDate =
-    isCommercial && task?.date_negotiation_status === 'PENDING_COMMERCIAL_REVIEW';
-  const canConfirmCurrentProposedDate =
-    plannerCanConfirmCommercialDate || commercialCanConfirmPlannerDate;
-  const handleProposeDate = async () => {
-    if (!task) return;
-    if (!dateProposal) {
-      setError('Date proposée obligatoire.');
-      return;
-    }
-    setSavingAction(true);
-    setError('');
+  /* ─ actions ─ */
+  const handlePropose = async () => {
+    if (!task || !dateProposal) { setError('Veuillez choisir une date.'); return; }
+    setSavingAction(true); setError('');
     try {
-      await taskAPI.dateNegotiation(task.id, {
-        action: 'PROPOSE',
-        proposedDate: dateProposal,
-        comment: null,
-      });
-      setDateProposal('');
-      await fetchDetail();
-      await onTaskUpdated?.();
+      await taskAPI.dateNegotiation(task.id, { action: 'PROPOSE', proposedDate: dateProposal, comment: null });
+      setDateProposal(''); setProposeOpen(false);
+      await fetchDetail(); await onTaskUpdated?.();
     } catch (err) {
-      setError(err?.response?.data?.error || 'Impossible de traiter la négociation de date.');
-    } finally {
-      setSavingAction(false);
-    }
+      setError(err?.response?.data?.error || 'Impossible de proposer cette date.');
+    } finally { setSavingAction(false); }
   };
 
-  const handleConfirmDate = async () => {
+  const handleAccept = async () => {
     if (!task) return;
-    setSavingAction(true);
-    setError('');
+    setSavingAction(true); setError('');
     try {
-      await taskAPI.dateNegotiation(task.id, {
-        action: 'ACCEPT',
-        proposedDate: null,
-        comment: null,
-      });
-      await fetchDetail();
-      await onTaskUpdated?.();
+      await taskAPI.dateNegotiation(task.id, { action: 'ACCEPT', proposedDate: null, comment: null });
+      await fetchDetail(); await onTaskUpdated?.();
     } catch (err) {
       setError(err?.response?.data?.error || 'Impossible de confirmer la date.');
-    } finally {
-      setSavingAction(false);
-    }
+    } finally { setSavingAction(false); }
   };
 
+  /* ═══════════════════════════════════════════════════════════ render ═══ */
   return (
     <div className="task-detail__overlay" onClick={onClose}>
-      <aside className="task-detail" onClick={(event) => event.stopPropagation()}>
+      <aside className="task-detail" onClick={(e) => e.stopPropagation()}>
+
+        {/* ╔══════════════════════════════════════════ HEADER ══════════╗ */}
         <div className="task-detail__header">
-          <div>
-            <div className="task-detail__eyebrow">Fiche de suivi production</div>
-            <h3 className="task-detail__title">{task ? task.title : 'Chargement...'}</h3>
+          <div className="task-detail__header-left">
+            <div className="task-detail__title-row">
+              {catCfg && (
+                <span className="task-detail__prefix-badge" style={{ background: catCfg.bg, color: catCfg.color }}>
+                  {prefix}
+                </span>
+              )}
+              <h3 className="task-detail__title">{task ? task.title : 'Chargement...'}</h3>
+            </div>
+
             {task && (
               <div className="task-detail__badges">
-                <span className="task-detail__badge" style={{ background: statusConfig.bg, color: statusConfig.color }}>
-                  {statusConfig.label}
+                <span className="task-detail__badge" style={{ background: statusCfg.bg, color: statusCfg.color }}>
+                  {statusCfg.label}
                 </span>
-                <span className="task-detail__badge" style={{ background: priorityConfig.bg, color: priorityConfig.color }}>
-                  Priorite {priorityConfig.label.toLowerCase()}
+                <span className="task-detail__badge" style={{ background: priorityCfg.bg, color: priorityCfg.color }}>
+                  {priorityCfg.label}
                 </span>
-                <span className="task-detail__badge task-detail__badge--neutral">{`SP-${task.id}`}</span>
+                {task.task_type === 'PREDICTIVE' && (
+                  <span className="task-detail__badge task-detail__badge--info">Prévisionnel</span>
+                )}
               </div>
             )}
+            {task?.description && <p className="task-detail__subtitle">{task.description}</p>}
           </div>
+
           <div className="task-detail__header-actions">
             {canEdit && (
               <>
-                <button type="button" className="btn btn-secondary" onClick={() => onEditTask?.(task)}>
-                  Modifier
-                </button>
-                <button type="button" className="btn btn-secondary task-detail__danger-btn" onClick={() => onDeleteTask?.(task.id)}>
-                  Supprimer
-                </button>
+                <button type="button" className="btn btn-secondary tdp-icon-btn" title="Modifier" onClick={() => onEditTask?.(task)}>✏️</button>
+                <button type="button" className="btn btn-secondary tdp-icon-btn task-detail__danger-btn" title="Supprimer" onClick={() => onDeleteTask?.(task.id)}>🗑️</button>
               </>
             )}
-            <button type="button" className="modal-close" onClick={onClose}>
-              ✕
-            </button>
+            <button type="button" className="modal-close" onClick={onClose}>✕</button>
           </div>
         </div>
 
+        {/* loading / error states */}
         {loading && !task ? (
-          <div className="task-detail__loading">
-            <div className="task-detail__spinner" />
-            <p>Chargement de la fiche...</p>
-          </div>
+          <div className="task-detail__loading"><div className="task-detail__spinner" /><p>Chargement...</p></div>
         ) : error && !task ? (
-          <div className="task-detail__error">{error}</div>
+          <div className="task-detail__error" style={{ margin: '1rem 1.2rem' }}>{error}</div>
         ) : task ? (
           <>
-            {error && <div className="task-detail__error">{error}</div>}
+            {error && <div className="task-detail__error" style={{ margin: '0.5rem 1.2rem 0' }}>{error}</div>}
 
-            <section className="task-panel-section task-details">
-              <h4 className="task-panel-subtitle">Détails essentiels</h4>
-              <div className="task-details-grid">
-                {DETAIL_FIELDS.filter((f) => task[f.key] && !(f.hideIf && f.hideIf(task))).map((f) => (
-                  <div key={f.key} className="task-detail-item">
-                    <span className="task-detail-label" aria-hidden>
-                      {f.icon} {f.label}
-                    </span>
-                    <strong className="task-detail-value">
-                      {f.format ? f.format(task[f.key], task) : task[f.key]}
-                    </strong>
-                  </div>
-                ))}
+            {/* ╔══════════════════════════════════════ KPI STRIP ════════╗ */}
+            <div className="task-detail__kpi-strip">
+              <div className="task-detail__kpi">
+                <span>Client</span>
+                <strong title={task.client_name}>{task.client_name || '—'}</strong>
               </div>
-              <div className="task-detail__meta-strip">
-                <div className="task-detail__meta-pill">
-                  <span>Créé le</span>
-                  <strong>{formatDateTime(task.created_at)}</strong>
-                </div>
-                <div className="task-detail__meta-pill">
-                  <span>Dernière maj</span>
-                  <strong>{formatRelativeDate(task.updated_at || task.created_at)}</strong>
-                </div>
+              <div className="task-detail__kpi">
+                <span>Référence</span>
+                <strong className="task-detail__kpi-mono">{task.item_reference || '—'}</strong>
               </div>
-            </section>
+              <div className="task-detail__kpi">
+                <span>Quantité</span>
+                <strong>{formatNumber(task.quantity)} <em>{task.quantity_unit || 'pcs'}</em></strong>
+              </div>
+              <div className={`task-detail__kpi${days != null && days < 0 ? ' task-detail__kpi--danger' : days != null && days <= 2 ? ' task-detail__kpi--warn' : ''}`}>
+                <span>Livraison</span>
+                <strong>{task.planned_date ? formatDate(task.planned_date) : '—'}</strong>
+                {daysLabel && <small className="task-detail__kpi-sub">{daysLabel}</small>}
+              </div>
+            </div>
 
+            {/* ╔══════════════════════════════════ STOCK SECTION ════════╗ */}
             {(task.stock_available_at_creation != null || task.stock_deficit != null || task.stock_allocated != null) && (
               <section className="task-detail__section">
                 <div className="task-detail__section-head">
-                  <h4>Stock & Approvisionnement</h4>
+                  <h4>📦 Stock & Approvisionnement</h4>
                   {task.priority_order != null && (
-                    <span className="task-detail__stock-order">
-                      Priorité #{task.priority_order}
-                    </span>
+                    <span className="tdp-fifo-pill">FIFO #{task.priority_order}</span>
                   )}
                 </div>
 
-                {/* Stock allocation progress bar */}
-                {task.quantity != null && task.quantity > 0 && (
+                {/* allocation bar */}
+                {task.quantity > 0 && (
                   <div className="task-detail__stock-bar-wrap">
                     <div className="task-detail__stock-bar">
                       <div
@@ -334,166 +262,201 @@ const TaskDetailsPanel = ({
                   </div>
                 )}
 
+                {/* numbers grid */}
                 <div className="task-details-grid">
                   {task.stock_available_at_creation != null && (
                     <div className="task-detail-item">
-                      <span className="task-detail-label" aria-hidden>📦 Stock global</span>
+                      <span className="task-detail-label">Stock global</span>
                       <strong className="task-detail-value">{formatNumber(task.stock_available_at_creation)} {task.quantity_unit || 'pcs'}</strong>
-                    </div>
-                  )}
-                  {task.quantity != null && (
-                    <div className="task-detail-item">
-                      <span className="task-detail-label" aria-hidden>🛒 Demandé</span>
-                      <strong className="task-detail-value">{formatNumber(task.quantity)} {task.quantity_unit || 'pcs'}</strong>
                     </div>
                   )}
                   {task.stock_allocated != null && (
                     <div className="task-detail-item">
-                      <span className={`task-detail-label ${Number(task.stock_allocated) >= Number(task.quantity) ? 'task-detail-label--success' : ''}`} aria-hidden>
-                        ✓ Alloué
-                      </span>
+                      <span className={`task-detail-label ${Number(task.stock_allocated) >= Number(task.quantity) ? 'task-detail-label--success' : ''}`}>Alloué</span>
                       <strong className={`task-detail-value ${Number(task.stock_allocated) >= Number(task.quantity) ? 'task-detail-value--success' : ''}`}>
                         {formatNumber(task.stock_allocated)} {task.quantity_unit || 'pcs'}
                       </strong>
                     </div>
                   )}
-                  {task.stock_deficit != null && Number(task.stock_deficit) > 0 && (
+                  {Number(task.stock_deficit) > 0 && (
                     <div className="task-detail-item">
-                      <span className="task-detail-label task-detail-label--danger" aria-hidden>⚠ Manquant</span>
+                      <span className="task-detail-label task-detail-label--danger">⚠ Manquant</span>
                       <strong className="task-detail-value task-detail-value--danger">{formatNumber(task.stock_deficit)} {task.quantity_unit || 'pcs'}</strong>
                     </div>
                   )}
                 </div>
 
-                {task.priority_order != null && task.priority_order > 1 && (
+                {task.priority_order > 1 && (
                   <div className="task-detail__stock-note">
-                    D'autres commandes avec la même référence article sont servies en priorité (FIFO par date de livraison).
+                    D'autres commandes sur cette référence sont servies en priorité (FIFO par date de livraison).
                   </div>
                 )}
-                {isPlanner && task && (
-                  <TaskTypeToggle
-                    task={task}
-                    isPlanner={isPlanner}
-                    onTypeChanged={async () => {
-                      await fetchDetail();
-                      await onTaskUpdated?.();
-                    }}
-                  />
+
+                {isPlanner && (
+                  <TaskTypeToggle task={task} isPlanner={isPlanner}
+                    onTypeChanged={async () => { await fetchDetail(); await onTaskUpdated?.(); }} />
                 )}
-                {task?.task_type === 'PREDICTIVE' && canConfirmPredictive && onConfirmPredictive && (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    style={{ width: '100%', marginTop: '0.75rem' }}
+
+                {task.task_type === 'PREDICTIVE' && canConfirmPredictive && onConfirmPredictive && (
+                  <button type="button" className="btn btn-primary" style={{ width: '100%', marginTop: '0.65rem' }}
                     disabled={savingAction}
                     onClick={async () => {
                       setSavingAction(true);
-                      try {
-                        await onConfirmPredictive(task.id);
-                        await fetchDetail();
-                      } catch (err) {
-                        setError(err?.response?.data?.error || 'Impossible de confirmer la commande.');
-                      } finally {
-                        setSavingAction(false);
-                      }
-                    }}
-                  >
+                      try { await onConfirmPredictive(task.id); await fetchDetail(); }
+                      catch (err) { setError(err?.response?.data?.error || 'Impossible de confirmer.'); }
+                      finally { setSavingAction(false); }
+                    }}>
                     {savingAction ? 'Confirmation…' : 'Confirmer la commande prévisionnelle'}
+                  </button>
+                )}
+
+                {canMarkDelivered && task.status === 'DONE' && (
+                  <button type="button" className="btn btn-primary"
+                    style={{ width: '100%', marginTop: '0.65rem', background: '#374151' }}
+                    disabled={savingAction}
+                    onClick={async () => {
+                      setSavingAction(true);
+                      try { await taskAPI.markDelivered(task.id); await fetchDetail(); onTaskUpdated?.(); }
+                      catch (err) { setError(err?.response?.data?.error || 'Impossible de marquer livré.'); }
+                      finally { setSavingAction(false); }
+                    }}>
+                    {savingAction ? 'Enregistrement…' : '🚚 Marquer livré'}
                   </button>
                 )}
               </section>
             )}
 
-            <section className="task-detail__section">
-              <div className="task-detail__section-head">
-                <h4>Résumé métier</h4>
-                <span>{formatRelativeDate(task.updated_at || task.created_at)}</span>
-              </div>
-              <div className="task-detail__description task-detail__description--emphasis">{operationalSummary}</div>
-            </section>
+            {/* ╔══════════════════════════════ DATE NÉGOCIATION ═════════╗ */}
+            {canAct && (
+              <section className="task-detail__section">
+                <div className="task-detail__section-head">
+                  <h4>🗓 Négociation date</h4>
+                  {negCfg
+                    ? <span className="tdp-negot-status-pill" style={{ background: negCfg.bg, color: negCfg.color }}>{negCfg.label}</span>
+                    : <span className="tdp-negot-status-pill">Non démarrée</span>
+                  }
+                </div>
 
-            <section className="task-detail__section">
-              <div className="task-detail__section-head">
-                <h4>Négociation date</h4>
-                <span>{dateNegotiationSteps.length}</span>
-              </div>
-              <div className="task-detail__meta-strip" style={{ marginBottom: '0.75rem' }}>
-                <div className="task-detail__meta-pill">
-                  <span>Statut</span>
-                  <strong>{dateNegotiationLabelMap[task.date_negotiation_status] || 'Non démarrée'}</strong>
-                </div>
-                <div className="task-detail__meta-pill">
-                  <span>Date proposée</span>
-                  <strong>{task.proposed_delivery_date ? formatDate(task.proposed_delivery_date) : '—'}</strong>
-                </div>
-                <div className="task-detail__meta-pill">
-                  <span>Proposé par</span>
-                  <strong>{task.proposed_by_role === 'planner' ? 'Planificateur' : task.proposed_by_role === 'commercial' ? 'Commercial' : '—'}</strong>
-                </div>
-              </div>
-              {(isCommercial || isPlanner) && (
-                <div className="task-detail__action-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                  <input
-                    type="date"
-                    value={dateProposal}
-                    onChange={(event) => setDateProposal(event.target.value)}
-                    placeholder="Proposer date"
-                  />
-                  <div className="task-detail__button-row">
-                    <button type="button" className="btn btn-secondary" disabled={savingAction || !dateProposal} onClick={handleProposeDate}>
-                      {savingAction ? 'Traitement...' : 'Proposer date'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={savingAction || !canConfirmCurrentProposedDate || Boolean(dateProposal)}
-                      onClick={handleConfirmDate}
-                      title={
-                        plannerCanConfirmCommercialDate
-                          ? 'Le planner confirme la date proposée par le commercial'
-                          : commercialCanConfirmPlannerDate
-                          ? 'Le commercial confirme automatiquement la date proposée par le planner'
-                          : 'Confirmation non disponible pour ce statut'
-                      }
-                    >
-                      {savingAction ? 'Traitement...' : 'Confirmer date'}
-                    </button>
-                  </div>
-                </div>
-              )}
-              <div className="task-detail__timeline">
-                {dateNegotiationSteps.length === 0 ? (
-                  <div className="task-detail__empty">Aucune négociation de date enregistrée.</div>
-                ) : (
-                  dateNegotiationSteps.map((step, index) => (
-                    <div key={`${step.label}-${index}`} className="task-detail__timeline-item task-detail__timeline-item--history">
-                      <span className="task-detail__history-dot" />
-                      <div>
-                        <div className="task-detail__timeline-head">
-                          <strong>{step.label}</strong>
+                {/* ── Thread (messagerie) ── */}
+                {negotThread.length > 0 && (
+                  <div className="tdp-thread">
+                    {negotThread.map((entry) => {
+                      const side = entry.actor_role === 'commercial' ? 'commercial' : 'planner';
+                      return (
+                        <div key={entry.id} className={`tdp-bubble tdp-bubble--${side}`}>
+                          <div className="tdp-bubble__meta">
+                            <span className="tdp-bubble__actor">{entry.actor_name || 'Système'}</span>
+                            <time className="tdp-bubble__time">{formatDateTime(entry.created_at)}</time>
+                          </div>
+                          <div className="tdp-bubble__body">
+                            <span>{entry.message || entry.action_type}</span>
+                            {entry.new_value && (
+                              <strong className="tdp-bubble__date">📅 {fmtVal(entry.new_value)}</strong>
+                            )}
+                          </div>
                         </div>
-                        <p>{step.detail}</p>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ── Pending proposal card ── */}
+                {task.proposed_delivery_date && myTurnToAct && !proposeOpen && (
+                  <div className="tdp-pending-card">
+                    <div className="tdp-pending-card__left">
+                      <div className="tdp-pending-card__date">📅 {formatDate(task.proposed_delivery_date)}</div>
+                      <div className="tdp-pending-card__sub">
+                        proposé par {task.proposed_by_role === 'planner' ? 'le planificateur' : 'le commercial'}
                       </div>
                     </div>
-                  ))
+                    <div className="tdp-pending-card__actions">
+                      <button
+                        type="button"
+                        className="tdp-btn tdp-btn--accept"
+                        disabled={savingAction}
+                        onClick={handleAccept}
+                      >
+                        {savingAction ? '…' : '✓ Accepter'}
+                      </button>
+                      <button
+                        type="button"
+                        className="tdp-btn tdp-btn--counter"
+                        disabled={savingAction}
+                        onClick={() => setProposeOpen(true)}
+                      >
+                        ↔ Contre-proposer
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </div>
-            </section>
 
-            {/* ── Historique complet ── */}
+                {/* ── Accepted state ── */}
+                {negStatus === 'ACCEPTED' && !proposeOpen && (
+                  <div className="tdp-accepted-bar">
+                    <span>✓ Date validée · {task.planned_date ? formatDate(task.planned_date) : '—'}</span>
+                    <button type="button" className="tdp-btn-link" onClick={() => setProposeOpen(true)}>
+                      Modifier
+                    </button>
+                  </div>
+                )}
+
+                {/* ── Propose / counter form ── */}
+                {(proposeOpen || (!task.proposed_delivery_date && negStatus !== 'ACCEPTED')) && (
+                  <div className="tdp-propose-form">
+                    <label className="tdp-propose-form__label">
+                      {proposeOpen ? 'Contre-proposer une date' : 'Proposer une date de livraison'}
+                    </label>
+                    <div className="tdp-propose-form__row">
+                      <input
+                        type="date"
+                        className="task-detail__date-input"
+                        value={dateProposal}
+                        onChange={(e) => setDateProposal(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="tdp-btn tdp-btn--send"
+                        disabled={savingAction || !dateProposal}
+                        onClick={handlePropose}
+                      >
+                        {savingAction ? '…' : '↑ Envoyer'}
+                      </button>
+                      {proposeOpen && (
+                        <button type="button" className="tdp-btn-link" onClick={() => { setProposeOpen(false); setDateProposal(''); }}>
+                          Annuler
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Waiting on other party ── */}
+                {task.proposed_delivery_date && !myTurnToAct && negStatus !== 'ACCEPTED' && !proposeOpen && (
+                  <div className="tdp-waiting-bar">
+                    En attente de réponse · date proposée : <strong>{formatDate(task.proposed_delivery_date)}</strong>
+                    <button type="button" className="tdp-btn-link" style={{ marginLeft: '0.5rem' }} onClick={() => setProposeOpen(true)}>
+                      Modifier
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* ╔═══════════════════════════════════════ HISTORIQUE ══════╗ */}
             <section className="task-detail__section">
               <div className="task-detail__section-head">
-                <h4>Historique des actions</h4>
-                <span>{history.length}</span>
+                <h4>Historique</h4>
+                <span>{history.length} action{history.length !== 1 ? 's' : ''}</span>
               </div>
-              {/* Intervenants */}
+
+              {/* actors */}
               <div className="task-detail__actors-strip">
                 {task.created_by_name && (
                   <div className="task-detail__actor task-detail__actor--commercial">
                     <span className="task-detail__actor-avatar">{getInitials(task.created_by_name)}</span>
                     <div>
                       <strong>{task.created_by_name}</strong>
-                      <span>Commercial — créateur</span>
+                      <span>Commercial</span>
                     </div>
                   </div>
                 )}
@@ -502,32 +465,34 @@ const TaskDetailsPanel = ({
                     <span className="task-detail__actor-avatar">{getInitials(task.planned_by_name)}</span>
                     <div>
                       <strong>{task.planned_by_name}</strong>
-                      <span>Planificateur — dernier sur les dates</span>
+                      <span>Planificateur</span>
                     </div>
                   </div>
                 )}
               </div>
+
+              {/* timeline */}
               <div className="task-detail__timeline">
                 {history.length === 0 ? (
                   <div className="task-detail__empty">Aucune action enregistrée.</div>
                 ) : (
-                  [...history].reverse().map((entry) => {
-                    const actorName = entry.actor_name || 'Système';
-                    const actorRole = entry.actor_role;
-                    const roleLabel = actorRole === 'planner' || actorRole === 'super_admin'
-                      ? 'Planificateur'
-                      : actorRole === 'commercial'
-                      ? 'Commercial'
-                      : null;
+                  visibleHistory.map((entry) => {
+                    const role = entry.actor_role;
+                    const roleLabel = role === 'planner' || role === 'super_admin' ? 'Planificateur'
+                      : role === 'commercial' ? 'Commercial' : null;
                     return (
                       <div key={entry.id} className="task-detail__timeline-item task-detail__timeline-item--history">
-                        <span className={`task-detail__history-dot task-detail__history-dot--${actorRole === 'commercial' ? 'commercial' : actorRole === 'planner' || actorRole === 'super_admin' ? 'planner' : 'system'}`} />
+                        <span className={`task-detail__history-dot task-detail__history-dot--${
+                          role === 'commercial' ? 'commercial'
+                          : role === 'planner' || role === 'super_admin' ? 'planner'
+                          : 'system'
+                        }`} />
                         <div style={{ flex: 1 }}>
                           <div className="task-detail__timeline-head">
                             <span className="task-detail__history-actor">
-                              {actorName}
+                              {entry.actor_name || 'Système'}
                               {roleLabel && (
-                                <span className={`task-detail__history-role task-detail__history-role--${actorRole === 'commercial' ? 'commercial' : 'planner'}`}>
+                                <span className={`task-detail__history-role task-detail__history-role--${role === 'commercial' ? 'commercial' : 'planner'}`}>
                                   {roleLabel}
                                 </span>
                               )}
@@ -537,9 +502,9 @@ const TaskDetailsPanel = ({
                           <p className="task-detail__history-msg">{entry.message || entry.action_type}</p>
                           {entry.old_value != null && entry.new_value != null && (
                             <p className="task-detail__history-diff">
-                              <span className="task-detail__history-old">{formatHistoryValue(entry.old_value)}</span>
+                              <span className="task-detail__history-old">{fmtVal(entry.old_value)}</span>
                               <span aria-hidden> → </span>
-                              <span className="task-detail__history-new">{formatHistoryValue(entry.new_value)}</span>
+                              <span className="task-detail__history-new">{fmtVal(entry.new_value)}</span>
                             </p>
                           )}
                         </div>
@@ -548,16 +513,15 @@ const TaskDetailsPanel = ({
                   })
                 )}
               </div>
-            </section>
 
-            {task.description && (
-              <section className="task-detail__section">
-                <div className="task-detail__section-head">
-                  <h4>Consigne brute</h4>
-                </div>
-                <div className="task-detail__description">{task.description || 'Aucune consigne ou ligne specifique.'}</div>
-              </section>
-            )}
+              {history.length > HISTORY_PREVIEW && (
+                <button type="button" className="tdp-history-toggle" onClick={() => setShowAllHistory(p => !p)}>
+                  {showAllHistory
+                    ? '↑ Réduire'
+                    : `↓ ${history.length - HISTORY_PREVIEW} action${history.length - HISTORY_PREVIEW > 1 ? 's' : ''} précédente${history.length - HISTORY_PREVIEW > 1 ? 's' : ''}`}
+                </button>
+              )}
+            </section>
           </>
         ) : null}
       </aside>

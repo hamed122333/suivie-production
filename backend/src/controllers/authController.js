@@ -37,14 +37,14 @@ const authController = {
       }
 
       const token = jwt.sign(
-        { id: user.id, email: user.email, name: user.name, role: user.role },
+        { id: user.id, email: user.email, name: user.name, role: user.role, commercial_id: user.commercial_id },
         process.env.JWT_SECRET || 'secret_key',
         { expiresIn: '24h' }
       );
 
       res.json({
         token,
-        user: { id: user.id, name: user.name, email: user.email, role: user.role }
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, commercial_id: user.commercial_id }
       });
     } catch (err) {
       console.error(err);

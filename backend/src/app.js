@@ -11,6 +11,7 @@ const workspaceRoutes = require('./routes/workspaceRoutes');
 const stockImportRoutes = require('./routes/stockImportRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const { addClient } = require('./services/sseService');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 
@@ -22,9 +23,12 @@ app.disable('x-powered-by');
 app.use(cors());
 app.use(express.json());
 
+const API_RATE_LIMIT_MAX = Number.parseInt(process.env.API_RATE_LIMIT_MAX, 10) || 500;
+const AUTH_RATE_LIMIT_MAX = Number.parseInt(process.env.AUTH_RATE_LIMIT_MAX, 10) || 50;
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500,
+  max: API_RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Trop de requetes, veuillez reessayer plus tard.' },
@@ -32,14 +36,48 @@ const apiLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 50,
+  max: AUTH_RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Trop de tentatives de connexion, veuillez reessayer plus tard.' },
 });
 
+// SSE — excluded from rate limiting (long-lived connection); JWT verified via query param
+app.get('/api/events', (req, res) => {
+  // EventSource cannot send headers, so token is passed as ?token=<jwt>
+  const token = req.query.token;
+  const secret = process.env.JWT_SECRET || 'dev_secret_key_do_not_use_in_production';
+  if (!token) {
+    return res.status(401).json({ error: 'Token manquant' });
+  }
+  try {
+    jwt.verify(token, secret);
+  } catch {
+    return res.status(401).json({ error: 'Token invalide' });
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write(':\n\n');
+  addClient(res);
+  const keepAlive = setInterval(() => res.write(':\n\n'), 30000);
+  req.on('close', () => clearInterval(keepAlive));
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Suivi Production API running' });
+});
+
 app.use('/api/auth', authLimiter);
-app.use('/api', apiLimiter);
+// Skip apiLimiter for /api/auth/* so auth requests aren't double-counted
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth')) return next();
+  return apiLimiter(req, res, next);
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
@@ -48,26 +86,6 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/stock-import', stockImportRoutes);
 app.use('/api/notifications', notificationRoutes);
-
-// SSE endpoint — real-time push to frontend
-app.get('/api/events', (req, res) => {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-    'X-Accel-Buffering': 'no', // Nginx: disable buffering
-  });
-  res.write(':\n\n'); // initial comment to flush headers
-  addClient(res);
-
-  // Keep-alive every 30s to prevent proxy/timeout drops
-  const keepAlive = setInterval(() => res.write(':\n\n'), 30000);
-  req.on('close', () => clearInterval(keepAlive));
-});
-
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Suivi Production API running' });
-});
 
 app.get('/', (req, res) => {
   res.send('API Suivi Production is running. Access the frontend app instead.');
