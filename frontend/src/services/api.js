@@ -63,7 +63,6 @@ export const taskAPI = {
   updateStatus: (id, status, reasonBlocked) => api.put(`/tasks/${id}/status`, { status, reasonBlocked }),
   dateNegotiation: (id, payload) => api.put(`/tasks/${id}/date-negotiation`, payload),
   addComment: (id, body) => api.post(`/tasks/${id}/comments`, { body }),
-  patchBoard: ({ workspaceId, columnOrders }) => api.patch('/tasks/board', { workspaceId, columnOrders }),
   delete: (id) => api.delete(`/tasks/${id}`),
   confirmPredictive: (id) => api.put(`/tasks/${id}/confirm-predictive`),
 

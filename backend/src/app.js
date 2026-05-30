@@ -11,6 +11,7 @@ const workspaceRoutes = require('./routes/workspaceRoutes');
 const stockImportRoutes = require('./routes/stockImportRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const { addClient } = require('./services/sseService');
+const errorHandler = require('./middleware/errorHandler');
 const jwt = require('jsonwebtoken');
 
 const app = express();
@@ -94,5 +95,8 @@ app.get('/', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({ error: 'Route introuvable' });
 });
+
+// Gestionnaire d'erreurs global — DOIT rester le dernier middleware monté
+app.use(errorHandler);
 
 module.exports = app;

@@ -1,25 +1,8 @@
 const express = require('express');
-const multer = require('multer');
 const router = express.Router();
 const stockImportController = require('../controllers/stockImportController');
+const { excelUpload: upload } = require('../middleware/upload');
 const { authenticate, requireRoles } = require('../middleware/auth');
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
-  fileFilter: (_req, file, cb) => {
-    const allowed = [
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'text/csv'
-    ];
-    if (allowed.includes(file.mimetype) || /\.(xls|xlsx|csv)$/i.test(file.originalname)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Seuls les fichiers Excel ou CSV sont acceptés'));
-    }
-  },
-});
 
 // Upload an Excel file — planner and super_admin only
 router.post(

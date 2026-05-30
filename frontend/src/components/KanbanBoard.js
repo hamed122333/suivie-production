@@ -67,17 +67,6 @@ function sortInColumn(a, b) {
   return (a.id ?? 0) - (b.id ?? 0);
 }
 
-function buildColumnOrders(taskList) {
-  const columnOrders = {};
-  ALL_COLUMNS.forEach((column) => {
-    columnOrders[column.id] = taskList
-      .filter((task) => task.status === column.id)
-      .sort(sortInColumn)
-      .map((task) => task.id);
-  });
-  return columnOrders;
-}
-
 function applyMove(taskList, draggedId, targetStatus, insertBeforeId) {
   const dragged = taskList.find((task) => task.id === draggedId);
   if (!dragged) return taskList;
@@ -202,8 +191,6 @@ const KanbanBoard = ({
     }
   };
 
-  // No workspace filtering — board is always in global view, order not persisted server-side
-  const isAllWorkspaces = true;
   const deferredQuery = useDeferredValue(filterQuery);
   const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filterCategory || filterCriticalDeficit || filterPredictiveOnly || filterCommercial || filterDate);
 
@@ -271,10 +258,6 @@ const KanbanBoard = ({
     setDragOverTaskId(null);
   };
 
-  const persistBoard = async (_nextTasks) => {
-    // Board order persistence disabled — global view, tasks span multiple workspaces
-  };
-
   const runDrop = async (draggedId, targetStatus, insertBeforeId) => {
     const task = tasks.find((entry) => entry.id === draggedId);
     if (!task) {
@@ -322,17 +305,23 @@ const KanbanBoard = ({
       return;
     }
 
-    const nextTasks = applyMove(tasks, draggedId, targetStatus, insertBeforeId);
-    const before = JSON.stringify(buildColumnOrders(tasks));
-    const after = JSON.stringify(buildColumnOrders(nextTasks));
-
-    if (before === after) {
+    // Same column → local reorder only (ordering is not persisted in the global view)
+    if (task.status === targetStatus) {
+      setTasks(applyMove(tasks, draggedId, targetStatus, insertBeforeId));
       clearDragHighlights();
       return;
     }
 
-    setTasks(nextTasks);
-    await persistBoard(nextTasks);
+    // Different column → persist the new status (optimistic update + rollback on error)
+    const previousTasks = tasks;
+    setTasks(applyMove(tasks, draggedId, targetStatus, insertBeforeId));
+    try {
+      await taskAPI.updateStatus(draggedId, targetStatus);
+      await refreshBoardAndPanels();
+    } catch (err) {
+      setTasks(previousTasks);
+      setErrorShort(err.response?.data?.error || 'Impossible de changer le statut de cette fiche.');
+    }
     clearDragHighlights();
   };
 
@@ -413,17 +402,9 @@ const KanbanBoard = ({
     }
   };
 
-  const roleHint = isAllWorkspaces
-    ? 'Vue transverse sur tous les espaces de production.'
-    : canChangeStatus
-    ? 'Planificateur — préparez les commandes et marquez-les prêtes à livrer.'
-    : isLivreur
+  const roleHint = isLivreur
     ? 'Livreur — glissez les fiches "Prêt à Livrer" vers la colonne Livré pour confirmer.'
-    : canCreateTask
-    ? 'Commercial — saisissez les commandes clients avec date de livraison souhaitée.'
-    : isSuperAdmin
-    ? 'Super Admin — vue complète du flux de distribution.'
-    : 'Mode consultation.';
+    : 'Vue transverse sur toutes les commandes de production.';
 
   const readyToDeliverCount = tasks.filter((t) => t.status === 'DONE').length;
 
@@ -451,19 +432,6 @@ const KanbanBoard = ({
             </span>
           )}
         </div>
-        {canCreateTask && !isAllWorkspaces && (
-          <button
-            type="button"
-            className="btn btn-primary kanban-board__cta"
-            onClick={() => {
-              setEditingTask(null);
-              setShowTaskModal(true);
-            }}
-          >
-            {isCommercial ? '+ Nouvelle commande client' : '+ Nouvelle fiche'}
-          </button>
-        )}
-
       </div>
 
       {error && <div className="kanban-board__error">{error}</div>}
@@ -561,18 +529,6 @@ const KanbanBoard = ({
                 )}
               </div>
 
-              {canCreateTask && !isAllWorkspaces && column.id === 'WAITING_STOCK' && (
-                <button
-                  type="button"
-                  className="kanban-column__create"
-                  onClick={() => {
-                    setEditingTask(null);
-                    setShowTaskModal(true);
-                  }}
-                >
-                  + Ajouter une demande
-                </button>
-              )}
             </section>
           );
         })}

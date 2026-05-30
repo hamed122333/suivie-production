@@ -1,13 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
 const userController = require('../controllers/userController');
+const { excelUpload: upload } = require('../middleware/upload');
 const { authenticate, requireSuperAdmin } = require('../middleware/auth');
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
-});
 
 // Récupérer tous les utilisateurs
 router.get('/', authenticate, userController.getAll);

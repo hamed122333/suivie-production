@@ -562,8 +562,6 @@ const OrdersReviewPage = () => {
 
   // ── Row + head renderers ──────────────────────────────────────────────────
 
-  const colCount = 9 + (canApprove ? 1 : 0) + (canApprove || canManage ? 1 : 0);
-
   const renderTableHead = () => (
     <thead>
       <tr>

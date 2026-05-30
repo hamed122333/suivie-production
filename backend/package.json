@@ -9,7 +9,7 @@
     "migrate": "node run-setup.js",
     "migrate:production-core": "node run-production-core-migration.js",
     "seed:commercials": "node seed-commercials.js",
-    "test": "echo \"No tests configured\" && exit 0"
+    "test": "node --test \"tests/**/*.test.js\""
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

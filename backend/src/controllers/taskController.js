@@ -621,12 +621,19 @@ const taskController = {
       if (!req.file) {
         return res.status(400).json({ error: 'Aucun fichier fourni' });
       }
+      if (!req.file.buffer || req.file.buffer.length === 0) {
+        return res.status(400).json({ error: 'Le fichier fourni est vide.' });
+      }
 
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(req.file.buffer);
+      try {
+        await workbook.xlsx.load(req.file.buffer);
+      } catch (parseErr) {
+        return res.status(400).json({ error: 'Fichier Excel illisible ou corrompu. Vérifiez le format (.xlsx).' });
+      }
       const worksheet = workbook.worksheets[0];
       if (!worksheet) {
-        return res.status(400).json({ error: 'Fichier Excel invalide' });
+        return res.status(400).json({ error: 'Fichier Excel invalide (aucune feuille trouvée).' });
       }
 
       const headers = {};
