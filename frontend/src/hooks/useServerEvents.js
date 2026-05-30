@@ -6,9 +6,14 @@
  * registered callback for that event name.
  *
  * JWT token is passed as ?token=<jwt> because EventSource cannot send headers.
+ * La connexion n'est ouverte QUE si un token est présent — sinon le backend
+ * renverrait 401 en boucle (ex. sur la page de login). La connexion est
+ * (re)établie automatiquement après login et fermée après logout via
+ * l'événement AUTH_CHANGED_EVENT.
  */
 
 import { useEffect, useRef } from 'react';
+import { AUTH_CHANGED_EVENT } from '../utils/authStorage';
 
 const RAW_API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const API_URL = RAW_API_URL.replace(/\/api\/?$/, '');
@@ -19,11 +24,16 @@ let singleton  = null;           // the live EventSource
 let retryTimer = null;
 let retryDelay = 3000;
 const MAX_RETRY_DELAY = 30_000;
+let authListenerAttached = false;
 
 // eventName → Set<callback>
 const registry  = {};
 // eventName → true (already wired on current ES instance)
 const wiredOn   = new Set();
+
+function getToken() {
+  try { return localStorage.getItem('token') || ''; } catch { return ''; }
+}
 
 function wireEvent(name) {
   if (!singleton || wiredOn.has(name)) return;
@@ -36,12 +46,30 @@ function wireEvent(name) {
   });
 }
 
+function disconnect() {
+  clearTimeout(retryTimer);
+  retryTimer = null;
+  if (singleton) {
+    singleton.onerror = null;
+    singleton.close();
+    singleton = null;
+  }
+  wiredOn.clear();
+}
+
 function ensureConnected() {
+  const token = getToken();
+
+  // Pas de token → aucune connexion (évite les 401 répétés avant authentification)
+  if (!token) {
+    disconnect();
+    return;
+  }
+
   if (singleton && singleton.readyState !== EventSource.CLOSED) return;
 
   clearTimeout(retryTimer);
-  const token = localStorage.getItem('token') || '';
-  const url   = `${API_URL}/api/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  const url = `${API_URL}/api/events?token=${encodeURIComponent(token)}`;
 
   singleton = new EventSource(url);
   wiredOn.clear();
@@ -54,12 +82,25 @@ function ensureConnected() {
   }
 
   singleton.onerror = () => {
-    singleton.close();
+    if (singleton) singleton.close();
     singleton = null;
     wiredOn.clear();
-    retryTimer = setTimeout(ensureConnected, retryDelay);
-    retryDelay = Math.min(retryDelay * 1.5, MAX_RETRY_DELAY);
+    // Reconnexion uniquement si un token est toujours présent
+    if (getToken()) {
+      retryTimer = setTimeout(ensureConnected, retryDelay);
+      retryDelay = Math.min(retryDelay * 1.5, MAX_RETRY_DELAY);
+    }
   };
+}
+
+// Reconnecte après login / déconnecte après logout (une seule fois par onglet)
+function attachAuthListener() {
+  if (authListenerAttached || typeof window === 'undefined') return;
+  authListenerAttached = true;
+  window.addEventListener(AUTH_CHANGED_EVENT, () => {
+    if (getToken()) ensureConnected();
+    else disconnect();
+  });
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
@@ -94,6 +135,7 @@ export default function useServerEvents(handlers) {
       }
     }
 
+    attachAuthListener();
     ensureConnected();
 
     return () => {
