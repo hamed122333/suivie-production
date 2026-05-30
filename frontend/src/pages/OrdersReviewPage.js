@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { taskAPI } from '../services/api';
+import { taskAPI, userAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 import { formatDate } from '../utils/formatters';
 import Spinner from '../components/Spinner';
 import useServerEvents from '../hooks/useServerEvents';
 import './CommercialReviewPage.css';
+import './PendingOrdersPage.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -31,30 +33,45 @@ function daysUntil(dateStr) {
 function urgencyLevel(task) {
   const d = daysUntil(task.planned_date);
   if (d === null)  return 'none';
-  if (d < 0)       return 'overdue';   // red
-  if (d <= 3)      return 'critical';  // orange
-  if (d <= 7)      return 'soon';      // yellow
+  if (d < 0)       return 'overdue';
+  if (d <= 3)      return 'critical';
+  if (d <= 7)      return 'soon';
   return 'ok';
 }
 
-// "Readiness" = can this order be sent to production right now?
 function readinessScore(task) {
   const qty   = Number(task.quantity || 0);
   const avail = task.stock?.available ?? 0;
   const ready = task.stock?.isReady ?? false;
   const days  = daysUntil(task.planned_date);
 
-  if (!task.stock)       return { level: 'unknown', label: '— Inconnu',       color: '#94a3b8' };
+  if (!task.stock)       return { level: 'unknown', label: '— Inconnu',          color: '#94a3b8' };
   if (!ready)            return { level: 'waiting', label: '⏳ Stock en attente', color: '#d97706' };
-  if (avail <= 0)        return { level: 'empty',   label: '✕ Rupture stock',  color: '#dc2626' };
-  if (avail < qty)       return { level: 'partial', label: '⚠ Stock partiel',  color: '#f59e0b' };
-  if (days !== null && days < 0) return { level: 'late', label: '🔴 En retard', color: '#dc2626' };
+  if (avail <= 0)        return { level: 'empty',   label: '✕ Rupture stock',     color: '#dc2626' };
+  if (avail < qty)       return { level: 'partial', label: '⚠ Stock partiel',     color: '#f59e0b' };
+  if (days !== null && days < 0) return { level: 'late', label: '🔴 En retard',   color: '#dc2626' };
   return { level: 'ready', label: '✓ Prêt', color: '#16a34a' };
 }
 
 function coveragePct(stock, qty) {
   if (!stock || !qty) return null;
   return Math.min(200, Math.round((stock.available / qty) * 100));
+}
+
+function taskAnomalies(task) {
+  const issues = [];
+  if (!task.commercial_id) {
+    issues.push({ label: 'Commercial non renseigné', severity: 'error' });
+  } else if (!task.commercial_name) {
+    issues.push({ label: `Commercial ${task.commercial_id} introuvable`, severity: 'warning' });
+  }
+  if (!task.client_name && !task.order_code) {
+    issues.push({ label: 'Client non identifié', severity: 'warning' });
+  }
+  if (!task.planned_date) {
+    issues.push({ label: 'Date de livraison manquante', severity: 'warning' });
+  }
+  return issues;
 }
 
 function highlightMatch(text, query) {
@@ -76,7 +93,7 @@ function highlightMatch(text, query) {
 // Detail Modal
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DetailModal({ task, onClose, onApprove, onReject, working }) {
+function DetailModal({ task, onClose, onApprove, onReject, working, canApprove }) {
   const prefix   = getPrefix(task.item_reference);
   const days     = daysUntil(task.planned_date);
   const urgency  = urgencyLevel(task);
@@ -94,13 +111,10 @@ function DetailModal({ task, onClose, onApprove, onReject, working }) {
     <div className="cr-overlay" onClick={onClose}>
       <div className="cr-modal" onClick={e => e.stopPropagation()}>
 
-        {/* ── Modal header ── */}
         <div className="cr-modal__head">
           <div className="cr-modal__head-left">
             {prefix && (
-              <div className={`article-badge article-badge--${prefix.toLowerCase()} cr-modal__badge`}>
-                {prefix}
-              </div>
+              <div className={`article-badge article-badge--${prefix.toLowerCase()} cr-modal__badge`}>{prefix}</div>
             )}
             <div>
               <div className="cr-modal__title">{task.client_name || task.title || '—'}</div>
@@ -125,13 +139,10 @@ function DetailModal({ task, onClose, onApprove, onReject, working }) {
           </div>
         </div>
 
-        {/* ── Two columns ── */}
         <div className="cr-modal__body">
-
           {/* Left — order details */}
           <div className="cr-modal__col">
             <div className="cr-modal__section">Détails commande</div>
-
             <div className="cr-modal__kv">
               <span>Désignation</span>
               <strong>{task.description || task.title || '—'}</strong>
@@ -150,8 +161,6 @@ function DetailModal({ task, onClose, onApprove, onReject, working }) {
                 <span>{task.commercial_name}{task.commercial_id ? ` (${task.commercial_id})` : ''}</span>
               </div>
             )}
-
-            {/* Date delivery — prominent */}
             <div className="cr-modal__date-block" data-urgency={urgency}>
               <div className="cr-modal__date-label">Date de livraison demandée</div>
               <div className="cr-modal__date-value">
@@ -173,7 +182,6 @@ function DetailModal({ task, onClose, onApprove, onReject, working }) {
           {/* Right — stock info */}
           <div className="cr-modal__col">
             <div className="cr-modal__section">Stock disponible</div>
-
             {task.stock ? (
               <>
                 <div className="cr-modal__kv">
@@ -192,8 +200,6 @@ function DetailModal({ task, onClose, onApprove, onReject, working }) {
                     {task.stock.available.toLocaleString('fr-FR')} pcs
                   </span>
                 </div>
-
-                {/* Coverage bar */}
                 {pct !== null && (
                   <div className="cr-modal__kv cr-modal__kv--col">
                     <span>Couverture commande ({Number(task.quantity || 0).toLocaleString('fr-FR')} pcs)</span>
@@ -205,7 +211,6 @@ function DetailModal({ task, onClose, onApprove, onReject, working }) {
                     </div>
                   </div>
                 )}
-
                 <div className="cr-modal__kv">
                   <span>État stock</span>
                   <span>
@@ -240,15 +245,16 @@ function DetailModal({ task, onClose, onApprove, onReject, working }) {
           </div>
         </div>
 
-        {/* ── Footer ── */}
-        <div className="cr-modal__foot">
-          <button type="button" className="btn btn-outline cr-btn-modal-reject" onClick={() => onReject(task.id)} disabled={working}>
-            ✕ Rejeter cette commande
-          </button>
-          <button type="button" className="btn btn-secondary cr-btn-modal-approve" onClick={() => onApprove(task.id)} disabled={working}>
-            {working ? 'Traitement…' : '✓ Valider → Production'}
-          </button>
-        </div>
+        {canApprove && (
+          <div className="cr-modal__foot">
+            <button type="button" className="btn btn-outline cr-btn-modal-reject" onClick={() => onReject(task.id)} disabled={working}>
+              ✕ Rejeter cette commande
+            </button>
+            <button type="button" className="btn btn-secondary cr-btn-modal-approve" onClick={() => onApprove(task.id)} disabled={working}>
+              {working ? 'Traitement…' : '✓ Valider → Production'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -258,55 +264,118 @@ function DetailModal({ task, onClose, onApprove, onReject, working }) {
 // Main Page
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CommercialReviewPage = () => {
-  const { user } = useAuth();
-  const [tasks, setTasks]         = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [selected, setSelected]   = useState(new Set());
-  const [working, setWorking]     = useState(false);
-  const [banner, setBanner]       = useState(null);      // { type, message }
-  const [detailTask, setDetailTask] = useState(null);
+const OrdersReviewPage = () => {
+  const { isSuperAdmin, isPlanner, isCommercial } = useAuth();
+  const { refreshWorkspaces, selectWorkspace } = useWorkspace();
+
+  // Permissions
+  const canManage   = isSuperAdmin;                 // import + fix anomalies
+  const canApprove  = isSuperAdmin || isCommercial; // approve / reject
+  const isGrouped   = isSuperAdmin || isPlanner;    // grouped-by-commercial view
+
+  const [tasks, setTasks]                 = useState([]);
+  const [commercialUsers, setCommercialUsers] = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [selected, setSelected]           = useState(new Set());
+  const [working, setWorking]             = useState(false);
+  const [banner, setBanner]               = useState(null);
+  const [detailTask, setDetailTask]       = useState(null);
 
   // Toolbar
-  const [inputValue, setInputValue]     = useState('');
-  const [searchTerm, setSearchTerm]     = useState('');
+  const [inputValue, setInputValue]       = useState('');
+  const [searchTerm, setSearchTerm]       = useState('');
   const [urgencyFilter, setUrgencyFilter] = useState('');
-  const [stockFilter, setStockFilter]   = useState('');
-  const [sortConfig, setSortConfig]     = useState({ key: 'date', dir: 'asc' });
-  const [currentPage, setCurrentPage]   = useState(1);
-  const [pageSize, setPageSize]         = useState(50);
+  const [stockFilter, setStockFilter]     = useState('');
+  const [commercialFilter, setCommercialFilter] = useState('');
+  const [sortConfig, setSortConfig]       = useState({ key: 'date', dir: 'asc' });
+  const [currentPage, setCurrentPage]     = useState(1);
+  const [pageSize, setPageSize]           = useState(50);
+
+  // Fix inline (super_admin)
+  const [fixingId, setFixingId]           = useState(null);
+  const [fixData, setFixData]             = useState({});
+  const [saving, setSaving]               = useState(false);
+
+  // Import (super_admin)
+  const [importing, setImporting]         = useState(false);
+  const [isDragOver, setIsDragOver]       = useState(false);
+  const importInputRef                    = useRef(null);
+
   const inputRef    = useRef(null);
   const bannerTimer = useRef(null);
 
-  const isPrivileged = ['super_admin', 'planner'].includes(user?.role);
+  // ── Data ────────────────────────────────────────────────────────────────
 
-  // ── Data ──────────────────────────────────────────────────────────────────
+  const showBanner = useCallback((type, message) => {
+    if (bannerTimer.current) clearTimeout(bannerTimer.current);
+    setBanner({ type, message });
+    bannerTimer.current = setTimeout(() => setBanner(null), 6000);
+  }, []);
 
   const fetchPending = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await taskAPI.getPendingApproval();
-      setTasks(res.data || []);
+      const reqs = [taskAPI.getPendingApproval()];
+      if (canManage) reqs.push(userAPI.getAll());
+      const [tasksRes, usersRes] = await Promise.all(reqs);
+      setTasks(tasksRes.data || []);
       setSelected(new Set());
+      if (usersRes) {
+        setCommercialUsers((usersRes.data || []).filter(u => u.role === 'commercial' && u.commercial_id));
+      }
     } catch (err) {
       console.error('getPendingApproval failed', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canManage]);
 
   useEffect(() => { fetchPending(); }, [fetchPending]);
-
-  // Real-time refresh when the planner approves/rejects from the kanban side
   useServerEvents({ 'tasks-updated': fetchPending });
 
-  const showBanner = (type, message) => {
-    if (bannerTimer.current) clearTimeout(bannerTimer.current);
-    setBanner({ type, message });
-    bannerTimer.current = setTimeout(() => setBanner(null), 6000);
-  };
+  // ── Import (super_admin) ──────────────────────────────────────────────────
 
-  // ── Actions ───────────────────────────────────────────────────────────────
+  const handleImportOrders = useCallback(async (file) => {
+    if (!file || !canManage) return;
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await taskAPI.importOrders(formData);
+      const imported  = res?.data?.imported ?? 0;
+      const skipped   = (res?.data?.skipped ?? 0) + (res?.data?.skippedExisting ?? 0);
+      const anomalies = res?.data?.anomalies?.length ?? 0;
+      const warnings  = res?.data?.warnings || [];
+
+      await refreshWorkspaces();
+      selectWorkspace('all');
+
+      let msg = imported === 0 && skipped > 0
+        ? `Aucune nouvelle ligne — les ${skipped} lignes existent déjà.`
+        : `${imported} ligne(s) importée(s) avec succès.`;
+      if (skipped > 0 && imported > 0) msg += ` • ${skipped} ignorée(s).`;
+      if (anomalies > 0)               msg += ` • ${anomalies} anomalie(s) à corriger.`;
+      if (warnings.length > 0)         msg += ` ⚠ ${warnings.join(' | ')}`;
+
+      showBanner('success', msg);
+      await fetchPending();
+    } catch (err) {
+      showBanner('error', err?.response?.data?.error || "Échec de l'import.");
+    } finally {
+      setImporting(false);
+    }
+  }, [canManage, fetchPending, refreshWorkspaces, selectWorkspace, showBanner]);
+
+  const handleDragOver  = useCallback((e) => { if (canManage) { e.preventDefault(); setIsDragOver(true); } }, [canManage]);
+  const handleDragLeave = useCallback((e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsDragOver(false); }, []);
+  const handleDrop      = useCallback((e) => {
+    e.preventDefault(); setIsDragOver(false);
+    if (!canManage) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) handleImportOrders(file);
+  }, [canManage, handleImportOrders]);
+
+  // ── Approve / Reject ──────────────────────────────────────────────────────
 
   const handleApprove = async (idOrIds) => {
     const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
@@ -314,6 +383,7 @@ const CommercialReviewPage = () => {
     setWorking(true);
     try {
       const res = await taskAPI.approveOrders(ids);
+      selectWorkspace('all');
       showBanner('success', res.data.message);
       setDetailTask(null);
       await fetchPending();
@@ -337,6 +407,33 @@ const CommercialReviewPage = () => {
     } finally { setWorking(false); }
   };
 
+  // ── Fix inline (super_admin) ──────────────────────────────────────────────
+
+  const startFix = (task) => {
+    setFixingId(task.id);
+    setFixData({
+      commercialId: task.commercial_id || '',
+      clientName:   task.client_name   || '',
+      plannedDate:  task.planned_date ? task.planned_date.slice(0, 10) : '',
+    });
+  };
+  const cancelFix = () => { setFixingId(null); setFixData({}); };
+  const applyFix  = async (taskId) => {
+    setSaving(true);
+    try {
+      const payload = {};
+      if ('commercialId' in fixData) payload.commercialId = fixData.commercialId || null;
+      if ('clientName'   in fixData) payload.clientName   = fixData.clientName   || null;
+      if ('plannedDate'  in fixData) payload.plannedDate  = fixData.plannedDate  || null;
+      await taskAPI.update(taskId, payload);
+      cancelFix();
+      fetchPending();
+    } catch (err) {
+      console.error('Fix failed', err);
+      showBanner('error', "Échec de la correction.");
+    } finally { setSaving(false); }
+  };
+
   // ── Search ────────────────────────────────────────────────────────────────
 
   const applySearch = () => { setSearchTerm(inputValue.trim()); setCurrentPage(1); };
@@ -354,25 +451,22 @@ const CommercialReviewPage = () => {
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
       items = items.filter(t =>
-        (t.client_name      || '').toLowerCase().includes(q) ||
-        (t.item_reference   || '').toLowerCase().includes(q) ||
-        (t.order_code       || '').toLowerCase().includes(q) ||
-        (t.commercial_name  || '').toLowerCase().includes(q) ||
-        (t.commercial_id    || '').toLowerCase().includes(q) ||
+        (t.client_name     || '').toLowerCase().includes(q) ||
+        (t.item_reference  || '').toLowerCase().includes(q) ||
+        (t.order_code      || '').toLowerCase().includes(q) ||
+        (t.commercial_name || '').toLowerCase().includes(q) ||
+        (t.commercial_id   || '').toLowerCase().includes(q) ||
         (t.description || t.title || '').toLowerCase().includes(q)
       );
     }
-
-    if (urgencyFilter) {
-      items = items.filter(t => urgencyLevel(t) === urgencyFilter);
-    }
+    if (urgencyFilter)  items = items.filter(t => urgencyLevel(t) === urgencyFilter);
+    if (commercialFilter) items = items.filter(t => (t.commercial_id || '') === commercialFilter);
 
     if (stockFilter === 'ready')   items = items.filter(t => t.stock?.available > 0 && t.stock?.isReady);
     if (stockFilter === 'partial') items = items.filter(t => t.stock?.available > 0 && t.stock.available < Number(t.quantity || 0));
     if (stockFilter === 'waiting') items = items.filter(t => t.stock && !t.stock.isReady);
     if (stockFilter === 'empty')   items = items.filter(t => !t.stock || t.stock.available <= 0);
 
-    // Sort
     const sorted = [...items].sort((a, b) => {
       let av, bv;
       switch (sortConfig.key) {
@@ -388,7 +482,19 @@ const CommercialReviewPage = () => {
       return 0;
     });
     return sorted;
-  }, [tasks, searchTerm, urgencyFilter, stockFilter, sortConfig]);
+  }, [tasks, searchTerm, urgencyFilter, stockFilter, commercialFilter, sortConfig]);
+
+  // ── Anomalies (super_admin only) ──────────────────────────────────────────
+
+  const anomalousTasks = useMemo(() => {
+    if (!canManage) return [];
+    return filtered.map(t => ({ ...t, _anomalies: taskAnomalies(t) })).filter(t => t._anomalies.length > 0);
+  }, [filtered, canManage]);
+
+  const cleanTasks = useMemo(() => {
+    if (!canManage) return filtered;
+    return filtered.filter(t => taskAnomalies(t).length === 0);
+  }, [filtered, canManage]);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
 
@@ -399,97 +505,133 @@ const CommercialReviewPage = () => {
       overdue:  t.filter(x => urgencyLevel(x) === 'overdue').length,
       critical: t.filter(x => urgencyLevel(x) === 'critical').length,
       ready:    t.filter(x => readinessScore(x).level === 'ready').length,
-      noStock:  t.filter(x => ['empty','waiting'].includes(readinessScore(x).level)).length,
+      noStock:  t.filter(x => ['empty', 'waiting'].includes(readinessScore(x).level)).length,
       totalQty: t.reduce((s, x) => s + Number(x.quantity || 0), 0),
       groups:   new Set(t.map(x => x.commercial_id).filter(Boolean)).size,
+      anomalies: canManage ? t.filter(x => taskAnomalies(x).length > 0).length : 0,
     };
-  }, [tasks]);
+  }, [tasks, canManage]);
 
-  // ── Groups (admin/planner) ────────────────────────────────────────────────
+  // ── Groups (grouped view) ─────────────────────────────────────────────────
 
   const groups = useMemo(() => {
     const map = {};
-    for (const task of filtered) {
+    for (const task of cleanTasks) {
       const key = task.commercial_id || '__none__';
-      if (!map[key]) map[key] = { label: task.commercial_name || task.commercial_id || '—', tasks: [] };
+      if (!map[key]) map[key] = { label: task.commercial_name || task.commercial_id || 'Commercial non assigné', tasks: [] };
       map[key].tasks.push(task);
     }
     return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filtered]);
+  }, [cleanTasks]);
 
-  // ── Pagination (single flat list for commercial, grouped stays full) ──────
+  // ── Pagination (commercial flat view) ─────────────────────────────────────
 
-  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
-  const paginatedFlat = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = Math.ceil(cleanTasks.length / pageSize) || 1;
+  const paginatedFlat = cleanTasks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  // ── Selection helpers ─────────────────────────────────────────────────────
+  // ── Selection ─────────────────────────────────────────────────────────────
 
-  const allVisibleIds  = filtered.map(t => t.id);
-  const allSelected    = allVisibleIds.length > 0 && allVisibleIds.every(id => selected.has(id));
-  const someSelected   = selected.size > 0;
+  const allVisibleIds = filtered.map(t => t.id);
+  const allSelected   = allVisibleIds.length > 0 && allVisibleIds.every(id => selected.has(id));
+  const someSelected  = selected.size > 0;
 
-  const toggleAll  = () => setSelected(allSelected ? new Set() : new Set(allVisibleIds));
-  const toggleOne  = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAll   = () => setSelected(allSelected ? new Set() : new Set(allVisibleIds));
+  const toggleOne   = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selectGroup = (ids) => setSelected(prev => { const n = new Set(prev); ids.forEach(id => n.add(id)); return n; });
 
   const requestSort = (key) => {
     setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
     setCurrentPage(1);
   };
-
   const sortIcon = (key) => {
     if (sortConfig.key !== key) return <span className="sort-icon-hidden">↕</span>;
     return sortConfig.dir === 'asc' ? '↑' : '↓';
   };
 
-  const hasFilters = searchTerm || urgencyFilter || stockFilter;
-  const clearFilters = () => { clearSearch(); setUrgencyFilter(''); setStockFilter(''); };
+  const commercialOptions = useMemo(() => {
+    const map = {};
+    for (const t of tasks) {
+      if (!t.commercial_id) continue;
+      if (!map[t.commercial_id]) map[t.commercial_id] = { id: t.commercial_id, name: t.commercial_name || t.commercial_id };
+    }
+    return Object.values(map).sort((a, b) => a.id.localeCompare(b.id));
+  }, [tasks]);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Row renderer (shared between grouped and flat views)
-  // ─────────────────────────────────────────────────────────────────────────
+  const hasFilters = searchTerm || urgencyFilter || stockFilter || commercialFilter;
+  const clearFilters = () => { clearSearch(); setUrgencyFilter(''); setStockFilter(''); setCommercialFilter(''); };
+
+  // ── Row + head renderers ──────────────────────────────────────────────────
+
+  const colCount = 9 + (canApprove ? 1 : 0) + (canApprove || canManage ? 1 : 0);
+
+  const renderTableHead = () => (
+    <thead>
+      <tr>
+        {canApprove && (
+          <th className="cr-col-check">
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} title="Tout sélectionner" />
+          </th>
+        )}
+        <th className="sortable-header" onClick={() => requestSort('client')}>Client / Commande {sortIcon('client')}</th>
+        <th className="sortable-header" onClick={() => requestSort('ref')}>Référence {sortIcon('ref')}</th>
+        <th className="cr-col-hide-md">Désignation</th>
+        <th className="text-center sortable-header" onClick={() => requestSort('qty')}>Quantité {sortIcon('qty')}</th>
+        <th className="sortable-header" onClick={() => requestSort('date')}>Date livraison {sortIcon('date')}</th>
+        <th className="text-center">Stock dispo.</th>
+        <th className="text-center sortable-header cr-col-hide-sm" onClick={() => requestSort('coverage')}>Couverture {sortIcon('coverage')}</th>
+        <th className="cr-col-hide-sm">Statut</th>
+        {(canApprove || canManage) && <th style={{ width: 90 }}></th>}
+      </tr>
+    </thead>
+  );
 
   const renderRow = (task) => {
-    const prefix   = getPrefix(task.item_reference);
+    const prefix    = getPrefix(task.item_reference);
     const isChecked = selected.has(task.id);
-    const urgency  = urgencyLevel(task);
-    const days     = daysUntil(task.planned_date);
-    const score    = readinessScore(task);
-    const pct      = coveragePct(task.stock, Number(task.quantity || 0));
+    const urgency   = urgencyLevel(task);
+    const days      = daysUntil(task.planned_date);
+    const score     = readinessScore(task);
+    const pct       = coveragePct(task.stock, Number(task.quantity || 0));
     const coverageColor = pct === null ? '#94a3b8' : pct >= 100 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
-
-    const qtyClass = !task.stock ? '' : pct >= 100 ? 'status-full' : pct >= 50 ? 'status-partial' : 'status-empty';
+    const qtyClass  = !task.stock ? '' : pct >= 100 ? 'status-full' : pct >= 50 ? 'status-partial' : 'status-empty';
+    const isFixing  = fixingId === task.id;
 
     return (
       <tr
         key={task.id}
         className={[
           'cr-row',
-          isChecked     ? 'cr-row--checked'  : '',
+          isChecked ? 'cr-row--checked' : '',
+          isFixing ? 'por-row--fixing' : '',
           urgency === 'overdue'  ? 'cr-row--overdue'  : '',
           urgency === 'critical' ? 'cr-row--critical' : '',
         ].filter(Boolean).join(' ')}
-        onClick={() => setDetailTask(task)}
+        onClick={() => !isFixing && setDetailTask(task)}
       >
-        {/* Checkbox */}
-        <td className="cr-col-check" onClick={e => { e.stopPropagation(); toggleOne(task.id); }}>
-          <input type="checkbox" checked={isChecked} onChange={() => toggleOne(task.id)} />
-        </td>
+        {canApprove && (
+          <td className="cr-col-check" onClick={e => { e.stopPropagation(); toggleOne(task.id); }}>
+            <input type="checkbox" checked={isChecked} onChange={() => toggleOne(task.id)} />
+          </td>
+        )}
 
-        {/* Article badge + client */}
-        <td>
-          <div className="item-article">
-            {prefix
-              ? <div className={`article-badge article-badge--${prefix.toLowerCase()}`}>{prefix}</div>
-              : <div className="article-badge article-badge--default">??</div>
-            }
-            <div className="article-info">
-              <span className="article-name">
-                {searchTerm ? highlightMatch(task.client_name || '—', searchTerm) : (task.client_name || '—')}
-              </span>
-              {task.order_code && <span className="article-subtext">{task.order_code}</span>}
+        {/* Client */}
+        <td onClick={isFixing ? (e) => e.stopPropagation() : undefined}>
+          {isFixing ? (
+            <input className="por-fix-input" value={fixData.clientName}
+              onChange={e => setFixData(f => ({ ...f, clientName: e.target.value }))} placeholder="Nom client" />
+          ) : (
+            <div className="item-article">
+              {prefix
+                ? <div className={`article-badge article-badge--${prefix.toLowerCase()}`}>{prefix}</div>
+                : <div className="article-badge article-badge--default">??</div>}
+              <div className="article-info">
+                <span className="article-name">
+                  {searchTerm ? highlightMatch(task.client_name || '—', searchTerm) : (task.client_name || '—')}
+                </span>
+                {task.order_code && <span className="article-subtext">{task.order_code}</span>}
+              </div>
             </div>
-          </div>
+          )}
         </td>
 
         {/* Reference */}
@@ -513,20 +655,19 @@ const CommercialReviewPage = () => {
 
         {/* Quantity */}
         <td className="text-center">
-          <span className={`qty-badge ${qtyClass}`}>
-            {Number(task.quantity || 0).toLocaleString('fr-FR')}
-          </span>
+          <span className={`qty-badge ${qtyClass}`}>{Number(task.quantity || 0).toLocaleString('fr-FR')}</span>
           <div style={{ fontSize: '0.67rem', color: '#94a3b8', marginTop: '0.15rem' }}>{task.quantity_unit || 'pcs'}</div>
         </td>
 
         {/* Delivery date */}
-        <td>
-          {task.planned_date ? (
+        <td onClick={isFixing ? (e) => e.stopPropagation() : undefined}>
+          {isFixing ? (
+            <input type="date" className="por-fix-input" value={fixData.plannedDate}
+              onChange={e => setFixData(f => ({ ...f, plannedDate: e.target.value }))} />
+          ) : task.planned_date ? (
             <div className="date-wrapper cr-date-wrapper" data-urgency={urgency}>
               <span className="date-icon">
-                {urgency === 'overdue'  ? '🔴' :
-                 urgency === 'critical' ? '🟠' :
-                 urgency === 'soon'     ? '🟡' : '📅'}
+                {urgency === 'overdue' ? '🔴' : urgency === 'critical' ? '🟠' : urgency === 'soon' ? '🟡' : '📅'}
               </span>
               <div>
                 <div style={{ fontWeight: 600, fontSize: '0.82rem', color: urgency === 'overdue' ? '#dc2626' : urgency === 'critical' ? '#c2410c' : '#334155' }}>
@@ -558,7 +699,7 @@ const CommercialReviewPage = () => {
           ) : <span className="text-muted italic">—</span>}
         </td>
 
-        {/* Coverage bar */}
+        {/* Coverage */}
         <td className="text-center cr-col-hide-sm">
           {pct !== null ? (
             <div className="coverage-wrapper">
@@ -570,72 +711,107 @@ const CommercialReviewPage = () => {
           ) : <span className="text-muted">—</span>}
         </td>
 
-        {/* Readiness score */}
-        <td className="cr-col-hide-sm">
-          <span className="cr-score-badge" style={{ background: score.color + '15', color: score.color, borderColor: score.color + '40' }}>
-            {score.label}
-          </span>
+        {/* Readiness / commercial fix */}
+        <td className="cr-col-hide-sm" onClick={isFixing ? (e) => e.stopPropagation() : undefined}>
+          {isFixing ? (
+            <select className="filter-select" value={fixData.commercialId}
+              onChange={e => setFixData(f => ({ ...f, commercialId: e.target.value }))}>
+              <option value="">Commercial…</option>
+              {commercialUsers.map(u => (
+                <option key={u.id} value={u.commercial_id}>{u.name} ({u.commercial_id})</option>
+              ))}
+            </select>
+          ) : (
+            <span className="cr-score-badge" style={{ background: score.color + '15', color: score.color, borderColor: score.color + '40' }}>
+              {score.label}
+            </span>
+          )}
         </td>
 
-        {/* Quick actions (visible on hover) */}
-        <td className="cr-col-actions" onClick={e => e.stopPropagation()}>
-          <div className="cr-quick-actions">
-            <button type="button" className="cr-quick-btn cr-quick-btn--reject"
-              title="Rejeter" onClick={() => handleReject(task.id)} disabled={working}>✕</button>
-            <button type="button" className="cr-quick-btn cr-quick-btn--approve"
-              title="Valider → Production" onClick={() => handleApprove(task.id)} disabled={working}>✓</button>
-          </div>
-        </td>
+        {/* Actions */}
+        {(canApprove || canManage) && (
+          <td className="cr-col-actions" onClick={e => e.stopPropagation()}>
+            {isFixing ? (
+              <div className="por-fix-actions">
+                <button className="por-fix-btn por-fix-btn--save" onClick={() => applyFix(task.id)} disabled={saving}>{saving ? '…' : '✓'}</button>
+                <button className="por-fix-btn por-fix-btn--cancel" onClick={cancelFix}>✕</button>
+              </div>
+            ) : (
+              <div className="cr-quick-actions">
+                {canManage && (
+                  <button type="button" className="por-fix-btn por-fix-btn--edit" title="Corriger" onClick={() => startFix(task)}>✎</button>
+                )}
+                {canApprove && (
+                  <>
+                    <button type="button" className="cr-quick-btn cr-quick-btn--reject" title="Rejeter" onClick={() => handleReject(task.id)} disabled={working}>✕</button>
+                    <button type="button" className="cr-quick-btn cr-quick-btn--approve" title="Valider → Production" onClick={() => handleApprove(task.id)} disabled={working}>✓</button>
+                  </>
+                )}
+              </div>
+            )}
+          </td>
+        )}
       </tr>
     );
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── Page title by role ────────────────────────────────────────────────────
+
+  const pageTitle = canManage ? 'Commandes importées'
+    : isPlanner ? 'Commandes en cours de validation'
+    : 'Mes commandes à valider';
+  const pageSubtitle = isPlanner
+    ? 'Vue lecture seule — les commandes sont validées par les commerciaux'
+    : 'Sélectionnez les commandes à envoyer en production';
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="stock-page-container cr-page-wrap">
+    <div
+      className={`stock-page-container cr-page-wrap${isDragOver ? ' por-page-wrap--drop' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {canManage && (
+        <input ref={importInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImportOrders(f); e.target.value = ''; }} />
+      )}
 
-      {/* ── Page header ── */}
+      {isDragOver && canManage && (
+        <div className="por-drop-overlay">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Déposer le fichier Excel pour importer
+        </div>
+      )}
+
+      {/* ── Header ── */}
       <div className="stock-page-header">
         <div className="title-section">
-          <h2>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.5rem', verticalAlign: 'middle' }}>
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-            Mes commandes à valider</h2>
+          <h2>{pageTitle}</h2>
           <p>
             {loading ? 'Chargement…' : tasks.length === 0
-              ? 'Aucune commande en attente de validation'
-              : `${tasks.length} commande${tasks.length !== 1 ? 's' : ''} importée${tasks.length !== 1 ? 's' : ''} — sélectionnez celles à envoyer en production`}
+              ? (canManage ? 'Aucune commande — importez un fichier Excel pour commencer' : 'Aucune commande en attente de validation')
+              : `${tasks.length} commande${tasks.length !== 1 ? 's' : ''}${canManage && stats.anomalies > 0 ? ` • ${stats.anomalies} anomalie${stats.anomalies !== 1 ? 's' : ''}` : ''} — ${pageSubtitle}`}
           </p>
         </div>
         <div className="actions-section">
-          {/* Search */}
           <div className="stock-search-bar">
             <span className="stock-search-bar__icon" aria-hidden>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <circle cx="11" cy="11" r="7" /><path d="m20 20-3.8-3.8" />
               </svg>
             </span>
-            <input
-              ref={inputRef}
-              type="text"
-              className="stock-search-bar__input"
+            <input ref={inputRef} type="text" className="stock-search-bar__input"
               placeholder="Client, référence, commercial… (Entrée)"
-              value={inputValue}
-              onChange={e => setInputValue(e.target.value)}
-              onKeyDown={handleKey}
-            />
-            {inputValue && (
-              <button type="button" className="stock-search-bar__clear" onClick={clearSearch} aria-label="Effacer">×</button>
-            )}
+              value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={handleKey} />
+            {inputValue && <button type="button" className="stock-search-bar__clear" onClick={clearSearch} aria-label="Effacer">×</button>}
             <button type="button" className="stock-search-bar__btn" onClick={applySearch}>Chercher</button>
           </div>
 
-          {/* Filters */}
           <div className="stock-filters">
             <select className="filter-select" value={urgencyFilter} onChange={e => { setUrgencyFilter(e.target.value); setCurrentPage(1); }}>
               <option value="">Toutes dates</option>
@@ -651,9 +827,24 @@ const CommercialReviewPage = () => {
               <option value="waiting">⏳ En attente</option>
               <option value="empty">✕ Rupture</option>
             </select>
+            {isGrouped && commercialOptions.length > 0 && (
+              <select className="filter-select" value={commercialFilter} onChange={e => { setCommercialFilter(e.target.value); setCurrentPage(1); }}>
+                <option value="">Tous les commerciaux</option>
+                {commercialOptions.map(c => <option key={c.id} value={c.id}>{c.name} ({c.id})</option>)}
+              </select>
+            )}
           </div>
 
           <div className="buttons-group">
+            {canManage && (
+              <button type="button" className={`btn btn-secondary${importing ? ' por-btn-loading' : ''}`}
+                onClick={() => importInputRef.current?.click()} disabled={importing}
+                title="Importer commandes Excel (.xlsx) — ou glisser-déposer">
+                {importing
+                  ? <><span className="por-spinner" aria-hidden /> Import…</>
+                  : <>📥 Importer</>}
+              </button>
+            )}
             <button className="btn btn-outline" onClick={fetchPending} disabled={loading || working}>↺ Actualiser</button>
           </div>
         </div>
@@ -667,14 +858,18 @@ const CommercialReviewPage = () => {
       )}
 
       {loading ? <Spinner message="Chargement des commandes..." /> : tasks.length === 0 ? (
-
-        /* ── Empty state ── */
         <div className="cr-empty">
-          <div className="cr-empty__icon">✓</div>
-          <strong>Toutes les commandes ont été traitées</strong>
-          <p>Les nouvelles commandes apparaissent ici après import par l'administrateur.</p>
+          <div className="cr-empty__icon">{canManage ? '📥' : '✓'}</div>
+          <strong>{canManage ? 'Aucune commande en attente' : 'Toutes les commandes ont été traitées'}</strong>
+          <p>{canManage
+            ? 'Importez un fichier Excel ou glissez-le sur cette page.'
+            : 'Les nouvelles commandes apparaissent ici après import par l\'administrateur.'}</p>
+          {canManage && (
+            <button type="button" className="btn btn-secondary" style={{ marginTop: '0.75rem' }} onClick={() => importInputRef.current?.click()}>
+              Choisir un fichier…
+            </button>
+          )}
         </div>
-
       ) : (
         <>
           {/* ── Stats strip ── */}
@@ -683,10 +878,16 @@ const CommercialReviewPage = () => {
               <strong>{stats.total}</strong>
               <span>commande{stats.total !== 1 ? 's' : ''}</span>
             </div>
-            {isPrivileged && stats.groups > 0 && (
+            {isGrouped && stats.groups > 0 && (
               <div className="stock-stat">
                 <strong>{stats.groups}</strong>
                 <span>commercial{stats.groups !== 1 ? 'x' : ''}</span>
+              </div>
+            )}
+            {canManage && stats.anomalies > 0 && (
+              <div className="stock-stat stock-stat--warning">
+                <strong>{stats.anomalies}</strong>
+                <span>anomalie{stats.anomalies !== 1 ? 's' : ''}</span>
               </div>
             )}
             <div className="stock-stat stock-stat--danger">
@@ -707,33 +908,33 @@ const CommercialReviewPage = () => {
               <span>pcs total</span>
             </div>
             {hasFilters && (
-              <button type="button" className="stock-stats-strip__clear" onClick={clearFilters}>
-                ✕ Effacer les filtres
-              </button>
+              <button type="button" className="stock-stats-strip__clear" onClick={clearFilters}>✕ Effacer les filtres</button>
             )}
           </div>
 
-          {/* ── Sticky action bar (appears when rows selected) ── */}
-          <div className={`cr-actionbar ${someSelected ? 'cr-actionbar--visible' : ''}`}>
-            <div className="cr-actionbar__left">
-              <span className="cr-actionbar__count">{selected.size} sélectionnée{selected.size !== 1 ? 's' : ''}</span>
-              <button type="button" className="cr-link-btn" onClick={toggleAll}>
-                {allSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
-              </button>
+          {/* ── Sticky action bar (approvers only) ── */}
+          {canApprove && (
+            <div className={`cr-actionbar ${someSelected ? 'cr-actionbar--visible' : ''}`}>
+              <div className="cr-actionbar__left">
+                <span className="cr-actionbar__count">{selected.size} sélectionnée{selected.size !== 1 ? 's' : ''}</span>
+                <button type="button" className="cr-link-btn" onClick={toggleAll}>
+                  {allSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
+                </button>
+              </div>
+              <div className="cr-actionbar__right">
+                <button type="button" className="btn btn-outline cr-btn-reject"
+                  onClick={() => handleReject([...selected])} disabled={!someSelected || working}>
+                  ✕ Rejeter ({selected.size})
+                </button>
+                <button type="button" className="btn btn-secondary"
+                  onClick={() => handleApprove([...selected])} disabled={!someSelected || working}>
+                  {working ? 'Traitement…' : `✓ Valider (${selected.size}) → Production`}
+                </button>
+              </div>
             </div>
-            <div className="cr-actionbar__right">
-              <button type="button" className="btn btn-outline cr-btn-reject"
-                onClick={() => handleReject([...selected])} disabled={!someSelected || working}>
-                ✕ Rejeter ({selected.size})
-              </button>
-              <button type="button" className="btn btn-secondary"
-                onClick={() => handleApprove([...selected])} disabled={!someSelected || working}>
-                {working ? 'Traitement…' : `✓ Valider (${selected.size}) → Production`}
-              </button>
-            </div>
-          </div>
+          )}
 
-          {/* ── No results after filter ── */}
+          {/* ── No results ── */}
           {filtered.length === 0 && (
             <div className="cr-empty" style={{ padding: '2rem 1rem' }}>
               <div className="cr-empty__icon" style={{ fontSize: '1.4rem' }}>🔍</div>
@@ -742,45 +943,64 @@ const CommercialReviewPage = () => {
             </div>
           )}
 
-          {/* ── Table(s) ── */}
-          {filtered.length > 0 && (isPrivileged ? (
+          {/* ── Anomalies section (super_admin) ── */}
+          {canManage && anomalousTasks.length > 0 && (
+            <div className="table-card" style={{ marginBottom: '1.25rem', borderColor: '#fde68a' }}>
+              <div className="cr-group-header" style={{ background: '#fffbeb' }}>
+                <div className="cr-group-header__left">
+                  <div className="cr-commercial-avatar" style={{ background: '#f59e0b' }}>⚠</div>
+                  <div>
+                    <div className="cr-group-name">Commandes avec anomalies</div>
+                    <div className="cr-group-meta">{anomalousTasks.length} à corriger avant validation</div>
+                  </div>
+                </div>
+                <div className="cr-group-header__right">
+                  <button type="button" className="btn btn-outline cr-btn-sm" onClick={() => selectGroup(anomalousTasks.map(t => t.id))}>
+                    Sélectionner
+                  </button>
+                </div>
+              </div>
+              <div className="table-responsive">
+                <table className="data-table">
+                  {renderTableHead()}
+                  <tbody>{anomalousTasks.map(renderRow)}</tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
-            /* Admin / planner: one table per commercial group */
+          {/* ── Main listing ── */}
+          {cleanTasks.length > 0 && (isGrouped ? (
             groups.map(([key, group]) => (
               <div key={key} className="table-card" style={{ marginBottom: '1.25rem' }}>
-                {/* Group header */}
                 <div className="cr-group-header">
                   <div className="cr-group-header__left">
-                    <div className="cr-commercial-avatar">
-                      {group.label.charAt(0).toUpperCase()}
-                    </div>
+                    <div className="cr-commercial-avatar">{group.label.charAt(0).toUpperCase()}</div>
                     <div>
                       <div className="cr-group-name">{group.label}</div>
                       <div className="cr-group-meta">
                         {group.tasks.length} commande{group.tasks.length !== 1 ? 's' : ''}
                         {' · '}
-                        {group.tasks.filter(t => readinessScore(t).level === 'ready').length} prête{group.tasks.filter(t => readinessScore(t).level === 'ready').length !== 1 ? 's' : ''}
+                        {group.tasks.filter(t => readinessScore(t).level === 'ready').length} prête(s)
                         {' · '}
                         {group.tasks.reduce((s, t) => s + Number(t.quantity || 0), 0).toLocaleString('fr-FR')} pcs
                       </div>
                     </div>
                   </div>
-                  <div className="cr-group-header__right">
-                    <button type="button" className="btn btn-outline cr-btn-sm"
-                      onClick={() => selectGroup(group.tasks.map(t => t.id))}>
-                      Sélectionner le groupe
-                    </button>
-                    <button type="button" className="btn btn-outline cr-btn-sm cr-btn-reject"
-                      onClick={() => handleReject(group.tasks.map(t => t.id))} disabled={working}>
-                      ✕ Rejeter tout
-                    </button>
-                    <button type="button" className="btn btn-secondary cr-btn-sm"
-                      onClick={() => handleApprove(group.tasks.map(t => t.id))} disabled={working}>
-                      ✓ Valider tout
-                    </button>
-                  </div>
+                  {canApprove && (
+                    <div className="cr-group-header__right">
+                      <button type="button" className="btn btn-outline cr-btn-sm" onClick={() => selectGroup(group.tasks.map(t => t.id))}>
+                        Sélectionner le groupe
+                      </button>
+                      <button type="button" className="btn btn-outline cr-btn-sm cr-btn-reject" onClick={() => handleReject(group.tasks.map(t => t.id))} disabled={working}>
+                        ✕ Rejeter tout
+                      </button>
+                      <button type="button" className="btn btn-secondary cr-btn-sm" onClick={() => handleApprove(group.tasks.map(t => t.id))} disabled={working}>
+                        ✓ Valider tout
+                      </button>
+                    </div>
+                  )}
                 </div>
-
                 <div className="table-responsive">
                   <table className="data-table">
                     {renderTableHead()}
@@ -789,10 +1009,7 @@ const CommercialReviewPage = () => {
                 </div>
               </div>
             ))
-
           ) : (
-
-            /* Commercial: flat table with pagination */
             <div className="table-card">
               <div className="table-responsive">
                 <table className="data-table">
@@ -800,9 +1017,7 @@ const CommercialReviewPage = () => {
                   <tbody>{paginatedFlat.map(renderRow)}</tbody>
                 </table>
               </div>
-
-              {/* Pagination */}
-              {filtered.length > pageSize && (
+              {cleanTasks.length > pageSize && (
                 <div className="pagination-container" style={{ justifyContent: 'space-between' }}>
                   <div className="pagination-controls">
                     <select className="page-size-select" value={pageSize}
@@ -813,7 +1028,7 @@ const CommercialReviewPage = () => {
                       <option value={10000}>Toutes</option>
                     </select>
                     <span className="page-indicator" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                      {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, filtered.length)} sur {filtered.length}
+                      {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, cleanTasks.length)} sur {cleanTasks.length}
                     </span>
                   </div>
                   {totalPages > 1 && (
@@ -828,7 +1043,6 @@ const CommercialReviewPage = () => {
                 </div>
               )}
             </div>
-
           ))}
         </>
       )}
@@ -841,45 +1055,11 @@ const CommercialReviewPage = () => {
           onApprove={handleApprove}
           onReject={handleReject}
           working={working}
+          canApprove={canApprove}
         />
       )}
     </div>
   );
-
-  function renderTableHead() {
-    return (
-      <thead>
-        <tr>
-          <th className="cr-col-check">
-            <input type="checkbox"
-              checked={allSelected}
-              onChange={toggleAll}
-              title="Tout sélectionner"
-            />
-          </th>
-          <th className="sortable-header" onClick={() => requestSort('client')}>
-            Client / Commande {sortIcon('client')}
-          </th>
-          <th className="sortable-header" onClick={() => requestSort('ref')}>
-            Référence {sortIcon('ref')}
-          </th>
-          <th className="cr-col-hide-md">Désignation</th>
-          <th className="text-center sortable-header" onClick={() => requestSort('qty')}>
-            Quantité {sortIcon('qty')}
-          </th>
-          <th className="sortable-header" onClick={() => requestSort('date')}>
-            Date livraison {sortIcon('date')}
-          </th>
-          <th className="text-center">Stock dispo.</th>
-          <th className="text-center sortable-header cr-col-hide-sm" onClick={() => requestSort('coverage')}>
-            Couverture {sortIcon('coverage')}
-          </th>
-          <th className="cr-col-hide-sm">Statut</th>
-          <th style={{ width: 80 }}></th>
-        </tr>
-      </thead>
-    );
-  }
 };
 
-export default CommercialReviewPage;
+export default OrdersReviewPage;

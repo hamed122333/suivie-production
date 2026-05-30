@@ -32,7 +32,8 @@ const Header = () => {
   const menuRef = useRef(null);
   const notifRef = useRef(null);
   const canViewNotifications = isSuperAdmin || isPlanner || isCommercial || isLivreur;
-  const canViewPending = isCommercial;
+  // /orders nav link + badge: super_admin, commercial, planner (planner read-only)
+  const canViewPending = isSuperAdmin || isCommercial || isPlanner;
   const [pendingCount, setPendingCount] = useState(0);
 
   const roleInfo = ROLE_CONFIG[user?.role] || ROLE_CONFIG.user;
@@ -68,7 +69,7 @@ const Header = () => {
     return () => window.clearInterval(interval);
   }, [canViewNotifications, loadNotifications]);
 
-  // Pending approval count for nav badge
+  // Pending approval count for nav badge (commercial, super_admin, planner)
   useEffect(() => {
     if (!canViewPending) return;
     const load = async () => {
@@ -123,7 +124,7 @@ const Header = () => {
     // Route to the most relevant page based on notification type
     const taskId = notification.task_id;
     if (notification.type === 'task_created' || notification.type === 'orders_imported') {
-      navigate('/my-orders');
+      navigate('/orders');
     } else if (notification.type === 'ready_to_deliver') {
       // Livreur: go straight to kanban scoped to DONE column
       navigate(taskId ? `/kanban?taskId=${taskId}` : '/kanban');
@@ -290,8 +291,7 @@ const Header = () => {
       {/* Navigation */}
       <nav className="header-nav" aria-label="Navigation principale">
         {navItem('/kanban', 'Production', '▤')}
-        {isSuperAdmin && navItem('/pending-orders', 'Commandes importées', '☰', pendingCount)}
-        {canViewPending && navItem('/my-orders', 'Mes commandes', '◈', pendingCount)}
+        {canViewPending && navItem('/orders', 'Commandes', '◈', pendingCount)}
         {navItem('/dashboard', 'Dashboard', '◱')}
         {navItem('/stock', 'Stock', '▦')}
         {isSuperAdmin && navItem('/users', 'Utilisateurs', '◉')}

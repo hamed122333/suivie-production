@@ -8,8 +8,7 @@ import DashboardPage from "./pages/DashboardPage";
 import KanbanPage from "./pages/KanbanPage";
 import UsersPage from "./pages/UsersPage";
 import StockPage from "./pages/StockPage";
-import CommercialReviewPage from "./pages/CommercialReviewPage";
-import PendingOrdersPage from "./pages/PendingOrdersPage";
+import OrdersReviewPage from "./pages/OrdersReviewPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -48,8 +47,9 @@ const AppRoutes = () => {
       <Route path="/dashboard" element={<ProtectedRoute><Layout><DashboardPage /></Layout></ProtectedRoute>} />
       <Route path="/reports"   element={<Navigate to="/dashboard" replace />} />
       <Route path="/kanban"    element={<ProtectedRoute><Layout><KanbanPage /></Layout></ProtectedRoute>} />
-      <Route path="/pending-orders" element={<ProtectedRoute><Layout><PendingOrdersPage /></Layout></ProtectedRoute>} />
-      <Route path="/my-orders" element={<ProtectedRoute><Layout><CommercialReviewPage /></Layout></ProtectedRoute>} />
+      <Route path="/orders"         element={<ProtectedRoute><Layout><OrdersReviewPage /></Layout></ProtectedRoute>} />
+      <Route path="/pending-orders" element={<Navigate to="/orders" replace />} />
+      <Route path="/my-orders"      element={<Navigate to="/orders" replace />} />
       <Route path="/users"     element={<ProtectedRoute><Layout><UsersPage /></Layout></ProtectedRoute>} />
       <Route path="/stock"     element={<ProtectedRoute><Layout><StockPage /></Layout></ProtectedRoute>} />
       <Route path="/"          element={<Navigate to="/kanban" replace />} />

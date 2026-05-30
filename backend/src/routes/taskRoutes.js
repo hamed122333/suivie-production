@@ -30,10 +30,11 @@ router.patch('/board', authenticate, requireRoles(['planner', 'commercial', 'sup
 // ── Commercial review workflow ──────────────────────────────────────────────
 // List tasks waiting for commercial approval
 router.get('/pending-approval', authenticate, requireRoles(['commercial', 'planner', 'super_admin']), taskController.getPendingApproval);
-// Approve selected tasks (commercial/admin → triggers FIFO → TODO or WAITING_STOCK)
-router.post('/approve', authenticate, requireRoles(['commercial', 'planner', 'super_admin']), taskController.approveOrders);
+// Approve selected tasks (commercial/super_admin → triggers FIFO → TODO or WAITING_STOCK)
+// planner is a read-only spectator here
+router.post('/approve', authenticate, requireRoles(['commercial', 'super_admin']), taskController.approveOrders);
 // Reject (delete) selected pending tasks
-router.post('/reject', authenticate, requireRoles(['commercial', 'planner', 'super_admin']), taskController.rejectOrders);
+router.post('/reject', authenticate, requireRoles(['commercial', 'super_admin']), taskController.rejectOrders);
 
 // Exporter les tches via Excel
 router.get('/export', authenticate, taskController.exportExcel);
@@ -50,7 +51,7 @@ router.get('/:id', authenticate, taskController.getById);
 router.post('/', authenticate, requireCommercial, taskController.create);
 
 // Modifier une tâche complète : planificateur et commercial
-router.put('/:id', authenticate, requireRoles(['planner', 'commercial']), taskController.update);
+router.put('/:id', authenticate, requireRoles(['planner', 'commercial', 'super_admin']), taskController.update);
 router.put('/:id/date-negotiation', authenticate, requireRoles(['planner', 'commercial']), taskController.applyDateNegotiation);
 
 // Confirmer une tâche prédictive : commercial et planner

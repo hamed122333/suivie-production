@@ -165,7 +165,8 @@ const KanbanToolbar = ({
   const importInputRef = useRef(null);
   const [inputValue, setInputValue] = useState(search);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [windowSize, setWindowSize] = useState('week');
+  // Default to 'all' so the board shows every task; date window is opt-in
+  const [windowSize, setWindowSize] = useState('all');
   const [anchor, setAnchor] = useState(() =>
     dateFrom ? normaliseAnchor(new Date(dateFrom+'T00:00:00'), 'week') : getMonday(new Date())
   );

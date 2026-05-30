@@ -1,7 +1,8 @@
+const pool = require('../config/db');
 const TaskModel = require('../models/taskModel');
 const StockImportModel = require('../models/stockImportModel');
 const { isHttpError } = require('../utils/httpErrors');
-const { applyTaskVisibility, parseWorkspaceId } = require('../utils/taskScope');
+const { applyTaskVisibility, parseWorkspaceId, isPrivilegedTaskRole } = require('../utils/taskScope');
 
 const dashboardController = {
   async getStats(req, res) {
@@ -17,6 +18,31 @@ const dashboardController = {
         TaskModel.getAll(filters),
         StockImportModel.getAll(),
       ]);
+
+      // Pending approval count (excluded from normal filters)
+      let pendingCount = 0;
+      let pendingByCommercial = [];
+      if (isPrivilegedTaskRole(req.user?.role)) {
+        const pendingResult = await pool.query(
+          "SELECT COUNT(*)::int AS count FROM tasks WHERE status = 'PENDING_APPROVAL'" + (workspaceId ? ' AND workspace_id = $1' : ''),
+          workspaceId ? [workspaceId] : []
+        );
+        pendingCount = pendingResult.rows[0]?.count || 0;
+
+        const commercialResult = await pool.query(
+          `SELECT COALESCE(t.commercial_id, '__none__') AS cid,
+                  COALESCE(u.name, t.commercial_id, 'Sans commercial') AS cname,
+                  COUNT(*)::int AS count
+           FROM tasks t
+           LEFT JOIN users u ON u.commercial_id = t.commercial_id AND u.role = 'commercial'
+           WHERE t.status = 'PENDING_APPROVAL'
+           ${workspaceId ? 'AND t.workspace_id = $1' : ''}
+           GROUP BY cid, cname
+           ORDER BY count DESC`,
+          workspaceId ? [workspaceId] : []
+        );
+        pendingByCommercial = commercialResult.rows;
+      }
 
       const clientBreakdown = {};
       const articleBreakdown = {};
@@ -74,6 +100,7 @@ const dashboardController = {
           completedToday: parseCount(counts.completed_today),
           totalQuantity,
           totalQuantityDone,
+          pendingCount,
         },
         upcomingDue: stats.upcomingDue || [],
         blockedTasks: stats.blockedTasks || [],
@@ -86,6 +113,7 @@ const dashboardController = {
           topArticles,
           categoryBreakdown,
           stockSummary,
+          pendingByCommercial,
         },
       });
     } catch (err) {

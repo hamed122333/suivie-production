@@ -148,7 +148,6 @@ const KanbanBoard = ({
   setTasks,
   users = [],
   onTasksChange,
-  workspaceId,
   filterQuery = '',
   filterPriority = '',
   filterCategory = '',
@@ -156,7 +155,6 @@ const KanbanBoard = ({
   filterPredictiveOnly = false,
   filterCommercial = '',
   filterDate = null,
-  onStatsRefresh,
 }) => {
   const { canChangeStatus, canCreateTask, isCommercial, isSuperAdmin, isLivreur, canMarkDelivered, user } = useAuth();
 
@@ -204,7 +202,8 @@ const KanbanBoard = ({
     }
   };
 
-  const isAllWorkspaces = workspaceId === 'all';
+  // No workspace filtering — board is always in global view, order not persisted server-side
+  const isAllWorkspaces = true;
   const deferredQuery = useDeferredValue(filterQuery);
   const hasActiveFilters = Boolean(deferredQuery.trim() || filterPriority || filterCategory || filterCriticalDeficit || filterPredictiveOnly || filterCommercial || filterDate);
 
@@ -233,7 +232,6 @@ const KanbanBoard = ({
 
   const refreshBoardAndPanels = async () => {
     await onTasksChange();
-    await onStatsRefresh?.();
     setDetailRefreshSignal((current) => current + 1);
   };
 
@@ -273,19 +271,8 @@ const KanbanBoard = ({
     setDragOverTaskId(null);
   };
 
-  const persistBoard = async (nextTasks) => {
-    if (isAllWorkspaces) return;
-
-    const columnOrders = buildColumnOrders(nextTasks);
-    try {
-      const response = await taskAPI.patchBoard({ workspaceId, columnOrders });
-      setTasks(response.data);
-      await onStatsRefresh?.();
-      setDetailRefreshSignal((current) => current + 1);
-    } catch (err) {
-      setErrorShort(err.response?.data?.error || 'Impossible de sauvegarder le tableau.');
-      await onTasksChange();
-    }
+  const persistBoard = async (_nextTasks) => {
+    // Board order persistence disabled — global view, tasks span multiple workspaces
   };
 
   const runDrop = async (draggedId, targetStatus, insertBeforeId) => {
@@ -386,7 +373,6 @@ const KanbanBoard = ({
       } else {
         await taskAPI.createBatch({
           tasks: formData.tasks || [formData],
-          workspaceId,
           status: formData.status || null,
         });
       }

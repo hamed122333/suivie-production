@@ -180,6 +180,10 @@ function normalizeTaskUpdatePayload(data = {}) {
     }
   }
 
+  if (Object.prototype.hasOwnProperty.call(data, 'commercialId')) {
+    normalized.commercialId = data.commercialId == null || data.commercialId === '' ? null : data.commercialId;
+  }
+
   return normalized;
 }
 

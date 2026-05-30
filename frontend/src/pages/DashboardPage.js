@@ -81,6 +81,8 @@ const DashboardPage = () => {
   const totalTasks = counts.totalTasks || 0;
   const completionRate = totalTasks > 0 ? Math.round(((counts.totalDone || 0) / totalTasks) * 100) : 0;
   const todayISO = new Date().toISOString().slice(0, 10);
+  const pendingByCommercial = stats?.analytics?.pendingByCommercial || [];
+  const categoryBreakdown = stats?.analytics?.categoryBreakdown || {};
 
   const dayPlus7 = useMemo(() => {
     const d = new Date();
@@ -126,11 +128,18 @@ const DashboardPage = () => {
       formData.append('file', file);
       const response = await taskAPI.importOrders(formData);
       const importedWorkspaces = response?.data?.workspaces || [];
-      const importedCount = response?.data?.imported ?? '?';
+      const importedCount = response?.data?.imported ?? 0;
+      const skippedCount = response?.data?.skipped ?? 0;
       await refreshWorkspaces();
       if (importedWorkspaces.length > 0) selectWorkspace(importedWorkspaces[0].id);
       await fetchData(false);
-      setImportBanner({ type: 'success', message: `${importedCount} ligne(s) importee(s)` });
+      let msg;
+      if (importedCount === 0 && skippedCount > 0) {
+        msg = `Aucune nouvelle ligne importee. Toutes les ${skippedCount} lignes existent deja.`;
+      } else {
+        msg = `${importedCount} ligne(s) importee(s).${skippedCount > 0 ? ` ${skippedCount} deja existante(s) ignoree(s).` : ''}`;
+      }
+      setImportBanner({ type: 'success', message: msg });
       if (bannerTimer.current) clearTimeout(bannerTimer.current);
       bannerTimer.current = setTimeout(() => setImportBanner(null), 5000);
     } catch (err) {
@@ -175,8 +184,9 @@ const DashboardPage = () => {
       </header>
 
       <section className="dashboard__metrics-grid">
-        <MetricTile label="Total" value={derived.totalLines} tone="blue" onClick={() => navigate('/kanban')} />
         <MetricTile label="Commandes" value={derived.totalOrders} tone="sky" />
+        <MetricTile label="Lignes prod." value={derived.totalLines} tone="blue" onClick={() => navigate('/kanban')} />
+        {isSuperAdmin && <MetricTile label="En attente" value={counts.pendingCount || 0} tone="purple" onClick={() => navigate('/orders')} />}
         <MetricTile label="Hors stock" value={derived.waitingCount} tone="amber" onClick={() => navigate('/kanban?status=WAITING_STOCK')} />
         <MetricTile label="Retards" value={derived.overdueCount} tone="red" onClick={() => navigate('/kanban')} />
         <MetricTile label="Termine" value={`${completionRate}%`} tone="green" helper={`${counts.totalDone || 0}/${totalTasks}`} />
@@ -265,6 +275,78 @@ const DashboardPage = () => {
                 <span>Faible</span>
                 <strong>{stockSummary.lowStockCount || 0}</strong>
               </div>
+            </div>
+          </div>
+
+          <div className="dashboard-card">
+            <div className="dashboard-card__header">
+              <h3>Flux production</h3>
+            </div>
+            <div className="dash-flow">
+              <div className="dash-flow__bar">
+                <div className="dash-flow__segment dash-flow__segment--todo" style={{ flex: counts.totalTodo || 1 }}>
+                  <strong>{(counts.totalTodo || 0).toLocaleString()}</strong>
+                  <span>À faire</span>
+                </div>
+                <div className="dash-flow__segment dash-flow__segment--progress" style={{ flex: counts.totalInProgress || 1 }}>
+                  <strong>{(counts.totalInProgress || 0).toLocaleString()}</strong>
+                  <span>En cours</span>
+                </div>
+                <div className="dash-flow__segment dash-flow__segment--done" style={{ flex: counts.totalDone || 1 }}>
+                  <strong>{(counts.totalDone || 0).toLocaleString()}</strong>
+                  <span>Fait</span>
+                </div>
+                <div className="dash-flow__segment dash-flow__segment--blocked" style={{ flex: counts.totalBlocked || 1 }}>
+                  <strong>{(counts.totalBlocked || 0).toLocaleString()}</strong>
+                  <span>Bloc.</span>
+                </div>
+                <div className="dash-flow__segment dash-flow__segment--waiting" style={{ flex: counts.totalWaitingStock || 1 }}>
+                  <strong>{(counts.totalWaitingStock || 0).toLocaleString()}</strong>
+                  <span>Stock</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {isSuperAdmin && pendingByCommercial.length > 0 && (
+            <div className="dashboard-card">
+              <div className="dashboard-card__header">
+                <h3>En attente par commercial</h3>
+                <span className="dashboard-card__badge dashboard-card__badge--purple">{counts.pendingCount}</span>
+              </div>
+              <div className="dashboard-list">
+                {pendingByCommercial.map((c, i) => (
+                  <div key={i} className="dashboard-list__item" onClick={() => navigate('/orders')}>
+                    <div className="dashboard-list__item-content">
+                      <span className="dashboard-list__item-title">{c.cname}</span>
+                      {c.cid !== '__none__' && <span className="dashboard-list__item-subtitle">{c.cid}</span>}
+                    </div>
+                    <span className="dash-badge-count">{c.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="dashboard-card">
+            <div className="dashboard-card__header">
+              <h3>Catégories</h3>
+            </div>
+            <div className="dash-categories">
+              {Object.entries(categoryBreakdown).filter(([, n]) => n > 0).map(([cat, n]) => {
+                const total = Object.values(categoryBreakdown).reduce((s, v) => s + v, 0);
+                const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+                return (
+                  <div key={cat} className="dash-cat">
+                    <div className="dash-cat__head">
+                      <span className={`article-badge article-badge--${cat.toLowerCase()}`}>{cat}</span>
+                      <strong>{n}</strong>
+                      <span className="dash-cat__pct">{pct}%</span>
+                    </div>
+                    <div className="dash-cat__bar"><div className="dash-cat__fill" style={{ width: `${pct}%` }} /></div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

@@ -4,88 +4,112 @@ import KanbanBoard from '../components/KanbanBoard';
 import KanbanToolbar from '../components/KanbanToolbar';
 import ExportModal from '../components/ExportModal';
 import Spinner from '../components/Spinner';
-import { taskAPI, userAPI, dashboardAPI } from '../services/api';
-import { useAuth } from '../context/AuthContext';
-import { useWorkspace } from '../context/WorkspaceContext';
+import { taskAPI, userAPI } from '../services/api';
 import useServerEvents from '../hooks/useServerEvents';
 
 const KanbanPage = () => {
-  const [tasks, setTasks] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [importing, setImporting] = useState(false);
-  const [importBanner, setImportBanner] = useState(null);
-  const skipNextLoadingRef = useRef(false);
-  const [search, setSearch] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [tasks, setTasks]         = useState([]);
+  const [users, setUsers]         = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [search, setSearch]       = useState('');
+  const [priorityFilter, setPriorityFilter]           = useState('');
+  const [categoryFilter, setCategoryFilter]           = useState('');
   const [criticalDeficitFilter, setCriticalDeficitFilter] = useState(false);
-  const [predictiveOnlyFilter, setPredictiveOnlyFilter] = useState(false);
-  const [commercialFilter, setCommercialFilter] = useState('');
-  const [selectedDayFilter, setSelectedDayFilter] = useState(null);
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [predictiveOnlyFilter, setPredictiveOnlyFilter]   = useState(false);
+  const [commercialFilter, setCommercialFilter]       = useState('');
+  const [selectedDayFilter, setSelectedDayFilter]     = useState(null);
+  const [plannedFrom, setPlannedFrom] = useState('');
+  const [plannedTo, setPlannedTo]     = useState('');
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isSuperAdmin } = useAuth();
-  const { workspaceId, loadingWorkspaces, refreshWorkspaces, selectWorkspace } = useWorkspace();
 
-  const fetchTasks = useCallback(
-    async (wsId) => {
-      try {
-        // Ne passer workspaceId que si c'est une valeur numérique valide
-        const params = {};
-        if (wsId && wsId !== 'all' && wsId !== null) {
-          params.workspaceId = wsId;
-        }
-        const status = searchParams.get('status');
-        if (status) params.status = status;
-        const res = await taskAPI.getAll(params);
-        setTasks(res.data);
-      } catch (err) {
-        console.error('Failed to fetch tasks', err);
-      }
-    },
-    [setTasks, searchParams]
-  );
+  // Keep latest date range in a ref so SSE handlers always use current values
+  const dateRef = useRef({ plannedFrom: '', plannedTo: '' });
+  dateRef.current = { plannedFrom, plannedTo };
 
-  const fetchStats = useCallback(async () => {
-    try {
-      // Ne passer workspaceId a l'API que si c'est un ID numerique
-      const statsWorkspaceId = workspaceId && workspaceId !== 'all' ? workspaceId : null;
-      const res = await dashboardAPI.getStats(statsWorkspaceId);
-      setStats(res.data);
-    } catch (err) {
-      console.error('Failed to fetch stats', err);
-    }
-  }, [workspaceId]);
+  // ── Fetch ─────────────────────────────────────────────────────────────────
 
-  // Real-time: refetch when stock or task allocations change
-  useServerEvents({
-    'stock-updated': () => {
-      fetchTasks(workspaceId);
-      fetchStats();
-    },
-    'tasks-updated': () => {
-      fetchTasks(workspaceId);
-      fetchStats();
-    },
-  });
-
-  const handleExport = async (startDate, endDate, exportAll) => {
+  const fetchTasks = useCallback(async (from, to) => {
     try {
       const params = {};
-      if (!exportAll && workspaceId !== 'all' && workspaceId !== null) {
-        params.workspaceId = workspaceId;
-      }
-      if (startDate) params.createdFrom = startDate;
-      if (endDate) params.createdTo = endDate;
+      const status = searchParams.get('status');
+      if (status)  params.status      = status;
+      if (from)    params.plannedFrom = from;
+      if (to)      params.plannedTo   = to;
+      const res = await taskAPI.getAll(params);
+      setTasks(res.data);
+    } catch (err) {
+      console.error('Failed to fetch tasks', err);
+    }
+  }, [searchParams]);
 
+  // Real-time: refetch with current date range on any task/stock change
+  useServerEvents({
+    'stock-updated': () => fetchTasks(dateRef.current.plannedFrom, dateRef.current.plannedTo),
+    'tasks-updated': () => fetchTasks(dateRef.current.plannedFrom, dateRef.current.plannedTo),
+  });
+
+  // ── Initial load ──────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [tasksRes, usersRes] = await Promise.all([
+          taskAPI.getAll({}),
+          userAPI.getAll(),
+        ]);
+        setTasks(tasksRes.data);
+        setUsers(usersRes.data);
+      } catch (err) {
+        console.error('Failed to load kanban', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Sync search from URL ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    setSearch(searchParams.get('q') || '');
+  }, [searchParams]);
+
+  // ── Date range from toolbar → refetch ─────────────────────────────────────
+  // Skip on first render (initial load already done above)
+
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    fetchTasks(plannedFrom, plannedTo);
+  }, [plannedFrom, plannedTo, fetchTasks]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  const handleDateChange = (from, to) => {
+    setPlannedFrom(from || '');
+    setPlannedTo(to || '');
+    // Also clear the day-bar selection when the window changes
+    setSelectedDayFilter(null);
+  };
+
+  const handleSearchChange = (value) => {
+    startTransition(() => {
+      setSearch(value);
+      if (value.trim()) setSearchParams({ q: value.trim() });
+      else setSearchParams({});
+    });
+  };
+
+  const handleExport = async (startDate, endDate) => {
+    try {
+      const params = {};
+      if (startDate) params.createdFrom = startDate;
+      if (endDate)   params.createdTo   = endDate;
       const res = await taskAPI.exportExcel(params);
-      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const url  = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
-      link.href = url;
+      link.href  = url;
       link.setAttribute('download', `Export_Taches_${new Date().toISOString().slice(0, 10)}.xlsx`);
       document.body.appendChild(link);
       link.click();
@@ -95,100 +119,10 @@ const KanbanPage = () => {
     }
   };
 
-  const handleImportOrders = async (file) => {
-    if (!file || !isSuperAdmin) return;
-    setImporting(true);
-    setImportBanner(null);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const response = await taskAPI.importOrders(formData);
-      const importedWorkspaces = response?.data?.workspaces || [];
-      const importedCount = response?.data?.imported ?? '?';
-      const anomaliesCount = response?.data?.anomalies?.length ?? 0;
-      await refreshWorkspaces();
-      const targetWsId = importedWorkspaces.length > 0 ? importedWorkspaces[0].id : workspaceId;
-      if (importedWorkspaces.length > 0) {
-        skipNextLoadingRef.current = true;
-        selectWorkspace(targetWsId);
-      }
-      await Promise.all([fetchTasks(targetWsId), fetchStats()]);
-      const anomalyNote = anomaliesCount > 0 ? ` • ${anomaliesCount} ligne(s) avec anomalies signalées.` : '';
-      setImportBanner({ type: 'success', message: `${importedCount} ligne(s) importée(s) avec succès.${anomalyNote}` });
-      setTimeout(() => setImportBanner(null), 5000);
-    } catch (err) {
-      setImportBanner({ type: 'error', message: err?.response?.data?.error || 'Echec import commandes client.' });
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  useEffect(() => {
-    const q = searchParams.get('q') || '';
-    setSearch(q);
-  }, [searchParams]);
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const usersRes = await userAPI.getAll();
-        setUsers(usersRes.data);
-      } catch (err) {
-        console.error('Failed to load data', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, []);
-
-  useEffect(() => {
-    if (loadingWorkspaces) return;
-    if (workspaceId === null) return;
-    if (skipNextLoadingRef.current) {
-      skipNextLoadingRef.current = false;
-      return;
-    }
-    setLoading(true);
-    Promise.all([fetchTasks(workspaceId), fetchStats()]).finally(() => setLoading(false));
-  }, [workspaceId, loadingWorkspaces, fetchTasks, fetchStats]);
-
-  const handleDateChange = (from, to) => { setDateFrom(from || ''); setDateTo(to || ''); };
-
-  const handleSearchChange = (value) => {
-    startTransition(() => {
-      setSearch(value);
-      if (value.trim()) {
-        setSearchParams({ q: value.trim() });
-      } else {
-        setSearchParams({});
-      }
-    });
-  };
-
-  if (loading) {
-    return (
-      <Spinner message="Chargement du tableau…" />
-    );
-  }
+  if (loading) return <Spinner message="Chargement du tableau…" />;
 
   return (
     <div className="kanban-page">
-      {importBanner && (
-        <div style={{
-          padding: '0.65rem 1.25rem',
-          background: importBanner.type === 'success' ? '#ecfdf5' : '#fef2f2',
-          color: importBanner.type === 'success' ? '#065f46' : '#991b1b',
-          borderBottom: `1px solid ${importBanner.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
-          fontSize: '0.875rem',
-          fontWeight: 600,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-        }}>
-          {importBanner.type === 'success' ? '✓' : '⚠'} {importBanner.message}
-        </div>
-      )}
       <KanbanToolbar
         search={search}
         onSearchChange={handleSearchChange}
@@ -204,19 +138,15 @@ const KanbanPage = () => {
         onCommercialFilterChange={setCommercialFilter}
         commercials={users.filter(u => u.role === 'commercial' && u.commercial_id)}
         tasks={tasks}
-        dateFrom={dateFrom}
         onDateChange={handleDateChange}
         onDaySelect={setSelectedDayFilter}
-        importing={importing}
-        onRefresh={() => Promise.all([fetchTasks(workspaceId), fetchStats()])}
+        onRefresh={() => fetchTasks(plannedFrom, plannedTo)}
         onExport={() => setExportModalOpen(true)}
-        onImportOrders={isSuperAdmin ? handleImportOrders : null}
       />
       <KanbanBoard
         tasks={tasks}
         setTasks={setTasks}
         users={users}
-        workspaceId={workspaceId}
         filterQuery={search}
         filterPriority={priorityFilter}
         filterCategory={categoryFilter}
@@ -224,14 +154,12 @@ const KanbanPage = () => {
         filterPredictiveOnly={predictiveOnlyFilter}
         filterCommercial={commercialFilter}
         filterDate={selectedDayFilter}
-        onTasksChange={() => fetchTasks(workspaceId)}
-        onStatsRefresh={fetchStats}
+        onTasksChange={() => fetchTasks(plannedFrom, plannedTo)}
       />
       <ExportModal
         isOpen={exportModalOpen}
         onClose={() => setExportModalOpen(false)}
         onExport={handleExport}
-        currentWorkspaceId={workspaceId}
       />
     </div>
   );

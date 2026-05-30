@@ -96,3 +96,45 @@
 .por-page-wrap .cr-date-wrapper[data-urgency="overdue"]  { background: #fef2f2; border-color: #fecaca; }
 .por-page-wrap .cr-date-wrapper[data-urgency="critical"] { background: #fff7ed; border-color: #fed7aa; }
 .por-page-wrap .cr-date-wrapper[data-urgency="soon"]     { background: #fffbeb; border-color: #fde68a; }
+
+/* ── Import drag-drop overlay ───────────────────────────────────────────── */
+.por-page-wrap--drop { outline: 3px dashed #3b82f6; outline-offset: -6px; }
+.por-drop-overlay {
+  position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem;
+  background: rgba(239,246,255,0.92); backdrop-filter: blur(2px);
+  font-size: 1.15rem; font-weight: 700; color: #1d4ed8;
+}
+
+/* ── Import spinner ──────────────────────────────────────────────────────── */
+.por-spinner {
+  display: inline-block; width: 12px; height: 12px; margin-right: 0.35rem;
+  border: 2px solid rgba(255,255,255,0.35); border-top-color: currentColor;
+  border-radius: 50%; animation: por-spin 0.7s linear infinite; vertical-align: middle;
+}
+@keyframes por-spin { to { transform: rotate(360deg); } }
+
+/* ── Row fix inline ──────────────────────────────────────────────────────── */
+.por-row--fixing { background: #f0f9ff !important; }
+.por-fix-input {
+  padding: 0.35rem 0.55rem; border: 1px solid #93c5fd; border-radius: 6px;
+  font-size: 0.82rem; color: #334155; width: 100%; min-width: 120px;
+}
+.por-fix-input:focus { outline: none; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+
+.por-fix-actions { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; }
+.por-fix-btn {
+  padding: 0.3rem 0.65rem; border: 1px solid #e2e8f0; border-radius: 6px;
+  background: white; font-size: 0.75rem; font-weight: 600; cursor: pointer;
+  white-space: nowrap; transition: all 0.12s;
+}
+.por-fix-btn--edit   { color: #1d4ed8; border-color: #bfdbfe; }
+.por-fix-btn--edit:hover { background: #eff6ff; }
+.por-fix-btn--save   { color: #16a34a; border-color: #bbf7d0; }
+.por-fix-btn--save:hover { background: #f0fdf4; }
+.por-fix-btn--save:disabled { opacity: 0.5; cursor: default; }
+.por-fix-btn--cancel { color: #dc2626; border-color: #fecaca; }
+.por-fix-btn--cancel:hover { background: #fef2f2; }
+
+/* ── Row quick actions ───────────────────────────────────────────────────── */
+.por-row-actions { display: flex; gap: 0.25rem; align-items: center; }

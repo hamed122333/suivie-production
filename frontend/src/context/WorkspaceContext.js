@@ -19,7 +19,6 @@ export const WorkspaceProvider = ({ children }) => {
       setWorkspaces(list);
 
       const stored = localStorage.getItem('workspaceId');
-      // Gérer la valeur spéciale 'all'
       if (stored === 'all') {
         setWorkspaceId('all');
         return;

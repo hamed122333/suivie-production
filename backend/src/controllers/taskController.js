@@ -790,6 +790,8 @@ const taskController = {
 
       const createdTasks = [];
       const workspacesTouched = [];
+      const warnings = [];
+      let skippedTotal = 0;
       for (const [workspaceName, drafts] of groupedByWorkspace.entries()) {
         const workspace = await WorkspaceModel.findOrCreateByName(workspaceName);
         workspacesTouched.push({ id: workspace.id, name: workspace.name });
@@ -828,8 +830,31 @@ const taskController = {
           };
         });
 
+        // Dedup: compare all import columns with existing DB rows
+        const existingRows = await TaskModel.listExistingOrderLines({
+          workspaceId: workspace.id,
+          orderCodes: null,
+        });
+        const fmtQty = (v) => { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : ''; };
+        const buildKey = (r) =>
+          `${r.orderCode || r.order_code || ''}|${r.clientName || r.client_name || ''}|${r.itemReference || r.item_reference || ''}|${fmtQty(r.quantity)}|${r.plannedDate || r.planned_date || ''}|${r.description || ''}|${r.commercialId || r.commercial_id || ''}`;
+        const existingKeys = new Set(existingRows.map(buildKey));
+        const seenInBatch = new Set();
+        const uniqueTasks = pendingTasks.filter((t) => {
+          const key = buildKey(t);
+          if (existingKeys.has(key) || seenInBatch.has(key)) return false;
+          seenInBatch.add(key);
+          return true;
+        });
+        const skippedCount = pendingTasks.length - uniqueTasks.length;
+        skippedTotal += skippedCount;
+        if (skippedCount > 0) {
+          warnings.push(`${skippedCount} ligne(s) déjà existante(s) ignorée(s) dans le workspace "${workspaceName}"`);
+        }
+        if (uniqueTasks.length === 0) continue;
+
         const createdPending = await TaskModel.createMany({
-          tasks: pendingTasks,
+          tasks: uniqueTasks,
           createdBy: req.user.id,
           workspaceId: workspace.id,
           status: 'PENDING_APPROVAL',
@@ -850,7 +875,6 @@ const taskController = {
 
       // No FIFO here — it runs when commercial approves each task
 
-      const warnings = [];
       if (invalidCommercialFormats.size > 0) {
         warnings.push(`Codes commerciaux invalides (format VL000001 attendu) : ${[...invalidCommercialFormats].join(', ')}`);
       }
@@ -860,6 +884,7 @@ const taskController = {
 
       return res.status(201).json({
         imported: createdTasks.length,
+        skipped: skippedTotal,
         anomalies,
         workspacesCreatedOrUsed: groupedByWorkspace.size,
         workspaces: workspacesTouched,
@@ -935,6 +960,8 @@ const taskController = {
       if (approved.length > 0) {
         const approvedTasks = await Promise.all(approved.map((id) => TaskModel.getById(id)));
         await notifyTaskCreation(approvedTasks.filter(Boolean), req.user);
+        // Broadcast so Kanban board refreshes in real-time for all connected users
+        broadcast('tasks-updated', { source: 'approve_orders', count: approved.length });
       }
 
       return res.status(200).json({
@@ -969,6 +996,10 @@ const taskController = {
 
         await TaskModel.delete(id);
         rejected++;
+      }
+
+      if (rejected > 0) {
+        broadcast('tasks-updated', { source: 'reject_orders', count: rejected });
       }
 
       return res.status(200).json({
