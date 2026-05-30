@@ -654,8 +654,10 @@ const taskController = {
       ]);
       // Optional: Désignation / description column
       const designationCol = pickHeaderColumn(headers, [(h) => h === 'designation', (h) => h.startsWith('designat')]);
-      // Optional: client/Nom column (new format doesn't have it)
-      const clientCol = pickHeaderColumn(headers, [(h) => h === 'nom', (h) => h.startsWith('client')]);
+      // Optional: client/Nom column (nom du client)
+      const clientCol = pickHeaderColumn(headers, [(h) => h === 'nom', (h) => h.startsWith('nom client')]);
+      // Optional: code client column (« Tiers » / « Code client » → CL000XXX)
+      const clientCodeCol = pickHeaderColumn(headers, [(h) => h === 'tiers', (h) => h === 'code client', (h) => h === 'client']);
       // Optional: commercial ID column → sets assigned_to and commercial_id on the task
       const commercialCol = pickHeaderColumn(headers, [
         (h) => h === 'commercial',
@@ -684,6 +686,7 @@ const taskController = {
         orderDate: null,
         orderCode: null,
         clientName: null,
+        clientCode: null,
         requestedDate: null,
         commercialId: null,
         designation: null,
@@ -694,6 +697,7 @@ const taskController = {
 
         const parsedOrderDate     = parseExcelDate(row.getCell(dateCol).value);
         const parsedClientName    = clientCol ? `${row.getCell(clientCol).value || ''}`.trim() : '';
+        const parsedClientCode    = clientCodeCol ? `${row.getCell(clientCodeCol).value || ''}`.trim() : '';
         const parsedOrderCode     = orderCol ? `${row.getCell(orderCol).value || ''}`.trim() : '';
         const parsedRequestedDate = requestedDateCol ? parseExcelDate(row.getCell(requestedDateCol).value) : null;
         const parsedCommercialId  = commercialCol ? `${row.getCell(commercialCol).value || ''}`.trim().toUpperCase() : '';
@@ -704,10 +708,12 @@ const taskController = {
           currentOrderContext.requestedDate = null;
           currentOrderContext.commercialId = null;
           currentOrderContext.clientName = null;
+          currentOrderContext.clientCode = null;
         }
 
         if (parsedOrderDate)       currentOrderContext.orderDate      = parsedOrderDate;
         if (parsedClientName)      currentOrderContext.clientName     = parsedClientName;
+        if (parsedClientCode)      currentOrderContext.clientCode     = parsedClientCode;
         if (parsedOrderCode)       currentOrderContext.orderCode      = parsedOrderCode;
         if (parsedRequestedDate)   currentOrderContext.requestedDate  = parsedRequestedDate;
         if (parsedCommercialId)    currentOrderContext.commercialId   = parsedCommercialId;
@@ -715,6 +721,7 @@ const taskController = {
 
         const orderDate      = currentOrderContext.orderDate || new Date().toISOString().slice(0, 10);
         const clientName     = currentOrderContext.clientName;
+        const clientCode     = currentOrderContext.clientCode || null;
         const orderCode      = currentOrderContext.orderCode || null;
         const requestedDate  = currentOrderContext.requestedDate;
         const commercialId   = currentOrderContext.commercialId;
@@ -751,6 +758,7 @@ const taskController = {
           description: designation || `Import commande • Quantité ${Number(quantity.toFixed(2))} pcs`,
           priority: 'MEDIUM',
           clientName,
+          clientCode,
           orderCode: orderCode || null,
           itemReference,
           quantity: Number(quantity.toFixed(2)),
@@ -814,6 +822,7 @@ const taskController = {
             description: draft.description,
             priority: draft.priority || 'MEDIUM',
             clientName: draft.clientName || null,
+            clientCode: draft.clientCode || null,
             orderCode: draft.orderCode || null,
             itemReference: draft.itemReference,
             quantity: draft.quantity,

@@ -64,6 +64,7 @@ function normalizeOptionalArticleCode(value, label = 'Reference article') {
 function normalizeTaskMetadata(data = {}) {
   return {
     clientName: normalizeOptionalString(data.clientName, { label: 'Client', maxLength: 255 }),
+    clientCode: normalizeOptionalString(data.clientCode, { label: 'Code client', maxLength: 100 }),
     orderCode: normalizeOptionalString(data.orderCode, { label: 'Code commande', maxLength: 100 }),
     itemReference: normalizeOptionalArticleCode(data.itemReference, 'Reference article'),
     quantity: normalizeOptionalQuantity(data.quantity),
