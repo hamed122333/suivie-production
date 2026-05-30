@@ -199,10 +199,16 @@ const stockImportController = {
         });
       }
 
-      // Phase 1: collapse exact duplicate rows (same article + client + date)
-      // keeping the row with the highest quantity (pivot-table exports often repeat rows).
+      // Phase 1 — déduplication stricte.
+      // Clé d'unicité d'une ligne de stock = (DATE, CODE ARTICLE, CLIENT, QUANTITE).
+      // Deux lignes ne sont des doublons que si elles coïncident sur CETTE clé :
+      //   • lignes 100% identiques → une seule conservée ;
+      //   • même article mais CLIENT différent → les deux conservées (affectations distinctes),
+      //     même quantité identique ;
+      //   • même article + même client mais QUANTITE différente → les deux conservées.
       const exactDedupMap = new Map();
       let skipped = 0;
+      let duplicates = 0;
 
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber <= headerRowNumber) return;
@@ -232,12 +238,13 @@ const stockImportController = {
         }
 
         const readyDate = calculateReadyDate(article, rawDate);
-        const exactKey  = `${article}||${clientCode || ''}||${readyDate}`;
-        const existing  = exactDedupMap.get(exactKey);
+        // Clé = (DATE, CODE ARTICLE, CLIENT, QUANTITE) → la quantité fait partie de la clé.
+        const qtyKey   = Number(quantity).toFixed(2);
+        const exactKey = `${article}||${clientCode || ''}||${readyDate}||${qtyKey}`;
 
-        if (existing) {
-          // Same row repeated: keep whichever has the higher quantity
-          if (quantity > existing.quantity) existing.quantity = quantity;
+        if (exactDedupMap.has(exactKey)) {
+          // Ligne 100% identique déjà rencontrée → doublon, on l'ignore.
+          duplicates += 1;
         } else {
           exactDedupMap.set(exactKey, { article, quantity, readyDate, designation, clientCode, clientName });
         }
@@ -277,7 +284,7 @@ const stockImportController = {
         await recalculateStockAllocation(art);
       }
       broadcast('stock-updated', { source: 'excel-import', articles: uniqueArticles, count: created.length });
-      res.status(201).json({ imported: created.length, skipped, records: created });
+      res.status(201).json({ imported: created.length, skipped, duplicates, records: created });
     } catch (err) {
       console.error('Excel import error:', err);
       res.status(500).json({ error: "Erreur lors de l'importation du fichier: " + err.message });
