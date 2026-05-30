@@ -1,0 +1,82 @@
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-base);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+    color var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
+}
+
+.ui-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.ui-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Tailles ─────────────────────────────────────────────────────────────── */
+.ui-btn--sm { padding: var(--space-1) var(--space-3); font-size: var(--font-size-sm); }
+.ui-btn--md { padding: var(--space-2) var(--space-4); font-size: var(--font-size-md); }
+.ui-btn--lg { padding: var(--space-3) var(--space-5); font-size: var(--font-size-lg); }
+
+.ui-btn--block { width: 100%; }
+
+/* ── Variantes ───────────────────────────────────────────────────────────── */
+.ui-btn--primary {
+  background: var(--color-primary);
+  color: var(--color-white);
+}
+.ui-btn--primary:hover:not(:disabled) { background: var(--color-primary-dark); }
+
+.ui-btn--secondary {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+.ui-btn--secondary:hover:not(:disabled) { background: var(--color-surface-alt); }
+
+.ui-btn--outline {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+.ui-btn--outline:hover:not(:disabled) { background: var(--color-surface-hover); }
+
+.ui-btn--danger {
+  background: var(--color-danger);
+  color: var(--color-white);
+}
+.ui-btn--danger:hover:not(:disabled) { filter: brightness(0.93); }
+
+.ui-btn--ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+.ui-btn--ghost:hover:not(:disabled) { background: var(--color-surface-hover); color: var(--color-text); }
+
+/* ── Icônes & spinner ────────────────────────────────────────────────────── */
+.ui-btn__icon { display: inline-flex; align-items: center; }
+.ui-btn__label { display: inline-flex; align-items: center; }
+
+.ui-btn__spinner {
+  width: 0.85em;
+  height: 0.85em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--radius-full);
+  animation: ui-btn-spin 0.6s linear infinite;
+}
+
+@keyframes ui-btn-spin {
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,18 @@
+.ui-select__wrap { position: relative; display: flex; }
+
+.ui-select__control {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: var(--space-8);
+  cursor: pointer;
+}
+
+.ui-select__chevron {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--color-text-subtle);
+  font-size: var(--font-size-sm);
+}
