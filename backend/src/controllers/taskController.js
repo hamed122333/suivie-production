@@ -636,12 +636,30 @@ const taskController = {
         return res.status(400).json({ error: 'Fichier Excel invalide (aucune feuille trouvée).' });
       }
 
-      const headers = {};
-      const headerRow = worksheet.getRow(1);
-      headerRow.eachCell((cell, col) => {
-        const key = normalizeHeaderLabel(cell.value);
-        headers[key] = col;
-      });
+      // Détecte la ligne d'en-tête dans les 10 premières lignes — tolère un
+      // préambule (ex. « Filtres appliqués … ») présent dans certains exports.
+      let headers = {};
+      let headerRowNumber = 0;
+      const maxHeaderScan = Math.min(10, worksheet.rowCount || 10);
+      for (let r = 1; r <= maxHeaderScan; r += 1) {
+        const candidate = {};
+        worksheet.getRow(r).eachCell((cell, col) => {
+          candidate[normalizeHeaderLabel(cell.value)] = col;
+        });
+        const keys = Object.keys(candidate);
+        const hasRef = keys.some((h) => h === 'reference' || h.includes('reference'));
+        const hasQty = keys.some((h) => h === 'quantite' || h.includes('quantite'));
+        if (hasRef && hasQty) {
+          headers = candidate;
+          headerRowNumber = r;
+          break;
+        }
+      }
+      if (!headerRowNumber) {
+        return res.status(400).json({
+          error: 'Ligne d\'en-tête introuvable. Le fichier doit contenir au moins les colonnes « Référence » et « Quantité ».',
+        });
+      }
 
       const dateCol = pickHeaderColumn(headers, [(h) => h === 'date']);
       const orderCol = pickHeaderColumn(headers, [(h) => h.startsWith('piece n'), (h) => h === 'piece no', (h) => h === 'piece']);
@@ -693,7 +711,7 @@ const taskController = {
       };
 
       worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
+        if (rowNumber <= headerRowNumber) return;
 
         const parsedOrderDate     = parseExcelDate(row.getCell(dateCol).value);
         const parsedClientName    = clientCol ? `${row.getCell(clientCol).value || ''}`.trim() : '';
