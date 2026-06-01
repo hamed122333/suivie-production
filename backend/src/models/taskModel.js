@@ -499,11 +499,12 @@ const TaskModel = {
         return this.getById(id);
       }
 
-      const changingWaitingStock =
-        currentTask.status === 'WAITING_STOCK' || status === 'WAITING_STOCK';
-      if (changingWaitingStock && !isSystem) {
+      // Le passage en « Prêt à Livrer » (DONE) est réservé au système : il se fait
+      // automatiquement à la confirmation du stock PF, jamais par drag manuel.
+      // (DONE → DELIVERED par le livreur reste autorisé : status = DELIVERED.)
+      if (status === 'DONE' && !isSystem) {
         await client.query('ROLLBACK');
-        throw new Error('WAITING_STOCK status can only be changed by system auto promotion');
+        throw new Error('Le passage en « Prêt à Livrer » est automatique (confirmation du stock PF).');
       }
 
       await client.query(

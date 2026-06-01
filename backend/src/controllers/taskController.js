@@ -937,7 +937,9 @@ const taskController = {
           }
         }
 
-        // Determine TODO vs WAITING_STOCK via stock check
+        // Entrée du flux = toujours « Hors Stock PF » (WAITING_STOCK).
+        // On calcule quand même les champs stock pour le badge ; le système
+        // promouvra ensuite automatiquement en « Prêt à Livrer » si le stock couvre.
         const resolved = await resolveCreationTarget({
           itemReference: task.item_reference,
           quantity: task.quantity,
@@ -946,7 +948,7 @@ const taskController = {
           title: task.title,
         });
 
-        const targetStatus = resolved.status; // 'TODO' or 'WAITING_STOCK'
+        const targetStatus = 'WAITING_STOCK';
 
         const updated = await TaskModel.approveFromPending(id, targetStatus, {
           isKnownProduct: resolved.isKnownProduct,
@@ -963,9 +965,11 @@ const taskController = {
           fieldName: 'status',
           oldValue: 'PENDING_APPROVAL',
           newValue: targetStatus,
-          message: 'Commande validée par le commercial — envoyée en production',
+          message: 'Commande validée par le commercial — entrée en Hors Stock PF',
         });
 
+        // Recalc : si le stock PF couvre déjà la quantité, le système la passera
+        // directement en « Prêt à Livrer ».
         if (task.item_reference) {
           await recalculateStockAllocation(task.item_reference);
         }

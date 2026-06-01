@@ -10,26 +10,19 @@ const { broadcast } = require('./sseService');
  * 1. Reads the total available stock (global, cross-workspace)
  * 2. Finds ALL active tasks for that article (any client, any workspace)
  * 3. Allocates stock FIFO by planned_date → due_date → id
- * 4. Persists stock_allocated, stock_deficit, priority_order on each task
- * 5. Auto-demotes TODO/IN_PROGRESS/BLOCKED → WAITING_STOCK if deficit > 0
- * 6. Auto-promotes WAITING_STOCK → TODO if fully covered
- * 7. Logs history for every status change
- * 8. Broadcasts real-time updates
+ * 4. Persists stock_allocated, stock_deficit, priority_order on each task (badge)
+ * 5. FORWARD-ONLY: when a task is fully covered (deficit === 0), the SYSTEM
+ *    promotes it to DONE (Prêt à Livrer) from any of WAITING_STOCK / TODO /
+ *    IN_PROGRESS. No demotion ever — a task never moves backward when stock drops.
+ * 6. Logs history for every system promotion
+ * 7. Broadcasts real-time updates
  *
- * Key rule: allocation is by ARTICLE CODE + QUANTITY only.
- * Client name is irrelevant — two clients ordering the same article compete
- * for the same stock pool.
+ * Key rule: allocation is by ARTICLE CODE + QUANTITY only — client is irrelevant,
+ * two clients ordering the same article compete for the same stock pool.
  *
- * Edge cases handled:
- * - No stock at all → all tasks demoted to WAITING_STOCK
- * - Partial stock → tasks get partial allocation, deficit calculated
- * - Stock increases → waiting tasks promoted to TODO
- * - Stock decreases → tasks demoted to WAITING_STOCK
- * - Multiple tasks with same planned_date → sorted by ID (oldest first)
- * - Tasks with no dates → treated as latest priority (9999-12-31)
- * - Stock deleted → all tasks for that article recalculated
- * - Task deleted → stock freed, queue shifts up
- * - Task quantity changed → reallocate, may affect other tasks
+ * Le planificateur pilote manuellement Hors Stock PF → À Préparer → En Préparation.
+ * Le système ne fait QUE confirmer la disponibilité (→ Prêt à Livrer) et n'effectue
+ * AUCUNE rétrogradation.
  */
 async function recalculateStockAllocation(itemReference) {
   if (!itemReference) return [];
@@ -73,6 +66,7 @@ async function recalculateStockAllocation(itemReference) {
     allocations.push({
       taskId: task.id,
       currentStatus: task.status,
+      stockImportId: task.stock_import_id || null,
       priorityOrder: i + 1,
       quantityRequested: requested,
       quantityAllocated: allocated,
@@ -92,51 +86,43 @@ async function recalculateStockAllocation(itemReference) {
       priorityOrder: alloc.priorityOrder,
     });
 
-    // DEMOTE: deficit > 0 and NOT already WAITING_STOCK → move to WAITING_STOCK
-    if (!alloc.isCovered && alloc.currentStatus !== 'WAITING_STOCK' && alloc.currentStatus !== 'DONE') {
+    // PROMOTION (avant uniquement) : couvert à 100% et statut actif amont
+    // (Hors Stock PF / À Préparer / En Préparation) → Prêt à Livrer (DONE).
+    // Aucune rétrogradation : une fiche non couverte reste où elle est.
+    const PROMOTABLE = ['WAITING_STOCK', 'TODO', 'IN_PROGRESS'];
+    if (alloc.isCovered && PROMOTABLE.includes(alloc.currentStatus)) {
       try {
         await TaskModel.updateStatus(
           alloc.taskId,
-          'WAITING_STOCK',
-          `Stock insuffisant: ${alloc.stockDeficit} pcs manquant(s) sur ${alloc.quantityRequested} demandés`,
-          null,
-          'system'
-        );
-        await TaskHistoryModel.log({
-          taskId: alloc.taskId,
-          actorId: null,
-          actionType: 'status_updated',
-          fieldName: 'status',
-          oldValue: alloc.currentStatus,
-          newValue: 'WAITING_STOCK',
-          message: `Stock insuffisant: ${alloc.stockDeficit} pcs manquant(s) — rétrogradé automatiquement (priorité #${alloc.priorityOrder})`,
-        });
-      } catch (err) {
-        console.error(`[Allocation] Failed to demote task ${alloc.taskId}:`, err.message);
-      }
-    }
-
-    // PROMOTE: fully covered and currently WAITING_STOCK → move to TODO
-    if (alloc.isCovered && alloc.currentStatus === 'WAITING_STOCK') {
-      try {
-        await TaskModel.updateStatus(
-          alloc.taskId,
-          'TODO',
+          'DONE',
           null,
           null,
-          'system'
+          'system',
+          { systemAutoPromotion: true }
         );
         await TaskHistoryModel.log({
           taskId: alloc.taskId,
           actorId: null,
           actionType: 'stock_confirmed',
           fieldName: 'status',
-          oldValue: 'WAITING_STOCK',
-          newValue: 'TODO',
-          message: `Stock disponible: ${alloc.quantityAllocated} pcs alloués — promu automatiquement (priorité #${alloc.priorityOrder})`,
+          oldValue: alloc.currentStatus,
+          newValue: 'DONE',
+          message: `Stock PF disponible (${alloc.quantityAllocated} pcs) — passage automatique en Prêt à Livrer`,
         });
+
+        // Le produit fini quitte l'inventaire dès « Prêt à Livrer » → déduire le stock
+        // (évite la double-allocation du même stock lors d'un recalcul ultérieur).
+        try {
+          if (alloc.stockImportId) {
+            await StockImportModel.deductQuantity(alloc.stockImportId, alloc.quantityAllocated);
+          } else {
+            await StockImportModel.deductQuantityByArticle(normalizedRef, alloc.quantityAllocated);
+          }
+        } catch (e) {
+          console.error(`[Allocation] Failed to deduct stock for task ${alloc.taskId}:`, e.message);
+        }
       } catch (err) {
-        console.error(`[Allocation] Failed to promote task ${alloc.taskId}:`, err.message);
+        console.error(`[Allocation] Failed to promote task ${alloc.taskId} → DONE:`, err.message);
       }
     }
   }

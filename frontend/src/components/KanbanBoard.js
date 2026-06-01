@@ -28,11 +28,11 @@ function getColumnSubtitle(columnId, isLivreur) {
     if (columnId === 'DONE')      return 'Glissez vers "Livré" pour confirmer';
     if (columnId === 'DELIVERED') return 'Livraisons confirmées ✓';
   }
-  if (columnId === 'WAITING_STOCK') return 'PF insuffisant — FIFO en attente';
-  if (columnId === 'TODO')          return 'PF alloué — à préparer et emballer';
-  if (columnId === 'IN_PROGRESS')   return 'En cours de préparation / emballage';
-  if (columnId === 'DONE')          return 'Emballé — en attente du livreur';
-  if (columnId === 'BLOCKED')       return 'Intervention requise';
+  if (columnId === 'WAITING_STOCK') return 'Entrée — glissez vers À Préparer (planificateur)';
+  if (columnId === 'TODO')          return 'Pris en charge par le planificateur';
+  if (columnId === 'IN_PROGRESS')   return 'En préparation — passage auto en Prêt dès stock PF';
+  if (columnId === 'DONE')          return 'Stock PF confirmé (auto) — en attente du livreur';
+  if (columnId === 'BLOCKED')       return 'Exception — intervention requise';
   if (columnId === 'DELIVERED')     return 'Livré au client ✓';
   return '';
 }
@@ -238,11 +238,6 @@ const KanbanBoard = ({
   const handleDragStart = (event, task) => {
     // Planner/super_admin can drag most cards; livreur can drag DONE → DELIVERED only
     if (!canChangeStatus && !isLivreur) return;
-    if (task.status === 'WAITING_STOCK') {
-      setErrorShort('Le statut Hors stock est géré automatiquement par le système.');
-      event.preventDefault();
-      return;
-    }
     // Livreur can only drag DONE cards
     if (isLivreur && task.status !== 'DONE') {
       event.preventDefault();
@@ -265,8 +260,9 @@ const KanbanBoard = ({
       return;
     }
 
-    if (task.status === 'WAITING_STOCK' || targetStatus === 'WAITING_STOCK') {
-      setErrorShort('Drag & drop interdit sur le statut Hors stock (gestion système uniquement).');
+    // « Prêt à Livrer » est automatique (confirmation du stock PF) — pas de drop manuel.
+    if (targetStatus === 'DONE') {
+      setErrorShort('Le passage en « Prêt à Livrer » est automatique (confirmation du stock PF).');
       clearDragHighlights();
       return;
     }
@@ -507,7 +503,7 @@ const KanbanBoard = ({
                     <div
                       key={task.id}
                       className={`kanban-card-slot ${selectedTaskId === task.id ? 'kanban-card-slot--selected' : ''}`}
-                      draggable={(canChangeStatus && task.status !== 'WAITING_STOCK') || (isLivreur && task.status === 'DONE')}
+                      draggable={(canChangeStatus && task.status !== 'DONE') || (isLivreur && task.status === 'DONE')}
                       onDragStart={(event) => handleDragStart(event, task)}
                       onDragEnd={clearDragHighlights}
                       onDragOver={(event) => {
