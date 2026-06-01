@@ -1,6 +1,7 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import BlockReasonModal from './BlockReasonModal';
+import DateValidationModal from './DateValidationModal';
 import TaskCard from './TaskCard';
 import TaskDetailsPanel from './TaskDetailsPanel';
 import TaskModal from './TaskModal';
@@ -165,6 +166,8 @@ const KanbanBoard = ({
   const [error, setError] = useState('');
   const [detailRefreshSignal, setDetailRefreshSignal] = useState(0);
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
+  const [dateModal, setDateModal] = useState({ open: false, task: null });
+  const [dateModalWorking, setDateModalWorking] = useState(false);
   const errorTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -301,6 +304,13 @@ const KanbanBoard = ({
       return;
     }
 
+    // Prise en charge planificateur : Hors Stock PF → À Préparer → valider/négocier la date
+    if (task.status === 'WAITING_STOCK' && targetStatus === 'TODO' && canChangeStatus) {
+      setDateModal({ open: true, task });
+      clearDragHighlights();
+      return;
+    }
+
     // Same column → local reorder only (ordering is not persisted in the global view)
     if (task.status === targetStatus) {
       setTasks(applyMove(tasks, draggedId, targetStatus, insertBeforeId));
@@ -349,6 +359,42 @@ const KanbanBoard = ({
     } catch (err) {
       setErrorShort(err.response?.data?.error || 'Impossible de bloquer cette fiche.');
     }
+  };
+
+  // ── Prise en charge (Hors Stock PF → À Préparer) : valider ou négocier la date ──
+  const closeDateModal = () => setDateModal({ open: false, task: null });
+
+  const moveToTodo = async (task) => {
+    await taskAPI.updateStatus(task.id, 'TODO');
+    await refreshBoardAndPanels();
+    closeDateModal();
+  };
+
+  const handleDateValidate = async () => {
+    const task = dateModal.task;
+    if (!task) return;
+    setDateModalWorking(true);
+    try {
+      // Si le commercial avait proposé une date (en attente du planner) → l'accepter.
+      if (task.date_negotiation_status === 'PENDING_PLANNER_REVIEW') {
+        await taskAPI.dateNegotiation(task.id, { action: 'ACCEPT', proposedDate: null, comment: null });
+      }
+      await moveToTodo(task);
+    } catch (err) {
+      setErrorShort(err.response?.data?.error || 'Impossible de valider la date.');
+    } finally { setDateModalWorking(false); }
+  };
+
+  const handleDatePropose = async (date) => {
+    const task = dateModal.task;
+    if (!task || !date) return;
+    setDateModalWorking(true);
+    try {
+      await taskAPI.dateNegotiation(task.id, { action: 'PROPOSE', proposedDate: date, comment: null });
+      await moveToTodo(task); // la fiche avance ; la négociation continue en parallèle
+    } catch (err) {
+      setErrorShort(err.response?.data?.error || 'Impossible de proposer cette date.');
+    } finally { setDateModalWorking(false); }
   };
 
   const handleSaveTask = async (formData) => {
@@ -584,6 +630,16 @@ const KanbanBoard = ({
         onConfirmPredictive={handleConfirmPredictive}
         onTaskUpdated={refreshBoardAndPanels}
       />
+
+      {dateModal.open && (
+        <DateValidationModal
+          task={dateModal.task}
+          working={dateModalWorking}
+          onClose={closeDateModal}
+          onValidate={handleDateValidate}
+          onPropose={handleDatePropose}
+        />
+      )}
     </div>
   );
 };

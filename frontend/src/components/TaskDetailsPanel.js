@@ -400,11 +400,12 @@ const TaskDetailsPanel = ({
                   </div>
                 )}
 
-                {/* ── Propose / counter form ── */}
-                {(proposeOpen || (!task.proposed_delivery_date && negStatus !== 'ACCEPTED')) && (
+                {/* ── Contre-proposition / modification (ouverte explicitement) ──
+                    La proposition initiale se fait désormais au drag Hors Stock PF → À Préparer. */}
+                {proposeOpen && (
                   <div className="tdp-propose-form">
                     <label className="tdp-propose-form__label">
-                      {proposeOpen ? 'Contre-proposer une date' : 'Proposer une date de livraison'}
+                      Proposer une nouvelle date
                     </label>
                     <div className="tdp-propose-form__row">
                       <input
