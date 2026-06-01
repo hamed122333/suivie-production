@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import './StockAllocationBadge.css';
 
+/**
+ * Badge d'allocation de stock affiché sur la carte Kanban.
+ * Le détail (demandé / alloué / manquant / priorité FIFO) est exposé via un
+ * `title` natif — pas de tooltip positionné en absolu (évite les sauts d'écran
+ * au survol pendant le scroll dans les colonnes).
+ */
 const StockAllocationBadge = ({ task }) => {
-  const [showTooltip, setShowTooltip] = useState(false);
-
   if (!task) return null;
 
   const requested = Number(task.quantity || 0);
@@ -14,28 +18,30 @@ const StockAllocationBadge = ({ task }) => {
   const priorityOrder = task.priority_order;
   const isShared = priorityOrder != null && priorityOrder >= 1;
 
-  // Show badge on WAITING_STOCK always, and on TODO/IN_PROGRESS/BLOCKED only if shared (priority_order exists)
+  // Affiché sur Hors Stock PF, et sur les autres statuts actifs si une priorité FIFO existe
   const showBadge = task.status === 'WAITING_STOCK' || (isShared && task.status !== 'DONE');
   if (!showBadge) return null;
 
-  // Determine badge style
   const badgeStyle = hasDeficit
     ? 'stock-badge__button--warning'
     : isShared
     ? 'stock-badge__button--shared'
     : 'stock-badge__button--success';
 
+  // Détail dans une infobulle native (multi-lignes)
+  const titleParts = [];
+  if (isShared) titleParts.push(`Référence partagée — priorité #${priorityOrder}`);
+  titleParts.push(`Demandé : ${requested} ${unit}`);
+  titleParts.push(`Alloué : ${allocated} ${unit}`);
+  if (hasDeficit) titleParts.push(`Manquant : ${deficit} ${unit}`);
+  else if (isShared) titleParts.push('✓ Stock réservé pour cette commande');
+  const title = titleParts.join('\n');
+
   return (
-    <div
-      className="stock-badge"
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
-    >
-      <button className={`stock-badge__button ${badgeStyle}`}>
+    <span className="stock-badge">
+      <span className={`stock-badge__button ${badgeStyle}`} title={title}>
         {isShared && (
-          <span className="stock-badge__order" title={`Priorité ${priorityOrder}`}>
-            #{priorityOrder}
-          </span>
+          <span className="stock-badge__order">#{priorityOrder}</span>
         )}
         <span className="stock-badge__requested">{requested}</span>
         <span className="stock-badge__separator">/</span>
@@ -44,53 +50,8 @@ const StockAllocationBadge = ({ task }) => {
         </span>
         {hasDeficit && <span className="stock-badge__icon" aria-hidden>⚠️</span>}
         <span className="stock-badge__unit">{unit}</span>
-      </button>
-
-      {showTooltip && (
-        <div className="stock-badge__tooltip">
-          {isShared && (
-            <div className="stock-badge__tooltip-row stock-badge__tooltip-row--header">
-              <span className="stock-badge__tooltip-label">Réf. partagée</span>
-              <span className="stock-badge__tooltip-value stock-badge__tooltip-value--info">
-                Priorité {priorityOrder}{priorityOrder === 1 ? 'ère' : 'ème'}
-              </span>
-            </div>
-          )}
-          <div className="stock-badge__tooltip-row">
-            <span className="stock-badge__tooltip-label">Demandé:</span>
-            <span className="stock-badge__tooltip-value">{requested} {unit}</span>
-          </div>
-          <div className="stock-badge__tooltip-row">
-            <span className="stock-badge__tooltip-label">Alloué:</span>
-            <span className={`stock-badge__tooltip-value ${allocated >= requested ? 'stock-badge__tooltip-value--success' : 'stock-badge__tooltip-value--warning'}`}>
-              {allocated} {unit}
-            </span>
-          </div>
-          {hasDeficit && (
-            <div className="stock-badge__tooltip-row">
-              <span className="stock-badge__tooltip-label">Manquant:</span>
-              <span className="stock-badge__tooltip-value stock-badge__tooltip-value--warning">
-                {deficit} {unit}
-              </span>
-            </div>
-          )}
-          {isShared && !hasDeficit && (
-            <div className="stock-badge__tooltip-row stock-badge__tooltip-row--note">
-              <span className="stock-badge__tooltip-note">
-                ✓ Stock réservé pour cette commande
-              </span>
-            </div>
-          )}
-          {isShared && hasDeficit && (
-            <div className="stock-badge__tooltip-row stock-badge__tooltip-row--note">
-              <span className="stock-badge__tooltip-note">
-                Autres commandes partagent cette réf. article
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+      </span>
+    </span>
   );
 };
 

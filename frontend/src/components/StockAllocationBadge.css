@@ -99,98 +99,6 @@
   margin-left: 0.1rem;
 }
 
-/* ── Tooltip ── */
-.stock-badge__tooltip {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 0;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-md, 10px);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
-  font-size: 0.75rem;
-  min-width: 200px;
-  max-width: 260px;
-  overflow: hidden;
-  animation: stockBadgeFadeIn 0.12s ease;
-}
-
-.stock-badge__tooltip-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.45rem 0.65rem;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.stock-badge__tooltip-row:last-child {
-  border-bottom: none;
-}
-
-.stock-badge__tooltip-row--header {
-  background: #f0f9ff;
-  border-bottom: 1px solid #e0f2fe;
-}
-
-.stock-badge__tooltip-row--note {
-  background: #fafafa;
-  padding: 0.35rem 0.65rem;
-}
-
-.stock-badge__tooltip-label {
-  font-weight: 600;
-  color: #64748b;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.stock-badge__tooltip-value {
-  font-weight: 700;
-  color: #1e293b;
-  text-align: right;
-}
-
-.stock-badge__tooltip-value--success {
-  color: #16a34a;
-}
-
-.stock-badge__tooltip-value--warning {
-  color: #dc2626;
-}
-
-.stock-badge__tooltip-value--info {
-  color: #0284c7;
-  background: #e0f2fe;
-  padding: 0.15rem 0.35rem;
-  border-radius: 4px;
-  font-size: 0.68rem;
-}
-
-.stock-badge__tooltip-note {
-  font-size: 0.65rem;
-  color: #94a3b8;
-  font-style: italic;
-  line-height: 1.4;
-}
-
-@keyframes stockBadgeFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-3px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 /* ── Responsive ── */
 @media (max-width: 640px) {
   .stock-badge__button {
@@ -202,10 +110,5 @@
   .stock-badge__order {
     font-size: 0.55rem;
     padding: 0.05rem 0.2rem;
-  }
-
-  .stock-badge__tooltip {
-    min-width: 180px;
-    right: -0.5rem;
   }
 }
