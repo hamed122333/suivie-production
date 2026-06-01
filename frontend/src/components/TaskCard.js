@@ -51,21 +51,17 @@ function buildShortOpsMessage(task) {
   return null;
 }
 
+// Badge de négociation/confirmation de date — visible sur les statuts amont
+// (Hors Stock PF / À Préparer / En Préparation) pour garder la traçabilité de la
+// modification de date même après la prise en charge par le planificateur.
 function getDateConfirmationBadge(task) {
   const negotiationStatus = task?.date_negotiation_status;
   const proposedByRole = `${task?.proposed_by_role || ''}`.toLowerCase();
   const proposedDate = task?.proposed_delivery_date;
   const dateSuffix = proposedDate ? ` (${formatDate(proposedDate)})` : '';
+  const ACTIVE = ['WAITING_STOCK', 'TODO', 'IN_PROGRESS'];
 
-  if (task?.urgent_date_pending && task?.status !== 'WAITING_STOCK') {
-    return {
-      className: 'task-card__date-check--warn',
-      icon: '!',
-      text: `Date urgente — approbation planner requise${task.due_date ? ` (${formatDate(task.due_date)})` : ''}`,
-    };
-  }
-
-  if (task?.status !== 'WAITING_STOCK') return null;
+  if (!ACTIVE.includes(task?.status)) return null;
 
   if (negotiationStatus === 'ACCEPTED') {
     return {
@@ -75,17 +71,30 @@ function getDateConfirmationBadge(task) {
     };
   }
 
-  if (negotiationStatus === 'PENDING_COMMERCIAL_REVIEW' && proposedByRole === 'planner') {
+  if (negotiationStatus === 'PENDING_COMMERCIAL_REVIEW') {
     const dateLabel = proposedDate ? formatDate(proposedDate) : '—';
-    return { className: 'task-card__date-check--info', icon: '●', text: `Planner → ${dateLabel}` };
+    return { className: 'task-card__date-check--info', icon: '●', text: `Date proposée → commercial : ${dateLabel}` };
   }
 
-  if (negotiationStatus === 'PENDING_PLANNER_REVIEW' && proposedByRole === 'commercial') {
+  if (negotiationStatus === 'PENDING_PLANNER_REVIEW') {
     const dateLabel = proposedDate ? formatDate(proposedDate) : '—';
-    return { className: 'task-card__date-check--ko', icon: '✕', text: `Commercial → ${dateLabel}` };
+    return { className: 'task-card__date-check--ko', icon: '✕', text: `Date proposée → planner : ${dateLabel}` };
   }
 
-  return { className: 'task-card__date-check--ko', icon: '✕', text: `Date non confirmée${dateSuffix}` };
+  if (task?.urgent_date_pending) {
+    return {
+      className: 'task-card__date-check--warn',
+      icon: '!',
+      text: `Date urgente${task.due_date ? ` (${formatDate(task.due_date)})` : ''}`,
+    };
+  }
+
+  // Aucune négociation : on signale « non confirmée » uniquement à l'entrée (Hors Stock PF)
+  if (task?.status === 'WAITING_STOCK') {
+    return { className: 'task-card__date-check--ko', icon: '✕', text: `Date non confirmée${dateSuffix}` };
+  }
+
+  return null;
 }
 
 const TaskCard = ({ task, onOpen, isDragging }) => {

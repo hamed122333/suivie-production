@@ -1447,6 +1447,10 @@ const taskController = {
         }
       }
 
+      // Temps réel : cloche du destinataire + rafraîchissement des cartes (badge date)
+      broadcast('notifications-updated', { source: 'date_negotiation', taskId: task.id });
+      broadcast('tasks-updated', { source: 'date_negotiation', taskId: task.id });
+
       return res.json(updated);
     } catch (err) {
       if (isHttpError(err)) {
