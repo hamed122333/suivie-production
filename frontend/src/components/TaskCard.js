@@ -22,31 +22,32 @@ function getDaysUntilPlannedDate(task) {
 function buildShortOpsMessage(task) {
   const qty = Number(task?.quantity || 0);
   const status = task?.status;
-  const expectedAction = `${task?.expected_action || ''}`.toUpperCase();
+  const deficit = task?.stock_deficit != null ? Number(task.stock_deficit) : null;
+  const stockCovers = deficit !== null && deficit <= 0; // stock PF couvre la quantité
 
+  // Statuts amont (Hors Stock PF / À Préparer / En Préparation) : indiquer si le
+  // stock PF couvre déjà la quantité → la fiche passera auto en « Prêt à Livrer ».
   if (status === 'WAITING_STOCK') {
-    const deficit = task?.stock_deficit != null ? Number(task.stock_deficit) : null;
-
-    if (!task?.is_known_product || expectedAction.includes('NEW_PRODUCT') || expectedAction.includes('STOCK_MISSING')) {
-      return 'Nouveau produit — sans référence stock';
-    }
-
     if (deficit !== null && deficit > 0) {
-      return `Stock insuffisant — ${deficit} manquants sur ${qty}`;
+      return `En attente de stock PF — ${deficit} manquants sur ${qty}`;
     }
-
-    return `Stock insuffisant — ${qty || '—'} pcs demandés`;
+    if (stockCovers) return 'Stock PF disponible ✓ — passage auto en Prêt à Livrer';
+    return 'Hors Stock PF — à prendre en charge par le planificateur';
   }
 
   if (status === 'TODO') {
     if (task?.task_type === 'PREDICTIVE') return 'Commande prévisionnelle';
-    return qty > 0 ? `PF alloué — ${qty} pcs à préparer` : 'PF alloué — à préparer';
+    if (stockCovers) return 'Stock PF disponible ✓ — passage auto en Prêt à Livrer';
+    return qty > 0 ? `Pris en charge — ${qty} pcs à préparer` : 'Pris en charge — à préparer';
   }
 
-  if (status === 'IN_PROGRESS') return 'En cours de préparation / emballage';
-  if (status === 'DONE')        return 'Emballé — prêt pour la livraison ✓';
+  if (status === 'IN_PROGRESS') {
+    if (stockCovers) return 'Stock PF disponible ✓ — passage auto en Prêt à Livrer';
+    return 'En préparation — Prêt à Livrer auto dès stock PF';
+  }
+  if (status === 'DONE')        return 'Stock PF confirmé — prêt à livrer ✓';
   if (status === 'DELIVERED')   return 'Livraison confirmée ✓';
-  if (status === 'BLOCKED') return 'Bloquée — action requise';
+  if (status === 'BLOCKED')     return 'Bloquée — action requise (exception)';
   return null;
 }
 
