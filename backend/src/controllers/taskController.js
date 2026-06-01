@@ -849,7 +849,11 @@ const taskController = {
           };
         });
 
-        // Dedup: compare all import columns with existing DB rows
+        // Protection ré-import UNIQUEMENT : on ignore les lignes déjà présentes en
+        // base (même fichier réimporté). On NE déduplique PAS à l'intérieur du
+        // fichier : dans un export ligne-à-ligne, deux lignes identiques (même
+        // commande, même article, même quantité) sont deux postes légitimes —
+        // les fusionner ferait perdre de la quantité.
         const existingRows = await TaskModel.listExistingOrderLines({
           workspaceId: workspace.id,
           orderCodes: null,
@@ -858,17 +862,11 @@ const taskController = {
         const buildKey = (r) =>
           `${r.orderCode || r.order_code || ''}|${r.clientName || r.client_name || ''}|${r.itemReference || r.item_reference || ''}|${fmtQty(r.quantity)}|${r.plannedDate || r.planned_date || ''}|${r.description || ''}|${r.commercialId || r.commercial_id || ''}`;
         const existingKeys = new Set(existingRows.map(buildKey));
-        const seenInBatch = new Set();
-        const uniqueTasks = pendingTasks.filter((t) => {
-          const key = buildKey(t);
-          if (existingKeys.has(key) || seenInBatch.has(key)) return false;
-          seenInBatch.add(key);
-          return true;
-        });
+        const uniqueTasks = pendingTasks.filter((t) => !existingKeys.has(buildKey(t)));
         const skippedCount = pendingTasks.length - uniqueTasks.length;
         skippedTotal += skippedCount;
         if (skippedCount > 0) {
-          warnings.push(`${skippedCount} ligne(s) déjà existante(s) ignorée(s) dans le workspace "${workspaceName}"`);
+          warnings.push(`${skippedCount} ligne(s) déjà importée(s) précédemment et ignorée(s) dans "${workspaceName}"`);
         }
         if (uniqueTasks.length === 0) continue;
 
