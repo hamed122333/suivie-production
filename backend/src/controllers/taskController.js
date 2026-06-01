@@ -694,7 +694,6 @@ const taskController = {
       }
 
       const groupedByWorkspace = new Map();
-      const anomalies = [];
 
       // Forward-fill context for "header" fields.
       // Excel layout: first line of each order group fills all columns; subsequent lines
@@ -746,20 +745,6 @@ const taskController = {
         const designation    = currentOrderContext.designation;
         const itemReference  = normalizeArticleCode(row.getCell(refCol).value) || 'INCONNU';
         const quantity       = Number.isFinite(parseExcelQuantity(row.getCell(qtyCol).value)) ? parseExcelQuantity(row.getCell(qtyCol).value) : 0;
-
-        // Collect anomalies per row — never skip, always import.
-        const rowAnomalies = [];
-        if (!currentOrderContext.orderDate)               rowAnomalies.push('Date manquante');
-        if (!row.getCell(refCol).value)                   rowAnomalies.push('Référence article manquante');
-        else if (!isValidArticleCode(normalizeArticleCode(row.getCell(refCol).value)))
-          rowAnomalies.push(`Référence invalide : "${row.getCell(refCol).value}" (format CI/CV/DI/DV/FC/FD/PL attendu)`);
-        if (!Number.isFinite(parseExcelQuantity(row.getCell(qtyCol).value)) || parseExcelQuantity(row.getCell(qtyCol).value) <= 0)
-          rowAnomalies.push(`Quantité invalide : "${row.getCell(qtyCol).value}"`);
-        if (!parsedCommercialId)                          rowAnomalies.push('Commercial 1 non renseigné');
-
-        if (rowAnomalies.length > 0) {
-          anomalies.push({ row: rowNumber, reference: itemReference, reasons: rowAnomalies });
-        }
 
         const title = clientName
           ? `${clientName} • ${itemReference}`
@@ -919,7 +904,6 @@ const taskController = {
       return res.status(201).json({
         imported: createdTasks.length,
         skipped: skippedTotal,
-        anomalies,
         workspacesCreatedOrUsed: groupedByWorkspace.size,
         workspaces: workspacesTouched,
         warnings,

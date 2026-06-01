@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { taskAPI, userAPI } from '../services/api';
+import { taskAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { formatDate } from '../utils/formatters';
@@ -56,22 +56,6 @@ function readinessScore(task) {
 function coveragePct(stock, qty) {
   if (!stock || !qty) return null;
   return Math.min(200, Math.round((stock.available / qty) * 100));
-}
-
-function taskAnomalies(task) {
-  const issues = [];
-  if (!task.commercial_id) {
-    issues.push({ label: 'Commercial non renseigné', severity: 'error' });
-  } else if (!task.commercial_name) {
-    issues.push({ label: `Commercial ${task.commercial_id} introuvable`, severity: 'warning' });
-  }
-  if (!task.client_name && !task.order_code) {
-    issues.push({ label: 'Client non identifié', severity: 'warning' });
-  }
-  if (!task.planned_date) {
-    issues.push({ label: 'Date de livraison manquante', severity: 'warning' });
-  }
-  return issues;
 }
 
 function highlightMatch(text, query) {
@@ -269,12 +253,11 @@ const OrdersReviewPage = () => {
   const { refreshWorkspaces, selectWorkspace } = useWorkspace();
 
   // Permissions
-  const canManage   = isSuperAdmin;                 // import + fix anomalies
+  const canManage   = isSuperAdmin;                 // import (correction = héritage à l'import)
   const canApprove  = isSuperAdmin || isCommercial; // approve / reject
   const isGrouped   = isSuperAdmin || isPlanner;    // grouped-by-commercial view
 
   const [tasks, setTasks]                 = useState([]);
-  const [commercialUsers, setCommercialUsers] = useState([]);
   const [loading, setLoading]             = useState(true);
   const [selected, setSelected]           = useState(new Set());
   const [working, setWorking]             = useState(false);
@@ -290,11 +273,6 @@ const OrdersReviewPage = () => {
   const [sortConfig, setSortConfig]       = useState({ key: 'date', dir: 'asc' });
   const [currentPage, setCurrentPage]     = useState(1);
   const [pageSize, setPageSize]           = useState(50);
-
-  // Fix inline (super_admin)
-  const [fixingId, setFixingId]           = useState(null);
-  const [fixData, setFixData]             = useState({});
-  const [saving, setSaving]               = useState(false);
 
   // Import (super_admin)
   const [importing, setImporting]         = useState(false);
@@ -315,20 +293,15 @@ const OrdersReviewPage = () => {
   const fetchPending = useCallback(async () => {
     setLoading(true);
     try {
-      const reqs = [taskAPI.getPendingApproval()];
-      if (canManage) reqs.push(userAPI.getAll());
-      const [tasksRes, usersRes] = await Promise.all(reqs);
-      setTasks(tasksRes.data || []);
+      const res = await taskAPI.getPendingApproval();
+      setTasks(res.data || []);
       setSelected(new Set());
-      if (usersRes) {
-        setCommercialUsers((usersRes.data || []).filter(u => u.role === 'commercial' && u.commercial_id));
-      }
     } catch (err) {
       console.error('getPendingApproval failed', err);
     } finally {
       setLoading(false);
     }
-  }, [canManage]);
+  }, []);
 
   useEffect(() => { fetchPending(); }, [fetchPending]);
   useServerEvents({ 'tasks-updated': fetchPending });
@@ -344,7 +317,6 @@ const OrdersReviewPage = () => {
       const res = await taskAPI.importOrders(formData);
       const imported  = res?.data?.imported ?? 0;
       const skipped   = (res?.data?.skipped ?? 0) + (res?.data?.skippedExisting ?? 0);
-      const anomalies = res?.data?.anomalies?.length ?? 0;
       const warnings  = res?.data?.warnings || [];
 
       await refreshWorkspaces();
@@ -354,7 +326,6 @@ const OrdersReviewPage = () => {
         ? `Aucune nouvelle ligne — les ${skipped} lignes existent déjà.`
         : `${imported} ligne(s) importée(s) avec succès.`;
       if (skipped > 0 && imported > 0) msg += ` • ${skipped} ignorée(s).`;
-      if (anomalies > 0)               msg += ` • ${anomalies} anomalie(s) à corriger.`;
       if (warnings.length > 0)         msg += ` ⚠ ${warnings.join(' | ')}`;
 
       showBanner('success', msg);
@@ -407,33 +378,6 @@ const OrdersReviewPage = () => {
     } finally { setWorking(false); }
   };
 
-  // ── Fix inline (super_admin) ──────────────────────────────────────────────
-
-  const startFix = (task) => {
-    setFixingId(task.id);
-    setFixData({
-      commercialId: task.commercial_id || '',
-      clientName:   task.client_name   || '',
-      plannedDate:  task.planned_date ? task.planned_date.slice(0, 10) : '',
-    });
-  };
-  const cancelFix = () => { setFixingId(null); setFixData({}); };
-  const applyFix  = async (taskId) => {
-    setSaving(true);
-    try {
-      const payload = {};
-      if ('commercialId' in fixData) payload.commercialId = fixData.commercialId || null;
-      if ('clientName'   in fixData) payload.clientName   = fixData.clientName   || null;
-      if ('plannedDate'  in fixData) payload.plannedDate  = fixData.plannedDate  || null;
-      await taskAPI.update(taskId, payload);
-      cancelFix();
-      fetchPending();
-    } catch (err) {
-      console.error('Fix failed', err);
-      showBanner('error', "Échec de la correction.");
-    } finally { setSaving(false); }
-  };
-
   // ── Search ────────────────────────────────────────────────────────────────
 
   const applySearch = () => { setSearchTerm(inputValue.trim()); setCurrentPage(1); };
@@ -484,17 +428,8 @@ const OrdersReviewPage = () => {
     return sorted;
   }, [tasks, searchTerm, urgencyFilter, stockFilter, commercialFilter, sortConfig]);
 
-  // ── Anomalies (super_admin only) ──────────────────────────────────────────
-
-  const anomalousTasks = useMemo(() => {
-    if (!canManage) return [];
-    return filtered.map(t => ({ ...t, _anomalies: taskAnomalies(t) })).filter(t => t._anomalies.length > 0);
-  }, [filtered, canManage]);
-
-  const cleanTasks = useMemo(() => {
-    if (!canManage) return filtered;
-    return filtered.filter(t => taskAnomalies(t).length === 0);
-  }, [filtered, canManage]);
+  // Liste affichée (l'héritage à l'import corrige déjà les lignes — pas d'anomalies)
+  const cleanTasks = filtered;
 
   // ── Stats ─────────────────────────────────────────────────────────────────
 
@@ -508,9 +443,8 @@ const OrdersReviewPage = () => {
       noStock:  t.filter(x => ['empty', 'waiting'].includes(readinessScore(x).level)).length,
       totalQty: t.reduce((s, x) => s + Number(x.quantity || 0), 0),
       groups:   new Set(t.map(x => x.commercial_id).filter(Boolean)).size,
-      anomalies: canManage ? t.filter(x => taskAnomalies(x).length > 0).length : 0,
     };
-  }, [tasks, canManage]);
+  }, [tasks]);
 
   // ── Groups (grouped view) ─────────────────────────────────────────────────
 
@@ -578,7 +512,7 @@ const OrdersReviewPage = () => {
         <th className="text-center">Stock dispo.</th>
         <th className="text-center sortable-header cr-col-hide-sm" onClick={() => requestSort('coverage')}>Couverture {sortIcon('coverage')}</th>
         <th className="cr-col-hide-sm">Statut</th>
-        {(canApprove || canManage) && <th style={{ width: 90 }}></th>}
+        {canApprove && <th style={{ width: 90 }}></th>}
       </tr>
     </thead>
   );
@@ -592,7 +526,6 @@ const OrdersReviewPage = () => {
     const pct       = coveragePct(task.stock, Number(task.quantity || 0));
     const coverageColor = pct === null ? '#94a3b8' : pct >= 100 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
     const qtyClass  = !task.stock ? '' : pct >= 100 ? 'status-full' : pct >= 50 ? 'status-partial' : 'status-empty';
-    const isFixing  = fixingId === task.id;
 
     return (
       <tr
@@ -600,11 +533,10 @@ const OrdersReviewPage = () => {
         className={[
           'cr-row',
           isChecked ? 'cr-row--checked' : '',
-          isFixing ? 'por-row--fixing' : '',
           urgency === 'overdue'  ? 'cr-row--overdue'  : '',
           urgency === 'critical' ? 'cr-row--critical' : '',
         ].filter(Boolean).join(' ')}
-        onClick={() => !isFixing && setDetailTask(task)}
+        onClick={() => setDetailTask(task)}
       >
         {canApprove && (
           <td className="cr-col-check" onClick={e => { e.stopPropagation(); toggleOne(task.id); }}>
@@ -613,23 +545,18 @@ const OrdersReviewPage = () => {
         )}
 
         {/* Client */}
-        <td onClick={isFixing ? (e) => e.stopPropagation() : undefined}>
-          {isFixing ? (
-            <input className="por-fix-input" value={fixData.clientName}
-              onChange={e => setFixData(f => ({ ...f, clientName: e.target.value }))} placeholder="Nom client" />
-          ) : (
-            <div className="item-article">
-              {prefix
-                ? <div className={`article-badge article-badge--${prefix.toLowerCase()}`}>{prefix}</div>
-                : <div className="article-badge article-badge--default">??</div>}
-              <div className="article-info">
-                <span className="article-name">
-                  {searchTerm ? highlightMatch(task.client_name || '—', searchTerm) : (task.client_name || '—')}
-                </span>
-                {task.order_code && <span className="article-subtext">{task.order_code}</span>}
-              </div>
+        <td>
+          <div className="item-article">
+            {prefix
+              ? <div className={`article-badge article-badge--${prefix.toLowerCase()}`}>{prefix}</div>
+              : <div className="article-badge article-badge--default">??</div>}
+            <div className="article-info">
+              <span className="article-name">
+                {searchTerm ? highlightMatch(task.client_name || '—', searchTerm) : (task.client_name || '—')}
+              </span>
+              {task.order_code && <span className="article-subtext">{task.order_code}</span>}
             </div>
-          )}
+          </div>
         </td>
 
         {/* Reference */}
@@ -658,11 +585,8 @@ const OrdersReviewPage = () => {
         </td>
 
         {/* Delivery date */}
-        <td onClick={isFixing ? (e) => e.stopPropagation() : undefined}>
-          {isFixing ? (
-            <input type="date" className="por-fix-input" value={fixData.plannedDate}
-              onChange={e => setFixData(f => ({ ...f, plannedDate: e.target.value }))} />
-          ) : task.planned_date ? (
+        <td>
+          {task.planned_date ? (
             <div className="date-wrapper cr-date-wrapper" data-urgency={urgency}>
               <span className="date-icon">
                 {urgency === 'overdue' ? '🔴' : urgency === 'critical' ? '🟠' : urgency === 'soon' ? '🟡' : '📅'}
@@ -709,44 +633,20 @@ const OrdersReviewPage = () => {
           ) : <span className="text-muted">—</span>}
         </td>
 
-        {/* Readiness / commercial fix */}
-        <td className="cr-col-hide-sm" onClick={isFixing ? (e) => e.stopPropagation() : undefined}>
-          {isFixing ? (
-            <select className="filter-select" value={fixData.commercialId}
-              onChange={e => setFixData(f => ({ ...f, commercialId: e.target.value }))}>
-              <option value="">Commercial…</option>
-              {commercialUsers.map(u => (
-                <option key={u.id} value={u.commercial_id}>{u.name} ({u.commercial_id})</option>
-              ))}
-            </select>
-          ) : (
-            <span className="cr-score-badge" style={{ background: score.color + '15', color: score.color, borderColor: score.color + '40' }}>
-              {score.label}
-            </span>
-          )}
+        {/* Readiness */}
+        <td className="cr-col-hide-sm">
+          <span className="cr-score-badge" style={{ background: score.color + '15', color: score.color, borderColor: score.color + '40' }}>
+            {score.label}
+          </span>
         </td>
 
         {/* Actions */}
-        {(canApprove || canManage) && (
+        {canApprove && (
           <td className="cr-col-actions" onClick={e => e.stopPropagation()}>
-            {isFixing ? (
-              <div className="por-fix-actions">
-                <button className="por-fix-btn por-fix-btn--save" onClick={() => applyFix(task.id)} disabled={saving}>{saving ? '…' : '✓'}</button>
-                <button className="por-fix-btn por-fix-btn--cancel" onClick={cancelFix}>✕</button>
-              </div>
-            ) : (
-              <div className="cr-quick-actions">
-                {canManage && (
-                  <button type="button" className="por-fix-btn por-fix-btn--edit" title="Corriger" onClick={() => startFix(task)}>✎</button>
-                )}
-                {canApprove && (
-                  <>
-                    <button type="button" className="cr-quick-btn cr-quick-btn--reject" title="Rejeter" onClick={() => handleReject(task.id)} disabled={working}>✕</button>
-                    <button type="button" className="cr-quick-btn cr-quick-btn--approve" title="Valider → Production" onClick={() => handleApprove(task.id)} disabled={working}>✓</button>
-                  </>
-                )}
-              </div>
-            )}
+            <div className="cr-quick-actions">
+              <button type="button" className="cr-quick-btn cr-quick-btn--reject" title="Rejeter" onClick={() => handleReject(task.id)} disabled={working}>✕</button>
+              <button type="button" className="cr-quick-btn cr-quick-btn--approve" title="Valider → Production" onClick={() => handleApprove(task.id)} disabled={working}>✓</button>
+            </div>
           </td>
         )}
       </tr>
@@ -793,7 +693,7 @@ const OrdersReviewPage = () => {
           <p>
             {loading ? 'Chargement…' : tasks.length === 0
               ? (canManage ? 'Aucune commande — importez un fichier Excel pour commencer' : 'Aucune commande en attente de validation')
-              : `${tasks.length} commande${tasks.length !== 1 ? 's' : ''}${canManage && stats.anomalies > 0 ? ` • ${stats.anomalies} anomalie${stats.anomalies !== 1 ? 's' : ''}` : ''} — ${pageSubtitle}`}
+              : `${tasks.length} commande${tasks.length !== 1 ? 's' : ''} — ${pageSubtitle}`}
           </p>
         </div>
         <div className="actions-section">
@@ -882,12 +782,6 @@ const OrdersReviewPage = () => {
                 <span>commercial{stats.groups !== 1 ? 'x' : ''}</span>
               </div>
             )}
-            {canManage && stats.anomalies > 0 && (
-              <div className="stock-stat stock-stat--warning">
-                <strong>{stats.anomalies}</strong>
-                <span>anomalie{stats.anomalies !== 1 ? 's' : ''}</span>
-              </div>
-            )}
             <div className="stock-stat stock-stat--danger">
               <strong>{stats.overdue + stats.critical}</strong>
               <span>urgent{stats.overdue + stats.critical !== 1 ? 'es' : 'e'}</span>
@@ -938,32 +832,6 @@ const OrdersReviewPage = () => {
               <div className="cr-empty__icon" style={{ fontSize: '1.4rem' }}>🔍</div>
               <strong>Aucun résultat</strong>
               <p><button type="button" className="cr-link-btn" onClick={clearFilters}>Effacer les filtres</button></p>
-            </div>
-          )}
-
-          {/* ── Anomalies section (super_admin) ── */}
-          {canManage && anomalousTasks.length > 0 && (
-            <div className="table-card" style={{ marginBottom: '1.25rem', borderColor: '#fde68a' }}>
-              <div className="cr-group-header" style={{ background: '#fffbeb' }}>
-                <div className="cr-group-header__left">
-                  <div className="cr-commercial-avatar" style={{ background: '#f59e0b' }}>⚠</div>
-                  <div>
-                    <div className="cr-group-name">Commandes avec anomalies</div>
-                    <div className="cr-group-meta">{anomalousTasks.length} à corriger avant validation</div>
-                  </div>
-                </div>
-                <div className="cr-group-header__right">
-                  <button type="button" className="btn btn-outline cr-btn-sm" onClick={() => selectGroup(anomalousTasks.map(t => t.id))}>
-                    Sélectionner
-                  </button>
-                </div>
-              </div>
-              <div className="table-responsive">
-                <table className="data-table">
-                  {renderTableHead()}
-                  <tbody>{anomalousTasks.map(renderRow)}</tbody>
-                </table>
-              </div>
             </div>
           )}
 
