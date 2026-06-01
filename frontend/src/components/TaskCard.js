@@ -59,26 +59,36 @@ function getDateConfirmationBadge(task) {
   const proposedByRole = `${task?.proposed_by_role || ''}`.toLowerCase();
   const proposedDate = task?.proposed_delivery_date;
   const dateSuffix = proposedDate ? ` (${formatDate(proposedDate)})` : '';
+  const byName = task?.planned_by_name || null; // nom de la personne ayant proposé/touché la date
   const ACTIVE = ['WAITING_STOCK', 'TODO', 'IN_PROGRESS'];
 
   if (!ACTIVE.includes(task?.status)) return null;
 
   if (negotiationStatus === 'ACCEPTED') {
+    const label = proposedByRole === 'planner' ? 'Date modifiée confirmée' : 'Date confirmée';
     return {
       className: 'task-card__date-check--ok',
       icon: '✓',
-      text: proposedByRole === 'planner' ? `Date modifiée confirmée${dateSuffix}` : `Date confirmée${dateSuffix}`,
+      text: byName ? `${label} par ${byName}${dateSuffix}` : `${label}${dateSuffix}`,
     };
   }
 
   if (negotiationStatus === 'PENDING_COMMERCIAL_REVIEW') {
     const dateLabel = proposedDate ? formatDate(proposedDate) : '—';
-    return { className: 'task-card__date-check--info', icon: '●', text: `Date proposée → commercial : ${dateLabel}` };
+    return {
+      className: 'task-card__date-check--info',
+      icon: '●',
+      text: `${byName || 'Planificateur'} → commercial : ${dateLabel}`,
+    };
   }
 
   if (negotiationStatus === 'PENDING_PLANNER_REVIEW') {
     const dateLabel = proposedDate ? formatDate(proposedDate) : '—';
-    return { className: 'task-card__date-check--ko', icon: '✕', text: `Date proposée → planner : ${dateLabel}` };
+    return {
+      className: 'task-card__date-check--ko',
+      icon: '✕',
+      text: `${byName || 'Commercial'} → planner : ${dateLabel}`,
+    };
   }
 
   if (task?.urgent_date_pending) {

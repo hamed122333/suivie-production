@@ -34,7 +34,8 @@ const taskBaseSelect = `
       FROM task_history th
       JOIN users u ON u.id = th.actor_id
       WHERE th.task_id = t.id
-        AND (th.field_name = 'plannedDate' OR th.field_name = 'dueDate')
+        AND (th.field_name IN ('plannedDate', 'dueDate', 'planned_date')
+             OR th.action_type = 'date_negotiation')
       ORDER BY th.created_at DESC
       LIMIT 1
     ) AS planned_by_name,
@@ -43,7 +44,8 @@ const taskBaseSelect = `
       FROM task_history th
       JOIN users u ON u.id = th.actor_id
       WHERE th.task_id = t.id
-        AND (th.field_name = 'plannedDate' OR th.field_name = 'dueDate')
+        AND (th.field_name IN ('plannedDate', 'dueDate', 'planned_date')
+             OR th.action_type = 'date_negotiation')
       ORDER BY th.created_at DESC
       LIMIT 1
     ) AS planned_by_role

@@ -366,7 +366,9 @@ const TaskDetailsPanel = ({
                     <div className="tdp-pending-card__left">
                       <div className="tdp-pending-card__date">📅 {formatDate(task.proposed_delivery_date)}</div>
                       <div className="tdp-pending-card__sub">
-                        proposé par {task.proposed_by_role === 'planner' ? 'le planificateur' : 'le commercial'}
+                        proposé par {task.planned_by_name
+                          ? `${task.planned_by_name} (${task.proposed_by_role === 'planner' ? 'planificateur' : 'commercial'})`
+                          : (task.proposed_by_role === 'planner' ? 'le planificateur' : 'le commercial')}
                       </div>
                     </div>
                     <div className="tdp-pending-card__actions">
