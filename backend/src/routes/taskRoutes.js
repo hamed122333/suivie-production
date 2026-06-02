@@ -4,8 +4,6 @@ const taskController = require('../controllers/taskController');
 const { excelUpload: upload } = require('../middleware/upload');
 const { authenticate, requireRoles, requireSuperAdmin, requireCommercial, requirePlanner, requireLivreur } = require('../middleware/auth');
 
-// Réordonner le tableau : planificateur ET commercial (le commercial réordonne ses propres tâches)
-router.patch('/board', authenticate, requireRoles(['planner', 'commercial', 'super_admin']), taskController.reorderBoard);
 
 // ── Commercial review workflow ──────────────────────────────────────────────
 // List tasks waiting for commercial approval

@@ -162,33 +162,6 @@ const NotificationModel = {
     broadcast('notifications-updated', { type: 'date_negotiation' });
   },
 
-  async createDateNegotiationNotification({ taskId, recipientUserId, actorName, action, proposedDate }) {
-    if (!taskId || !recipientUserId) return;
-    const dateFmt = formatDateFR(proposedDate);
-    const titleMap = {
-      PROPOSE: `${actorName || 'Un planificateur'} — Date proposée`,
-      ACCEPT:  `${actorName || 'Un planificateur'} — Date confirmée`,
-      REJECT:  `${actorName || 'Un planificateur'} — Date refusée`,
-    };
-    const bodyMap = {
-      PROPOSE: `${actorName || 'Un planificateur'} a proposé une date de livraison pour SP-${taskId} : ${dateFmt}`,
-      ACCEPT:  `${actorName || 'Un planificateur'} a confirmé la date de livraison de SP-${taskId} : ${dateFmt}`,
-      REJECT:  `${actorName || 'Un planificateur'} a refusé la date et contre-propose le ${dateFmt} pour SP-${taskId}`,
-    };
-    await pool.query(
-      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        recipientUserId,
-        taskId,
-        'date_negotiation',
-        titleMap[action] || `${actorName} — Négociation date`,
-        bodyMap[action] || `Négociation de date sur SP-${taskId}`,
-      ]
-    );
-    broadcast('notifications-updated', { type: 'date_negotiation' });
-  },
-
   async createEscalationNotification({ taskId, recipientUserId, commercialName, taskTitle }) {
     if (!taskId || !recipientUserId) return;
     await pool.query(
@@ -260,22 +233,6 @@ const NotificationModel = {
       values
     );
     broadcast('notifications-updated', { type: 'orders_imported' });
-  },
-
-  async createStatusChangedNotification({ taskId, recipientUserId, changedByName, oldStatusLabel, newStatusLabel }) {
-    if (!taskId || !recipientUserId) return;
-    await pool.query(
-      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        recipientUserId,
-        taskId,
-        'status_updated',
-        `${changedByName || 'Un planificateur'} — ${newStatusLabel}`,
-        `${changedByName || 'Un planificateur'} a fait passer SP-${taskId} de "${oldStatusLabel}" à "${newStatusLabel}"`,
-      ]
-    );
-    broadcast('notifications-updated', { type: 'status_updated' });
   },
 
   /**
