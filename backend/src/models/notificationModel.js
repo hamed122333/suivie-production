@@ -233,6 +233,35 @@ const NotificationModel = {
     broadcast('notifications-updated', { type: 'ready_to_deliver', taskId });
   },
 
+  /**
+   * Notify a commercial that new orders were imported and await their review.
+   * @param {Array<{recipientUserId:number, count:number}>} entries
+   */
+  async createOrdersImportedNotifications(entries) {
+    const list = (entries || []).filter((e) => e && e.recipientUserId && e.count > 0);
+    if (list.length === 0) return;
+    const values = [];
+    const placeholders = [];
+    let index = 1;
+    for (const { recipientUserId, count } of list) {
+      values.push(
+        recipientUserId,
+        null,
+        'orders_imported',
+        `📥 ${count} nouvelle${count > 1 ? 's' : ''} commande${count > 1 ? 's' : ''} à valider`,
+        `${count} commande${count > 1 ? 's' : ''} vous ${count > 1 ? 'ont' : 'a'} été affectée${count > 1 ? 's' : ''} — à vérifier et valider dans « Commandes ».`
+      );
+      placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
+      index += 5;
+    }
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ${placeholders.join(', ')}`,
+      values
+    );
+    broadcast('notifications-updated', { type: 'orders_imported' });
+  },
+
   async createStatusChangedNotification({ taskId, recipientUserId, changedByName, oldStatusLabel, newStatusLabel }) {
     if (!taskId || !recipientUserId) return;
     await pool.query(

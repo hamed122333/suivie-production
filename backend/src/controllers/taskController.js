@@ -899,6 +899,22 @@ const taskController = {
         warnings.push(`Codes commerciaux non trouvés dans la base (importez-les d'abord) : ${[...unresolvedCommercials].join(', ')}`);
       }
 
+      // Notifier chaque commercial du nombre de commandes qui lui sont affectées
+      try {
+        const countByUser = new Map();
+        for (const t of createdTasks) {
+          const info = t.commercial_id ? commercialIdCache.get(t.commercial_id) : null;
+          if (info?.userId) countByUser.set(info.userId, (countByUser.get(info.userId) || 0) + 1);
+        }
+        if (countByUser.size > 0) {
+          await NotificationModel.createOrdersImportedNotifications(
+            [...countByUser.entries()].map(([recipientUserId, count]) => ({ recipientUserId, count }))
+          );
+        }
+      } catch (notifErr) {
+        console.error('Order import notification failed:', notifErr.message);
+      }
+
       return res.status(201).json({
         imported: createdTasks.length,
         skipped: skippedTotal,

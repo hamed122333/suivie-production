@@ -1,6 +1,8 @@
 const TaskModel = require('../models/taskModel');
 const StockImportModel = require('../models/stockImportModel');
 const TaskHistoryModel = require('../models/taskHistoryModel');
+const NotificationModel = require('../models/notificationModel');
+const UserModel = require('../models/userModel');
 const { broadcast } = require('./sseService');
 
 /**
@@ -75,6 +77,7 @@ async function recalculateStockAllocation(itemReference) {
       taskId: task.id,
       currentStatus: task.status,
       stockImportId: task.stock_import_id || null,
+      title: task.title,
       priorityOrder: i + 1,
       quantityRequested: requested,
       quantityAllocated: allocated,
@@ -86,6 +89,7 @@ async function recalculateStockAllocation(itemReference) {
   }
 
   // 4. Persist + status changes
+  const promotedToDone = []; // fiches passées auto en « Prêt à Livrer » → notifier les livreurs
   for (const alloc of allocations) {
     // Always persist allocation fields (camelCase → updateFieldMap)
     await TaskModel.update(alloc.taskId, {
@@ -119,9 +123,31 @@ async function recalculateStockAllocation(itemReference) {
         });
         // Pas de déduction ici : le stock est seulement ENGAGÉ. La soustraction
         // réelle se fait à la LIVRAISON (markDelivered → statut Livré).
+        promotedToDone.push({ id: alloc.taskId, title: alloc.title });
       } catch (err) {
         console.error(`[Allocation] Failed to promote task ${alloc.taskId} → DONE:`, err.message);
       }
+    }
+  }
+
+  // 4b. Notifier les livreurs des commandes devenues « Prêt à Livrer » (le système
+  //     promeut hors du contrôleur, donc on déclenche ici la notification livreur).
+  if (promotedToDone.length > 0) {
+    try {
+      const livreurs = await UserModel.findByRoles(['livreur']);
+      const livreurIds = livreurs.map((l) => l.id);
+      if (livreurIds.length > 0) {
+        for (const t of promotedToDone) {
+          await NotificationModel.createReadyToDeliverNotifications({
+            taskId: t.id,
+            recipientUserIds: livreurIds,
+            plannerName: 'Le système (stock confirmé)',
+            taskTitle: t.title,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[Allocation] Failed to notify livreurs of ready-to-deliver tasks:', err.message);
     }
   }
 
