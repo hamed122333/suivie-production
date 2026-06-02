@@ -138,3 +138,7 @@
 
 /* ── Row quick actions ───────────────────────────────────────────────────── */
 .por-row-actions { display: flex; gap: 0.25rem; align-items: center; }
+
+/* ── Groupe en anomalie (Commercial non assigné / données manquantes) ─────── */
+.table-card--anomaly { border: 1px solid #fde68a; box-shadow: 0 0 0 1px #fde68a; }
+.table-card--anomaly .cr-group-header { background: #fffbeb; }

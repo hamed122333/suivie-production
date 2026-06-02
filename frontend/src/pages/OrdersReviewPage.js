@@ -5,6 +5,7 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import { formatDate } from '../utils/formatters';
 import Spinner from '../components/Spinner';
 import OrderEditModal from '../components/OrderEditModal';
+import { ConfirmDialog } from '../components/ui';
 import useServerEvents from '../hooks/useServerEvents';
 import './CommercialReviewPage.css';
 import './PendingOrdersPage.css';
@@ -293,6 +294,7 @@ const OrdersReviewPage = () => {
   const [commercialUsers, setCommercialUsers] = useState([]);
   const [editTask, setEditTask]           = useState(null);
   const [editWorking, setEditWorking]     = useState(false);
+  const [rejectIds, setRejectIds]         = useState(null);
 
   const inputRef    = useRef(null);
   const bannerTimer = useRef(null);
@@ -383,15 +385,22 @@ const OrdersReviewPage = () => {
     } finally { setWorking(false); }
   };
 
-  const handleReject = async (idOrIds) => {
+  // Ouvre le dialogue de confirmation (remplace window.confirm)
+  const handleReject = (idOrIds) => {
     const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
     if (!ids.length) return;
-    if (!window.confirm(`Supprimer ${ids.length} commande${ids.length > 1 ? 's' : ''} définitivement ?`)) return;
+    setRejectIds(ids);
+  };
+
+  const doReject = async () => {
+    const ids = rejectIds;
+    if (!ids || !ids.length) return;
     setWorking(true);
     try {
       const res = await taskAPI.rejectOrders(ids);
       showBanner('success', res.data.message);
       setDetailTask(null);
+      setRejectIds(null);
       await fetchPending();
     } catch (err) {
       showBanner('error', err?.response?.data?.error || 'Erreur lors du rejet');
@@ -900,13 +909,24 @@ const OrdersReviewPage = () => {
 
           {/* ── Main listing ── */}
           {cleanTasks.length > 0 && (isGrouped ? (
-            groups.map(([key, group]) => (
-              <div key={key} className="table-card" style={{ marginBottom: '1.25rem' }}>
+            groups.map(([key, group]) => {
+              const groupAnomalies = canManage && (key === '__none__' || group.tasks.some(t => taskAnomalies(t).length > 0));
+              return (
+              <div key={key} className={`table-card${groupAnomalies ? ' table-card--anomaly' : ''}`} style={{ marginBottom: '1.25rem' }}>
                 <div className="cr-group-header">
                   <div className="cr-group-header__left">
-                    <div className="cr-commercial-avatar">{group.label.charAt(0).toUpperCase()}</div>
+                    <div className="cr-commercial-avatar" style={groupAnomalies ? { background: '#f59e0b' } : undefined}>
+                      {groupAnomalies ? '⚠' : group.label.charAt(0).toUpperCase()}
+                    </div>
                     <div>
-                      <div className="cr-group-name">{group.label}</div>
+                      <div className="cr-group-name">
+                        {group.label}
+                        {groupAnomalies && (
+                          <span className="por-anomaly-tag por-anomaly-tag--warning" style={{ marginLeft: '0.5rem' }}>
+                            ⚠ Anomalies à corriger
+                          </span>
+                        )}
+                      </div>
                       <div className="cr-group-meta">
                         {group.tasks.length} commande{group.tasks.length !== 1 ? 's' : ''}
                         {' · '}
@@ -937,7 +957,8 @@ const OrdersReviewPage = () => {
                   </table>
                 </div>
               </div>
-            ))
+              );
+            })
           ) : (
             <div className="table-card">
               <div className="table-responsive">
@@ -998,6 +1019,18 @@ const OrdersReviewPage = () => {
           onSave={handleSaveEdit}
         />
       )}
+
+      {/* ── Confirmation de rejet ── */}
+      <ConfirmDialog
+        isOpen={!!rejectIds}
+        title="Rejeter la commande"
+        message={`Supprimer définitivement ${rejectIds?.length || 0} commande${(rejectIds?.length || 0) > 1 ? 's' : ''} ? Cette action est irréversible.`}
+        confirmLabel="Rejeter"
+        danger
+        working={working}
+        onConfirm={doReject}
+        onClose={() => setRejectIds(null)}
+      />
     </div>
   );
 };
