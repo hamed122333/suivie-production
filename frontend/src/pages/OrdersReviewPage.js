@@ -1,12 +1,24 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { taskAPI } from '../services/api';
+import { taskAPI, userAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { formatDate } from '../utils/formatters';
 import Spinner from '../components/Spinner';
+import OrderEditModal from '../components/OrderEditModal';
 import useServerEvents from '../hooks/useServerEvents';
 import './CommercialReviewPage.css';
 import './PendingOrdersPage.css';
+
+// Anomalies bloquant la bonne prise en charge (corrigeables par le super admin)
+function taskAnomalies(task) {
+  const issues = [];
+  if (!task.commercial_id) issues.push('Commercial non renseigné');
+  else if (!task.commercial_name) issues.push(`Commercial ${task.commercial_id} introuvable`);
+  if (!task.client_name && !task.order_code) issues.push('Client non identifié');
+  if (!task.planned_date) issues.push('Date de livraison manquante');
+  if (!task.item_reference || task.item_reference === 'INCONNU') issues.push('Référence invalide');
+  return issues;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -274,10 +286,13 @@ const OrdersReviewPage = () => {
   const [currentPage, setCurrentPage]     = useState(1);
   const [pageSize, setPageSize]           = useState(50);
 
-  // Import (super_admin)
+  // Import + correction (super_admin)
   const [importing, setImporting]         = useState(false);
   const [isDragOver, setIsDragOver]       = useState(false);
   const importInputRef                    = useRef(null);
+  const [commercialUsers, setCommercialUsers] = useState([]);
+  const [editTask, setEditTask]           = useState(null);
+  const [editWorking, setEditWorking]     = useState(false);
 
   const inputRef    = useRef(null);
   const bannerTimer = useRef(null);
@@ -293,15 +308,20 @@ const OrdersReviewPage = () => {
   const fetchPending = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await taskAPI.getPendingApproval();
-      setTasks(res.data || []);
+      const reqs = [taskAPI.getPendingApproval()];
+      if (canManage) reqs.push(userAPI.getAll());
+      const [tasksRes, usersRes] = await Promise.all(reqs);
+      setTasks(tasksRes.data || []);
       setSelected(new Set());
+      if (usersRes) {
+        setCommercialUsers((usersRes.data || []).filter(u => u.role === 'commercial' && u.commercial_id));
+      }
     } catch (err) {
       console.error('getPendingApproval failed', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canManage]);
 
   useEffect(() => { fetchPending(); }, [fetchPending]);
   useServerEvents({ 'tasks-updated': fetchPending });
@@ -378,6 +398,28 @@ const OrdersReviewPage = () => {
     } finally { setWorking(false); }
   };
 
+  // ── Correction des anomalies (super admin) ────────────────────────────────
+  const handleSaveEdit = async (form) => {
+    const t = editTask;
+    if (!t) return;
+    const payload = {};
+    if ((form.clientName || '') !== (t.client_name || '')) payload.clientName = form.clientName || null;
+    if ((form.commercialId || '') !== (t.commercial_id || '')) payload.commercialId = form.commercialId || null;
+    if ((form.plannedDate || '') !== (t.planned_date ? String(t.planned_date).slice(0, 10) : '')) payload.plannedDate = form.plannedDate || null;
+    if ((form.itemReference || '') !== (t.item_reference || '')) payload.itemReference = form.itemReference || null;
+    if (String(form.quantity ?? '') !== String(t.quantity ?? '')) payload.quantity = form.quantity;
+    if (Object.keys(payload).length === 0) { setEditTask(null); return; }
+    setEditWorking(true);
+    try {
+      await taskAPI.update(t.id, payload);
+      setEditTask(null);
+      showBanner('success', 'Commande corrigée.');
+      await fetchPending();
+    } catch (err) {
+      showBanner('error', err?.response?.data?.error || 'Échec de la correction.');
+    } finally { setEditWorking(false); }
+  };
+
   // ── Search ────────────────────────────────────────────────────────────────
 
   const applySearch = () => { setSearchTerm(inputValue.trim()); setCurrentPage(1); };
@@ -443,8 +485,9 @@ const OrdersReviewPage = () => {
       noStock:  t.filter(x => ['empty', 'waiting'].includes(readinessScore(x).level)).length,
       totalQty: t.reduce((s, x) => s + Number(x.quantity || 0), 0),
       groups:   new Set(t.map(x => x.commercial_id).filter(Boolean)).size,
+      anomalies: canManage ? t.filter(x => taskAnomalies(x).length > 0).length : 0,
     };
-  }, [tasks]);
+  }, [tasks, canManage]);
 
   // ── Groups (grouped view) ─────────────────────────────────────────────────
 
@@ -526,6 +569,7 @@ const OrdersReviewPage = () => {
     const pct       = coveragePct(task.stock, Number(task.quantity || 0));
     const coverageColor = pct === null ? '#94a3b8' : pct >= 100 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
     const qtyClass  = !task.stock ? '' : pct >= 100 ? 'status-full' : pct >= 50 ? 'status-partial' : 'status-empty';
+    const anomalies = canManage ? taskAnomalies(task) : [];
 
     return (
       <tr
@@ -533,6 +577,7 @@ const OrdersReviewPage = () => {
         className={[
           'cr-row',
           isChecked ? 'cr-row--checked' : '',
+          anomalies.length ? 'por-row--anomaly' : '',
           urgency === 'overdue'  ? 'cr-row--overdue'  : '',
           urgency === 'critical' ? 'cr-row--critical' : '',
         ].filter(Boolean).join(' ')}
@@ -555,6 +600,11 @@ const OrdersReviewPage = () => {
                 {searchTerm ? highlightMatch(task.client_name || '—', searchTerm) : (task.client_name || '—')}
               </span>
               {task.order_code && <span className="article-subtext">{task.order_code}</span>}
+              {anomalies.length > 0 && (
+                <span className="por-anomaly-tag por-anomaly-tag--warning" title={anomalies.join(' · ')}>
+                  ⚠ {anomalies.length} anomalie{anomalies.length > 1 ? 's' : ''}
+                </span>
+              )}
             </div>
           </div>
         </td>
@@ -641,11 +691,18 @@ const OrdersReviewPage = () => {
         </td>
 
         {/* Actions */}
-        {canApprove && (
+        {(canApprove || canManage) && (
           <td className="cr-col-actions" onClick={e => e.stopPropagation()}>
             <div className="cr-quick-actions">
-              <button type="button" className="cr-quick-btn cr-quick-btn--reject" title="Rejeter" onClick={() => handleReject(task.id)} disabled={working}>✕</button>
-              <button type="button" className="cr-quick-btn cr-quick-btn--approve" title="Valider → Production" onClick={() => handleApprove(task.id)} disabled={working}>✓</button>
+              {canManage && (
+                <button type="button" className="por-fix-btn por-fix-btn--edit" title="Corriger la commande" onClick={() => setEditTask(task)}>✎</button>
+              )}
+              {canApprove && (
+                <>
+                  <button type="button" className="cr-quick-btn cr-quick-btn--reject" title="Rejeter" onClick={() => handleReject(task.id)} disabled={working}>✕</button>
+                  <button type="button" className="cr-quick-btn cr-quick-btn--approve" title="Valider → Production" onClick={() => handleApprove(task.id)} disabled={working}>✓</button>
+                </>
+              )}
             </div>
           </td>
         )}
@@ -794,6 +851,12 @@ const OrdersReviewPage = () => {
               <strong>{stats.noStock}</strong>
               <span>hors stock</span>
             </div>
+            {canManage && stats.anomalies > 0 && (
+              <div className="stock-stat stock-stat--danger">
+                <strong>{stats.anomalies}</strong>
+                <span>⚠ anomalie{stats.anomalies !== 1 ? 's' : ''}</span>
+              </div>
+            )}
             <div className="stock-stat--divider" />
             <div className="stock-stat">
               <strong>{stats.totalQty.toLocaleString('fr-FR')}</strong>
@@ -922,6 +985,17 @@ const OrdersReviewPage = () => {
           onReject={handleReject}
           working={working}
           canApprove={canApprove}
+        />
+      )}
+
+      {/* ── Correction d'une commande (super admin) ── */}
+      {editTask && (
+        <OrderEditModal
+          task={editTask}
+          commercials={commercialUsers}
+          working={editWorking}
+          onClose={() => setEditTask(null)}
+          onSave={handleSaveEdit}
         />
       )}
     </div>
