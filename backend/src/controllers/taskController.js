@@ -314,10 +314,10 @@ const taskController = {
                 message: `Statut changé de ${TASK_STATUS_LABELS[beforeTask.status] || beforeTask.status} vers ${TASK_STATUS_LABELS[afterStatus] || afterStatus}`,
             });
 
-            // Handle stock quantities based on status changes
-            if (afterStatus === 'DONE' && beforeTask.status !== 'DONE') {
+            // Stock PF déduit à la livraison (Livré) uniquement
+            if (afterStatus === 'DELIVERED' && beforeTask.status !== 'DELIVERED') {
               await deductStockForTask(beforeTask);
-            } else if (beforeTask.status === 'DONE' && afterStatus !== 'DONE') {
+            } else if (beforeTask.status === 'DELIVERED' && afterStatus !== 'DELIVERED') {
               await addStockForTask(beforeTask);
             }
         }
@@ -1112,11 +1112,11 @@ const taskController = {
       const task = await TaskModel.update(req.params.id, payload);
       if (!task) return res.status(404).json({ error: 'Task not found' });
 
-      // Handle stock quantities if the task is already DONE and quantity changed
-      if (previousTask.status === 'DONE' && task.status === 'DONE') {
+      // Ajustement du stock si la quantité change sur une tâche déjà LIVRÉE
+      if (previousTask.status === 'DELIVERED' && task.status === 'DELIVERED') {
         const oldQty = previousTask.quantity || 1;
         const newQty = task.quantity || 1;
-        
+
         if (newQty !== oldQty) {
           const diff = newQty - oldQty;
           if (diff > 0) {
@@ -1129,9 +1129,9 @@ const taskController = {
 
       // Handle stock quantities if the API payload also somehow changed the status
       if (payload.status && previousTask.status !== payload.status) {
-        if (previousTask.status !== 'DONE' && task.status === 'DONE') {
+        if (previousTask.status !== 'DELIVERED' && task.status === 'DELIVERED') {
           await deductStockForTask(task);
-        } else if (previousTask.status === 'DONE' && task.status !== 'DONE') {
+        } else if (previousTask.status === 'DELIVERED' && task.status !== 'DELIVERED') {
           await addStockForTask(task);
         }
       }
@@ -1246,11 +1246,11 @@ const taskController = {
       );
       if (!task) return res.status(404).json({ error: 'Task not found' });
 
-      // Handle stock quantities based on status changes
-      if (previousTask.status !== 'DONE' && task.status === 'DONE') {
+      // Le stock PF est déduit à la LIVRAISON (statut Livré), pas avant.
+      if (previousTask.status !== 'DELIVERED' && task.status === 'DELIVERED') {
         await deductStockForTask(task);
         if (task.item_reference) await recalculateStockAllocation(task.item_reference);
-      } else if (previousTask.status === 'DONE' && task.status !== 'DONE') {
+      } else if (previousTask.status === 'DELIVERED' && task.status !== 'DELIVERED') {
         await addStockForTask(task);
         if (task.item_reference) await recalculateStockAllocation(task.item_reference);
       }
@@ -1468,7 +1468,8 @@ const taskController = {
       const task = await TaskModel.delete(req.params.id);
       if (!task) return res.status(404).json({ error: 'Task not found' });
 
-      if (taskToDelete && taskToDelete.status === 'DONE') {
+      // Le stock n'est déduit qu'à la livraison → on ne réintègre que pour une tâche Livrée.
+      if (taskToDelete && taskToDelete.status === 'DELIVERED') {
         await addStockForTask(taskToDelete);
       }
       if (taskToDelete?.item_reference) {
@@ -1662,6 +1663,12 @@ const taskController = {
 
       const updatedTask = await TaskModel.updateStatus(req.params.id, 'DELIVERED', null, req.user.id, req.user.role);
       if (!updatedTask) return res.status(404).json({ error: 'Tâche introuvable' });
+
+      // Le produit fini quitte physiquement l'inventaire à la LIVRAISON → déduire le stock PF.
+      await deductStockForTask(updatedTask);
+      if (updatedTask.item_reference) {
+        await recalculateStockAllocation(updatedTask.item_reference);
+      }
 
       await TaskHistoryModel.log({
         taskId: updatedTask.id,

@@ -29,8 +29,16 @@ async function recalculateStockAllocation(itemReference) {
 
   const normalizedRef = itemReference.toUpperCase().trim();
 
-  // 1. Total stock available for this article (global)
-  const availableStock = Math.max(0, await StockImportModel.getStockQuantity(normalizedRef));
+  // 1. Stock physique de l'article. La déduction réelle n'a lieu qu'à la LIVRAISON
+  //    (statut Livré). Les fiches déjà en « Prêt à Livrer » (DONE) ont leur stock
+  //    ENGAGÉ mais pas encore déduit → on le réserve hors de l'allocation pour ne
+  //    pas le ré-attribuer à une autre commande.
+  const physicalStock = Math.max(0, await StockImportModel.getStockQuantity(normalizedRef));
+  const doneTasks = await TaskModel.getAll({ itemReference, status: 'DONE' });
+  const committedToDone = doneTasks
+    .filter(t => t.item_reference && t.item_reference.toUpperCase() === normalizedRef)
+    .reduce((sum, t) => sum + Number(t.quantity || 0), 0);
+  const availableStock = Math.max(0, physicalStock - committedToDone);
 
   // 2. All active tasks for this article, any workspace, any client
   const allTasks = await TaskModel.getAll({
@@ -109,18 +117,8 @@ async function recalculateStockAllocation(itemReference) {
           newValue: 'DONE',
           message: `Stock PF disponible (${alloc.quantityAllocated} pcs) — passage automatique en Prêt à Livrer`,
         });
-
-        // Le produit fini quitte l'inventaire dès « Prêt à Livrer » → déduire le stock
-        // (évite la double-allocation du même stock lors d'un recalcul ultérieur).
-        try {
-          if (alloc.stockImportId) {
-            await StockImportModel.deductQuantity(alloc.stockImportId, alloc.quantityAllocated);
-          } else {
-            await StockImportModel.deductQuantityByArticle(normalizedRef, alloc.quantityAllocated);
-          }
-        } catch (e) {
-          console.error(`[Allocation] Failed to deduct stock for task ${alloc.taskId}:`, e.message);
-        }
+        // Pas de déduction ici : le stock est seulement ENGAGÉ. La soustraction
+        // réelle se fait à la LIVRAISON (markDelivered → statut Livré).
       } catch (err) {
         console.error(`[Allocation] Failed to promote task ${alloc.taskId} → DONE:`, err.message);
       }
