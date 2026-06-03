@@ -73,6 +73,7 @@ export const taskAPI = {
 export const userAPI = {
   getAll: () => api.get('/users'),
   create: (data) => api.post('/users', { ...data, commercialId: data.commercialId || undefined }),
+  update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
   importCommercials: (formData) => api.post('/users/import-commercials', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },

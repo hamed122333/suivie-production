@@ -24,7 +24,7 @@ const BlockReasonModal = ({ task, onConfirm, onCancel }) => {
       <div className="modal-content">
         <div className="modal-header">
           <h3 className="modal-title">🚫 Bloquer la tache</h3>
-          <button className="modal-close" onClick={onCancel}>✕</button>
+          <button className="modal-close" onClick={onCancel}>Fermer</button>
         </div>
         <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '1rem' }}>
           Tache : <strong>{task?.title}</strong>
@@ -66,7 +66,7 @@ const BlockReasonModal = ({ task, onConfirm, onCancel }) => {
                   onClick={() => { setCustom(false); setReason(''); }}
                   style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}
                 >
-                  ← Revenir a la liste
+                  Revenir a la liste
                 </button>
               </>
             )}

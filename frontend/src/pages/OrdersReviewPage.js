@@ -132,7 +132,7 @@ function DetailModal({ task, onClose, onApprove, onReject, working, canApprove }
             <span className="cr-readiness-pill" style={{ background: score.color + '18', color: score.color, border: `1px solid ${score.color}40` }}>
               {score.label}
             </span>
-            <button type="button" className="cr-modal__close" onClick={onClose} aria-label="Fermer">✕</button>
+            <button type="button" className="cr-modal__close" onClick={onClose} aria-label="Fermer">Fermer</button>
           </div>
         </div>
 
@@ -245,10 +245,10 @@ function DetailModal({ task, onClose, onApprove, onReject, working, canApprove }
         {canApprove && (
           <div className="cr-modal__foot">
             <button type="button" className="btn btn-outline cr-btn-modal-reject" onClick={() => onReject(task.id)} disabled={working}>
-              ✕ Rejeter cette commande
+              Rejeter cette commande
             </button>
             <button type="button" className="btn btn-secondary cr-btn-modal-approve" onClick={() => onApprove(task.id)} disabled={working}>
-              {working ? 'Traitement…' : '✓ Valider → Production'}
+              {working ? 'Traitement…' : 'Valider pour la production'}
             </button>
           </div>
         )}
@@ -704,12 +704,12 @@ const OrdersReviewPage = () => {
           <td className="cr-col-actions" onClick={e => e.stopPropagation()}>
             <div className="cr-quick-actions">
               {canManage && (
-                <button type="button" className="por-fix-btn por-fix-btn--edit" title="Corriger la commande" onClick={() => setEditTask(task)}>✎</button>
+                <button type="button" className="por-fix-btn por-fix-btn--edit" title="Corriger la commande" onClick={() => setEditTask(task)}>Corriger</button>
               )}
               {canApprove && (
                 <>
-                  <button type="button" className="cr-quick-btn cr-quick-btn--reject" title="Rejeter" onClick={() => handleReject(task.id)} disabled={working}>✕</button>
-                  <button type="button" className="cr-quick-btn cr-quick-btn--approve" title="Valider → Production" onClick={() => handleApprove(task.id)} disabled={working}>✓</button>
+                  <button type="button" className="cr-quick-btn cr-quick-btn--reject" title="Rejeter" onClick={() => handleReject(task.id)} disabled={working}>Rejeter</button>
+                  <button type="button" className="cr-quick-btn cr-quick-btn--approve" title="Valider → Production" onClick={() => handleApprove(task.id)} disabled={working}>Valider</button>
                 </>
               )}
             </div>
@@ -772,7 +772,7 @@ const OrdersReviewPage = () => {
             <input ref={inputRef} type="text" className="stock-search-bar__input"
               placeholder="Client, référence, commercial… (Entrée)"
               value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={handleKey} />
-            {inputValue && <button type="button" className="stock-search-bar__clear" onClick={clearSearch} aria-label="Effacer">×</button>}
+            {inputValue && <button type="button" className="stock-search-bar__clear" onClick={clearSearch} aria-label="Effacer">Effacer</button>}
             <button type="button" className="stock-search-bar__btn" onClick={applySearch}>Chercher</button>
           </div>
 
@@ -806,10 +806,10 @@ const OrdersReviewPage = () => {
                 title="Importer commandes Excel (.xlsx) — ou glisser-déposer">
                 {importing
                   ? <><span className="por-spinner" aria-hidden /> Import…</>
-                  : <>📥 Importer</>}
+                  : 'Importer'}
               </button>
             )}
-            <button className="btn btn-outline" onClick={fetchPending} disabled={loading || working}>↺ Actualiser</button>
+            <button className="btn btn-outline" onClick={fetchPending} disabled={loading || working}>Actualiser</button>
           </div>
         </div>
       </div>
@@ -872,7 +872,7 @@ const OrdersReviewPage = () => {
               <span>pcs total</span>
             </div>
             {hasFilters && (
-              <button type="button" className="stock-stats-strip__clear" onClick={clearFilters}>✕ Effacer les filtres</button>
+              <button type="button" className="stock-stats-strip__clear" onClick={clearFilters}>Effacer les filtres</button>
             )}
           </div>
 
@@ -888,11 +888,11 @@ const OrdersReviewPage = () => {
               <div className="cr-actionbar__right">
                 <button type="button" className="btn btn-outline cr-btn-reject"
                   onClick={() => handleReject([...selected])} disabled={!someSelected || working}>
-                  ✕ Rejeter ({selected.size})
+                  Rejeter ({selected.size})
                 </button>
                 <button type="button" className="btn btn-secondary"
                   onClick={() => handleApprove([...selected])} disabled={!someSelected || working}>
-                  {working ? 'Traitement…' : `✓ Valider (${selected.size}) → Production`}
+                  {working ? 'Traitement…' : `Valider (${selected.size}) pour la production`}
                 </button>
               </div>
             </div>
@@ -942,10 +942,10 @@ const OrdersReviewPage = () => {
                         Sélectionner le groupe
                       </button>
                       <button type="button" className="btn btn-outline cr-btn-sm cr-btn-reject" onClick={() => handleReject(group.tasks.map(t => t.id))} disabled={working}>
-                        ✕ Rejeter tout
+                        Rejeter tout
                       </button>
                       <button type="button" className="btn btn-secondary cr-btn-sm" onClick={() => handleApprove(group.tasks.map(t => t.id))} disabled={working}>
-                        ✓ Valider tout
+                        Valider tout
                       </button>
                     </div>
                   )}
@@ -983,11 +983,11 @@ const OrdersReviewPage = () => {
                   </div>
                   {totalPages > 1 && (
                     <div className="pagination-buttons">
-                      <button className="btn-page" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>«</button>
-                      <button className="btn-page" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>‹ Préc.</button>
+                      <button className="btn-page" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>Première</button>
+                      <button className="btn-page" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>Préc.</button>
                       <span className="page-indicator">Page {currentPage}/{totalPages}</span>
-                      <button className="btn-page" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>Suiv. ›</button>
-                      <button className="btn-page" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>»</button>
+                      <button className="btn-page" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>Suiv.</button>
+                      <button className="btn-page" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>Dernière</button>
                     </div>
                   )}
                 </div>

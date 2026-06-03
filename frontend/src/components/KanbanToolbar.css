@@ -92,7 +92,7 @@
 .kanban-toolbar__nav { display: flex; align-items: center; gap: 0.2rem; }
 .kanban-toolbar__nav-arrow {
   width: 24px; height: 24px; border: 1px solid #e2e8f0; border-radius: 5px;
-  background: #fff; color: #64748b; cursor: pointer; font-size: 0.6rem;
+  background: #fff; color: #64748b; cursor: pointer; font-size: 0.95rem; line-height: 1;
   display: flex; align-items: center; justify-content: center;
   transition: background 0.1s, border-color 0.1s, color 0.1s; flex-shrink: 0;
 }

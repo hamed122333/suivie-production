@@ -259,7 +259,7 @@ const KanbanToolbar = ({
           <input type="text" placeholder="Commande, client, article… (Entrée)"
             value={inputValue} onChange={e => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown} aria-label="Rechercher" />
-          {inputValue && <button type="button" className="kanban-toolbar__clear-search" onClick={clearSearch} aria-label="Effacer">×</button>}
+          {inputValue && <button type="button" className="kanban-toolbar__clear-search" onClick={clearSearch} aria-label="Effacer">Effacer</button>}
         </div>
 
         <label className="kanban-toolbar__filter">
@@ -293,11 +293,11 @@ const KanbanToolbar = ({
         <div className="kanban-toolbar__checkboxes">
           <label className="kanban-toolbar__checkbox">
             <input type="checkbox" checked={criticalDeficit} onChange={e => onCriticalDeficitChange(e.target.checked)}/>
-            <span title="Fiches avec stock insuffisant">⚠ Déficit</span>
+            <span title="Fiches avec stock insuffisant">Déficit</span>
           </label>
           <label className="kanban-toolbar__checkbox">
             <input type="checkbox" checked={predictiveOnly} onChange={e => onPredictiveOnlyChange(e.target.checked)}/>
-            <span title="Commandes prévisionnelles uniquement">📊 Prév.</span>
+            <span title="Commandes prévisionnelles uniquement">Prév.</span>
           </label>
         </div>
 
@@ -307,7 +307,7 @@ const KanbanToolbar = ({
             onPriorityChange(''); onCategoryChange('');
             onCriticalDeficitChange(false); onPredictiveOnlyChange(false);
             onCommercialFilterChange?.('');
-          }}>✕ Effacer</button>
+          }}>Effacer</button>
         )}
       </div>
 
@@ -332,13 +332,13 @@ const KanbanToolbar = ({
           {windowSize !== 'all' && (
             <div className="kanban-toolbar__nav">
               <button type="button" className="kanban-toolbar__nav-arrow"
-                onClick={() => navigate(-1)} aria-label="Période précédente">◀</button>
+                onClick={() => navigate(-1)} aria-label="Période précédente">‹</button>
               <div className="kanban-toolbar__window-label">
                 <span className="kanban-toolbar__window-range">{windowLabel}</span>
                 {todayInWindow && <span className="kanban-toolbar__today-dot">auj.</span>}
               </div>
               <button type="button" className="kanban-toolbar__nav-arrow"
-                onClick={() => navigate(+1)} aria-label="Période suivante">▶</button>
+                onClick={() => navigate(+1)} aria-label="Période suivante">›</button>
               {!onCurPeriod && (
                 <button type="button" className="kanban-toolbar__now-btn" onClick={jumpToToday}>
                   Période actuelle
@@ -390,7 +390,7 @@ const KanbanToolbar = ({
 
             {selectedDay && (
               <button type="button" className="kanban-toolbar__daybar-clear" onClick={clearDay}>
-                ✕ Effacer
+                Effacer
               </button>
             )}
           </div>
@@ -435,22 +435,13 @@ const KanbanToolbar = ({
                 onClick={() => importInputRef.current?.click()}>
                 {importing
                   ? <><span className="kanban-toolbar__spinner" aria-hidden /> Import…</>
-                  : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg> Importer</>}
+                  : 'Importer'}
               </button>
             )}
             <button type="button" className="kanban-toolbar__action" title="Exporter Excel" onClick={onExport}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
               Exporter
             </button>
             <button type="button" className="kanban-toolbar__action kanban-toolbar__action--primary" title="Actualiser" onClick={onRefresh}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-              </svg>
               Actualiser
             </button>
           </div>

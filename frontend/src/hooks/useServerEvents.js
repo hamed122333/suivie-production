@@ -31,6 +31,30 @@ const registry  = {};
 // eventName → true (already wired on current ES instance)
 const wiredOn   = new Set();
 
+// ── Coalescing des rafales SSE ───────────────────────────────────────────────
+// Lors d'opérations en masse côté backend (import stock, recalcul global), une
+// rafale de broadcasts du même type peut arriver. Sans regroupement, chaque
+// message déclencherait un re-fetch → tempête de requêtes → 429. On regroupe
+// donc les messages d'un même type sur une courte fenêtre et ne déclenche les
+// handlers qu'une fois (avec le dernier payload reçu).
+const COALESCE_MS = 250;
+const coalesceTimers = {}; // eventName → timeout id
+const lastData = {};       // eventName → dernier payload reçu
+
+function dispatchEvent(name, data) {
+  const cbs = registry[name];
+  if (cbs) for (const cb of cbs) cb(data);
+}
+
+function scheduleDispatch(name, data) {
+  lastData[name] = data;
+  if (coalesceTimers[name]) return; // une rafale est déjà en attente
+  coalesceTimers[name] = setTimeout(() => {
+    coalesceTimers[name] = null;
+    dispatchEvent(name, lastData[name]);
+  }, COALESCE_MS);
+}
+
 function getToken() {
   try { return localStorage.getItem('token') || ''; } catch { return ''; }
 }
@@ -41,8 +65,7 @@ function wireEvent(name) {
   singleton.addEventListener(name, (event) => {
     let data;
     try { data = JSON.parse(event.data); } catch { data = {}; }
-    const cbs = registry[name];
-    if (cbs) for (const cb of cbs) cb(data);
+    scheduleDispatch(name, data);
   });
 }
 

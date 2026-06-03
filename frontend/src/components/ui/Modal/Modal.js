@@ -78,7 +78,7 @@ function Modal({
           <div className="ui-modal__header">
             {title && <h3 id={titleId} className="ui-modal__title">{title}</h3>}
             <button type="button" className="ui-modal__close" onClick={onClose} aria-label="Fermer">
-              ✕
+              Fermer
             </button>
           </div>
         )}

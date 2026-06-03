@@ -44,13 +44,10 @@ const TaskTypeToggle = ({ task, onTypeChanged, isPlanner }) => {
         onClick={handleToggle}
         disabled={loading}
       >
-        <span className="task-type-toggle__icon">
-          {task.task_type === 'PREDICTIVE' ? '📊' : '📋'}
-        </span>
         <span className="task-type-toggle__text">
           {task.task_type === 'PREDICTIVE' ? 'Prédictive' : 'Standard'}
         </span>
-        {loading && <span className="task-type-toggle__spinner">⟳</span>}
+        {loading && <span className="task-type-toggle__spinner">…</span>}
       </button>
       {error && <div className="task-type-toggle__error">{error}</div>}
     </div>

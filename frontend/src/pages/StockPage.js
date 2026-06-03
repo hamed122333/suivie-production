@@ -192,7 +192,7 @@ const StockPage = () => {
               aria-label="Rechercher dans le stock"
             />
             {inputValue && (
-              <button type="button" className="stock-search-bar__clear" onClick={clearSearch} aria-label="Effacer">×</button>
+              <button type="button" className="stock-search-bar__clear" onClick={clearSearch} aria-label="Effacer">Effacer</button>
             )}
             <button
               type="button"
@@ -232,8 +232,8 @@ const StockPage = () => {
 
           {isPlanner && (
             <div className="buttons-group">
-              <button className="btn btn-outline" onClick={() => setIsManualModalOpen(true)}>+ Ajout Manuel</button>
-              <button className="btn btn-secondary" onClick={() => setIsModalOpen(true)}>↑ Importer Excel</button>
+              <button className="btn btn-outline" onClick={() => setIsManualModalOpen(true)}>Ajout Manuel</button>
+              <button className="btn btn-secondary" onClick={() => setIsModalOpen(true)}>Importer Excel</button>
             </div>
           )}
         </div>
@@ -277,7 +277,7 @@ const StockPage = () => {
               className="stock-stats-strip__clear" 
               onClick={() => { clearSearch(); setCategoryFilter(''); setStatusFilter(''); }}
             >
-              ✕ Effacer les filtres
+              Effacer les filtres
             </button>
           )}
         </div>
@@ -446,11 +446,11 @@ const StockPage = () => {
 
                 {totalPages > 1 && (
                   <div className="pagination-buttons">
-                    <button className="btn-page" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>«</button>
-                    <button className="btn-page" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>‹ Précédent</button>
+                    <button className="btn-page" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>Première</button>
+                    <button className="btn-page" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>Précédent</button>
                     <span className="page-indicator">Page {currentPage} / {totalPages}</span>
-                    <button className="btn-page" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>Suivant ›</button>
-                    <button className="btn-page" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>»</button>
+                    <button className="btn-page" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>Suivant</button>
+                    <button className="btn-page" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>Dernière</button>
                   </div>
                 )}
               </div>

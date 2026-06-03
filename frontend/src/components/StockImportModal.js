@@ -59,7 +59,7 @@ const StockImportModal = ({ onClose, onImported }) => {
             Importer des articles (Excel)
           </h3>
           <button type="button" className="modal-close" onClick={onClose} disabled={uploading} title="Fermer">
-            ✕
+            Fermer
           </button>
         </div>
 

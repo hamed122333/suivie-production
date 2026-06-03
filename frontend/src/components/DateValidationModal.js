@@ -29,16 +29,16 @@ function DateValidationModal({ task, working = false, onClose, onValidate, onPro
   const footer = mode === 'validate' ? (
     <>
       <Button variant="ghost" onClick={() => setMode('propose')} disabled={working}>
-        ✏️ Proposer une autre date
+        Proposer une autre date
       </Button>
       <Button variant="primary" onClick={onValidate} loading={working}>
-        ✅ Valider la date
+        Valider la date
       </Button>
     </>
   ) : (
     <>
       <Button variant="ghost" onClick={() => setMode('validate')} disabled={working}>
-        ← Retour
+        Retour
       </Button>
       <Button
         variant="primary"

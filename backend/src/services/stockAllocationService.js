@@ -26,7 +26,12 @@ const { broadcast } = require('./sseService');
  * Le système ne fait QUE confirmer la disponibilité (→ Prêt à Livrer) et n'effectue
  * AUCUNE rétrogradation.
  */
-async function recalculateStockAllocation(itemReference) {
+async function recalculateStockAllocation(itemReference, options = {}) {
+  // options.silent — suppress the final broadcast('tasks-updated') and batch the
+  // ready-to-deliver notifications into a single broadcast. Used when this function
+  // is called inside a loop (large stock import, recalculateAllArticles,
+  // approveOrders) so the caller emits ONE broadcast at the end instead of N.
+  const { silent = false } = options;
   if (!itemReference) return [];
 
   const normalizedRef = itemReference.toUpperCase().trim();
@@ -137,22 +142,24 @@ async function recalculateStockAllocation(itemReference) {
       const livreurs = await UserModel.findByRoles(['livreur']);
       const livreurIds = livreurs.map((l) => l.id);
       if (livreurIds.length > 0) {
-        for (const t of promotedToDone) {
-          await NotificationModel.createReadyToDeliverNotifications({
-            taskId: t.id,
-            recipientUserIds: livreurIds,
-            plannerName: 'Le système (stock confirmé)',
-            taskTitle: t.title,
-          });
-        }
+        // Single batched insert + single broadcast for all promoted tasks
+        // (avoids one 'notifications-updated' broadcast per task → 429 amplification).
+        await NotificationModel.createReadyToDeliverNotificationsBatch({
+          tasks: promotedToDone.map((t) => ({ taskId: t.id, title: t.title })),
+          recipientUserIds: livreurIds,
+          plannerName: 'Le système (stock confirmé)',
+        });
       }
     } catch (err) {
       console.error('[Allocation] Failed to notify livreurs of ready-to-deliver tasks:', err.message);
     }
   }
 
-  // 5. Notify frontend
-  broadcast('tasks-updated', { source: 'allocation', article: itemReference });
+  // 5. Notify frontend (skipped in silent mode — the caller emits one broadcast
+  //    after its loop to avoid N broadcasts during bulk operations).
+  if (!silent) {
+    broadcast('tasks-updated', { source: 'allocation', article: itemReference });
+  }
 
   return allocations;
 }
@@ -174,8 +181,13 @@ async function recalculateAllArticles() {
 
   let totalProcessed = 0;
   for (const article of articles) {
-    await recalculateStockAllocation(article);
+    await recalculateStockAllocation(article, { silent: true });
     totalProcessed++;
+  }
+
+  // Single broadcast after the whole batch instead of one per article.
+  if (totalProcessed > 0) {
+    broadcast('tasks-updated', { source: 'allocation-all', count: totalProcessed });
   }
 
   return totalProcessed;

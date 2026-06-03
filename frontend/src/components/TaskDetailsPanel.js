@@ -198,11 +198,11 @@ const TaskDetailsPanel = ({
           <div className="task-detail__header-actions">
             {canEdit && (
               <>
-                <button type="button" className="btn btn-secondary tdp-icon-btn" title="Modifier" onClick={() => onEditTask?.(task)}>✏️</button>
-                <button type="button" className="btn btn-secondary tdp-icon-btn task-detail__danger-btn" title="Supprimer" onClick={() => onDeleteTask?.(task.id)}>🗑️</button>
+                <button type="button" className="btn btn-secondary tdp-icon-btn" title="Modifier" onClick={() => onEditTask?.(task)}>Modifier</button>
+                <button type="button" className="btn btn-secondary tdp-icon-btn task-detail__danger-btn" title="Supprimer" onClick={() => onDeleteTask?.(task.id)}>Supprimer</button>
               </>
             )}
-            <button type="button" className="modal-close" onClick={onClose}>✕</button>
+            <button type="button" className="modal-close" onClick={onClose}>Fermer</button>
           </div>
         </div>
 
@@ -320,7 +320,7 @@ const TaskDetailsPanel = ({
                       catch (err) { setError(err?.response?.data?.error || 'Impossible de marquer livré.'); }
                       finally { setSavingAction(false); }
                     }}>
-                    {savingAction ? 'Enregistrement…' : '🚚 Marquer livré'}
+                    {savingAction ? 'Enregistrement…' : 'Marquer livré'}
                   </button>
                 )}
               </section>
@@ -378,7 +378,7 @@ const TaskDetailsPanel = ({
                         disabled={savingAction}
                         onClick={handleAccept}
                       >
-                        {savingAction ? '…' : '✓ Accepter'}
+                        {savingAction ? '…' : 'Accepter'}
                       </button>
                       <button
                         type="button"
@@ -386,7 +386,7 @@ const TaskDetailsPanel = ({
                         disabled={savingAction}
                         onClick={() => setProposeOpen(true)}
                       >
-                        ↔ Contre-proposer
+                        Contre-proposer
                       </button>
                     </div>
                   </div>
@@ -422,7 +422,7 @@ const TaskDetailsPanel = ({
                         disabled={savingAction || !dateProposal}
                         onClick={handlePropose}
                       >
-                        {savingAction ? '…' : '↑ Envoyer'}
+                        {savingAction ? '…' : 'Envoyer'}
                       </button>
                       {proposeOpen && (
                         <button type="button" className="tdp-btn-link" onClick={() => { setProposeOpen(false); setDateProposal(''); }}>
@@ -520,8 +520,8 @@ const TaskDetailsPanel = ({
               {history.length > HISTORY_PREVIEW && (
                 <button type="button" className="tdp-history-toggle" onClick={() => setShowAllHistory(p => !p)}>
                   {showAllHistory
-                    ? '↑ Réduire'
-                    : `↓ ${history.length - HISTORY_PREVIEW} action${history.length - HISTORY_PREVIEW > 1 ? 's' : ''} précédente${history.length - HISTORY_PREVIEW > 1 ? 's' : ''}`}
+                    ? 'Réduire'
+                    : `${history.length - HISTORY_PREVIEW} action${history.length - HISTORY_PREVIEW > 1 ? 's' : ''} précédente${history.length - HISTORY_PREVIEW > 1 ? 's' : ''}`}
                 </button>
               )}
             </section>

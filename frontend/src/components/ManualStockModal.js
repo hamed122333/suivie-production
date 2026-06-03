@@ -130,7 +130,7 @@ const ManualStockModal = ({ onClose, onAdded }) => {
             <span role="img" aria-label="pen" style={{ marginRight: '8px' }}>✍️</span>
             Gestion manuelle stock PF
           </h3>
-          <button type="button" className="modal-close" onClick={onClose} disabled={submitting} title="Fermer">✕</button>
+          <button type="button" className="modal-close" onClick={onClose} disabled={submitting} title="Fermer">Fermer</button>
         </div>
 
         <div className="stock-import-modal__body">

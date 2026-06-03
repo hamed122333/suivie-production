@@ -44,6 +44,17 @@ const UserModel = {
     return result.rows[0];
   },
 
+  async update(id, { name, email, role, commercialId }) {
+    const result = await pool.query(
+      `UPDATE users
+       SET name = $1, email = $2, role = $3, commercial_id = $4
+       WHERE id = $5
+       RETURNING id, name, email, role, commercial_id, created_at`,
+      [name, email, role, commercialId || null, id]
+    );
+    return result.rows[0] || null;
+  },
+
   async validatePassword(plainPassword, hashedPassword) {
     return bcrypt.compare(plainPassword, hashedPassword);
   },

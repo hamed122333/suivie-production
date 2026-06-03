@@ -141,7 +141,6 @@ const Header = () => {
       (to === '/kanban' && (location.pathname === '/' || location.pathname === '/kanban'));
     return (
       <Link to={to} className={`header-nav__link ${active ? 'header-nav__link--active' : ''}`}>
-        {icon && <span className="header-nav__icon" aria-hidden>{icon}</span>}
         {label}
         {badge > 0 && <span className="header-nav__badge">{badge > 99 ? '99+' : badge}</span>}
       </Link>
@@ -272,7 +271,7 @@ const Header = () => {
                 <div className="app-header__dropdown-divider" />
                 {isSuperAdmin && (
                   <Link to="/users" className="app-header__dropdown-item" onClick={() => setMenuOpen(false)}>
-                    ◉ Gestion des utilisateurs
+                    Gestion des utilisateurs
                   </Link>
                 )}
                 <button
@@ -280,7 +279,7 @@ const Header = () => {
                   className="app-header__dropdown-item app-header__dropdown-item--danger"
                   onClick={() => { logout(); setMenuOpen(false); }}
                 >
-                  ⎋ Déconnexion
+                  Déconnexion
                 </button>
               </div>
             )}

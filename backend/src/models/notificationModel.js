@@ -207,6 +207,42 @@ const NotificationModel = {
   },
 
   /**
+   * Batch version of createReadyToDeliverNotifications: inserts notifications for
+   * MANY tasks (× many livreurs) in a single SQL statement and emits a SINGLE
+   * broadcast. Used by the stock-allocation recalculation when several tasks are
+   * promoted to DONE at once (e.g. during a large stock import) to avoid emitting
+   * one 'notifications-updated' broadcast per task (429 amplification).
+   * @param {Array<{taskId:number, title?:string}>} tasks
+   */
+  async createReadyToDeliverNotificationsBatch({ tasks, recipientUserIds, plannerName }) {
+    const taskList = (tasks || []).filter((t) => t && t.taskId);
+    if (taskList.length === 0) return;
+    if (!Array.isArray(recipientUserIds) || recipientUserIds.length === 0) return;
+    const values = [];
+    const placeholders = [];
+    let index = 1;
+    for (const { taskId, title } of taskList) {
+      for (const uid of recipientUserIds) {
+        values.push(
+          uid,
+          taskId,
+          'ready_to_deliver',
+          `🚚 Prêt à livrer — SP-${taskId}`,
+          `${plannerName || 'Le planificateur'} a validé SP-${taskId}${title ? ` (${title})` : ''} — commande prête à livrer.`
+        );
+        placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
+        index += 5;
+      }
+    }
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ${placeholders.join(', ')}`,
+      values
+    );
+    broadcast('notifications-updated', { type: 'ready_to_deliver', count: taskList.length });
+  },
+
+  /**
    * Notify a commercial that new orders were imported and await their review.
    * @param {Array<{recipientUserId:number, count:number}>} entries
    */

@@ -54,12 +54,14 @@ const KanbanPage = () => {
   useEffect(() => {
     const load = async () => {
       try {
+        // La liste d'utilisateurs (filtre commercial) est réservée aux rôles
+        // privilégiés → un 403 ne doit pas bloquer le chargement du board.
         const [tasksRes, usersRes] = await Promise.all([
           taskAPI.getAll({}),
-          userAPI.getAll(),
+          userAPI.getAll().catch(() => ({ data: [] })),
         ]);
         setTasks(tasksRes.data);
-        setUsers(usersRes.data);
+        setUsers(usersRes.data || []);
       } catch (err) {
         console.error('Failed to load kanban', err);
       } finally {

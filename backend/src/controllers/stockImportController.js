@@ -281,8 +281,10 @@ const stockImportController = {
       // Recalculate FIFO allocation for each imported article
       const uniqueArticles = [...new Set(created.map(r => r.article.toUpperCase()))];
       for (const art of uniqueArticles) {
-        await recalculateStockAllocation(art);
+        await recalculateStockAllocation(art, { silent: true });
       }
+      // One broadcast for the whole import instead of one per article (429 fix).
+      broadcast('tasks-updated', { source: 'excel-import', count: uniqueArticles.length });
       broadcast('stock-updated', { source: 'excel-import', articles: uniqueArticles, count: created.length });
       res.status(201).json({ imported: created.length, skipped, duplicates, records: created });
     } catch (err) {

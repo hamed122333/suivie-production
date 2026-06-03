@@ -69,10 +69,11 @@ const ROLE_PERMISSIONS = [
 ];
 
 const UsersPage = () => {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState(null); // null = création, sinon édition
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'user', commercialId: '' });
   const [formError, setFormError] = useState('');
   const [creating, setCreating] = useState(false);
@@ -103,23 +104,65 @@ const UsersPage = () => {
 
   if (!isSuperAdmin) return <Navigate to="/kanban" replace />;
 
-  const handleCreate = async (e) => {
+  const openCreate = () => {
+    setEditingId(null);
+    setForm({ name: '', email: '', password: '', role: 'user', commercialId: '' });
+    setFormError('');
+    setShowModal(true);
+  };
+
+  const openEdit = (u) => {
+    setEditingId(u.id);
+    setForm({
+      name: u.name || '',
+      email: u.email || '',
+      password: '',
+      role: u.role || 'user',
+      commercialId: u.commercial_id || '',
+    });
+    setFormError('');
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
-    if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
-      setFormError('Tous les champs sont obligatoires');
+    const isEdit = editingId != null;
+
+    if (!form.name.trim() || !form.email.trim()) {
+      setFormError('Le nom et l\'email sont obligatoires');
       return;
     }
+    // Mot de passe : obligatoire en création, optionnel en édition (vide = inchangé).
+    if (!isEdit && !form.password.trim()) {
+      setFormError('Le mot de passe est obligatoire');
+      return;
+    }
+    if (form.password && form.password.length < 6) {
+      setFormError('Le mot de passe doit faire au moins 6 caractères');
+      return;
+    }
+    if (form.role === 'commercial' && !/^VL\d{6}$/.test(form.commercialId.trim())) {
+      setFormError('L\'ID commercial doit être au format VL000001 (VL + 6 chiffres)');
+      return;
+    }
+
     setCreating(true);
     try {
       const payload = { ...form };
       if (payload.role !== 'commercial') delete payload.commercialId;
-      await userAPI.create(payload);
+      if (isEdit && !payload.password) delete payload.password; // ne pas changer le mot de passe
+      if (isEdit) {
+        await userAPI.update(editingId, payload);
+      } else {
+        await userAPI.create(payload);
+      }
       setShowModal(false);
+      setEditingId(null);
       setForm({ name: '', email: '', password: '', role: 'user', commercialId: '' });
       fetchUsers();
     } catch (err) {
-      setFormError(err?.response?.data?.error || 'Impossible de créer l\'utilisateur');
+      setFormError(err?.response?.data?.error || (isEdit ? 'Impossible de modifier l\'utilisateur' : 'Impossible de créer l\'utilisateur'));
     } finally {
       setCreating(false);
     }
@@ -174,15 +217,15 @@ const UsersPage = () => {
     <div className="users-page">
       <div className="users-page__header">
         <div>
-          <h1 className="users-page__title">👥 Gestion des utilisateurs</h1>
+          <h1 className="users-page__title">Gestion des utilisateurs</h1>
           <p className="users-page__subtitle">{users.length} utilisateur{users.length !== 1 ? 's' : ''} dans le système</p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button className="btn btn-secondary" onClick={() => setShowImportModal(true)}>
-            📥 Importer commerciaux
+            Importer commerciaux
           </button>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            + Nouvel utilisateur
+          <button className="btn btn-primary" onClick={openCreate}>
+            Nouvel utilisateur
           </button>
         </div>
       </div>
@@ -200,9 +243,7 @@ const UsersPage = () => {
             return (
               <div key={role.key} className="users-page__role-card">
                 <div className="users-page__role-title" style={{ color: styleRole.color }}>
-                  <span className="users-page__role-icon" style={{ background: styleRole.bg, color: styleRole.color }}>
-                    {styleRole.icon}
-                  </span>
+                  <span className="users-page__role-dot" style={{ background: styleRole.color }} aria-hidden />
                   <div>
                     <strong>{role.title}</strong>
                     <span>{role.summary}</span>
@@ -235,7 +276,7 @@ const UsersPage = () => {
       {loading ? (
         <Spinner message="Chargement des utilisateurs..." />
       ) : filtered.length === 0 ? (
-        <EmptyState icon="⚲" message="Aucun utilisateur trouvé." />
+        <EmptyState message="Aucun utilisateur trouvé." />
       ) : (
         <div className="users-page__table-wrap">
           <table className="data-table">
@@ -246,7 +287,7 @@ const UsersPage = () => {
                 <th>Rôle</th>
                 <th>ID Commercial</th>
                 <th>Créé le</th>
-                <th style={{ width: '60px', textAlign: 'center' }}>Actions</th>
+                <th style={{ width: '170px', textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -266,33 +307,38 @@ const UsersPage = () => {
                     <td className="users-page__email">{u.email}</td>
                     <td>
                       <span className="users-page__role-badge" style={{ background: role.bg, color: role.color }}>
-                        {role.icon} {role.label}
+                        {role.label}
                       </span>
                     </td>
                     <td className="users-page__commercial-id">
                       {u.commercial_id || '—'}
                     </td>
                     <td className="users-page__date">{date}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(u.id, u.name)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#ef4444',
-                          cursor: 'pointer',
-                          padding: '0.25rem 0.5rem',
-                          borderRadius: '4px',
-                          fontSize: '1.2rem',
-                          lineHeight: 1
-                        }}
-                        title="Supprimer l'utilisateur"
-                        onMouseOver={(e) => (e.target.style.backgroundColor = '#fef2f2')}
-                        onMouseOut={(e) => (e.target.style.backgroundColor = 'transparent')}
-                      >
-                        ×
-                      </button>
+                    <td>
+                      <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ padding: '0.3rem 0.7rem', fontSize: '0.8rem' }}
+                          onClick={() => openEdit(u)}
+                          title="Modifier l'utilisateur"
+                        >
+                          Modifier
+                        </button>
+                        {currentUser && u.id === currentUser.id ? (
+                          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', alignSelf: 'center' }} title="Vous ne pouvez pas supprimer votre propre compte">—</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            style={{ padding: '0.3rem 0.7rem', fontSize: '0.8rem' }}
+                            onClick={() => handleDelete(u.id, u.name)}
+                            title="Supprimer l'utilisateur"
+                          >
+                            Supprimer
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -302,15 +348,15 @@ const UsersPage = () => {
         </div>
       )}
 
-      {/* Modal Créer un utilisateur */}
+      {/* Modal Créer / Modifier un utilisateur */}
       {showModal && (
-        <div className="modal-overlay" role="dialog" aria-label="Créer un utilisateur">
+        <div className="modal-overlay" role="dialog" aria-label={editingId ? 'Modifier un utilisateur' : 'Créer un utilisateur'}>
           <div className="modal-content">
             <div className="modal-header">
-              <h3 className="modal-title">Nouvel utilisateur</h3>
-              <button className="modal-close" onClick={() => { setShowModal(false); setFormError(''); }}>✕</button>
+              <h3 className="modal-title">{editingId ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur'}</h3>
+              <button className="modal-close" onClick={() => { setShowModal(false); setEditingId(null); setFormError(''); }}>Fermer</button>
             </div>
-            <form onSubmit={handleCreate}>
+            <form onSubmit={handleSubmit}>
               {formError && (
                 <div className="users-page__form-error">{formError}</div>
               )}
@@ -325,18 +371,18 @@ const UsersPage = () => {
                   placeholder="jean@exemple.com" required />
               </div>
               <div className="form-group">
-                <label>Mot de passe</label>
+                <label>Mot de passe {editingId && <span style={{ textTransform: 'none', fontWeight: 400 }}>(laisser vide pour ne pas changer)</span>}</label>
                 <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                  placeholder="Minimum 6 caractères" required />
+                  placeholder={editingId ? 'Inchangé si vide' : 'Minimum 6 caractères'} required={!editingId} />
               </div>
               <div className="form-group">
                 <label>Rôle</label>
                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value, commercialId: '' }))}>
-                  <option value="commercial">✉ Commercial (crée les tâches)</option>
-                  <option value="planner">⚙ Planificateur (gère les statuts)</option>
-                  <option value="livreur">🚚 Livreur (marque les livraisons)</option>
-                  <option value="super_admin">✦ Super Admin (accès complet)</option>
-                  <option value="user">○ Utilisateur</option>
+                  <option value="commercial">Commercial (crée les tâches)</option>
+                  <option value="planner">Planificateur (gère les statuts)</option>
+                  <option value="livreur">Livreur (marque les livraisons)</option>
+                  <option value="super_admin">Super Admin (accès complet)</option>
+                  <option value="user">Utilisateur</option>
                 </select>
               </div>
 
@@ -356,11 +402,13 @@ const UsersPage = () => {
                 </div>
               )}
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => { setShowModal(false); setFormError(''); }}>
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowModal(false); setEditingId(null); setFormError(''); }}>
                   Annuler
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={creating}>
-                  {creating ? 'Création…' : 'Créer l\'utilisateur'}
+                  {creating
+                    ? (editingId ? 'Enregistrement…' : 'Création…')
+                    : (editingId ? 'Enregistrer' : 'Créer l\'utilisateur')}
                 </button>
               </div>
             </form>
@@ -399,7 +447,7 @@ const UsersPage = () => {
                 setImportError('');
                 setImportResult(null);
                 setImportFile(null);
-              }}>✕</button>
+              }}>Fermer</button>
             </div>
 
             {importResult ? (

@@ -331,7 +331,7 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
               <h3 className="modal-title task-modal-classic__title">Nouvelle commande client</h3>
             </div>
             <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
-              ✕
+              Fermer
             </button>
           </div>
 
@@ -536,7 +536,7 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
               <h3 className="modal-title task-modal-classic__title">Saisir une commande client</h3>
             </div>
             <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
-              ✕
+              Fermer
             </button>
           </div>
 
@@ -628,7 +628,7 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
             <h3 className="modal-title task-modal-classic__title">Modifier la fiche</h3>
           </div>
           <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
-            ✕
+            Fermer
           </button>
         </div>
 

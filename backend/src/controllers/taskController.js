@@ -903,9 +903,9 @@ const taskController = {
         });
 
         // Recalc : si le stock PF couvre déjà la quantité, le système la passera
-        // directement en « Prêt à Livrer ».
+        // directement en « Prêt à Livrer ». silent → un seul broadcast final (l.918).
         if (task.item_reference) {
-          await recalculateStockAllocation(task.item_reference);
+          await recalculateStockAllocation(task.item_reference, { silent: true });
         }
         approved.push(id);
       }

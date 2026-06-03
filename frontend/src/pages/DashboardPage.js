@@ -159,7 +159,7 @@ const DashboardPage = () => {
           {importBanner.type === 'success' && (
             <button className="dashboard-banner__btn" onClick={() => navigate('/kanban')}>Voir</button>
           )}
-          <button className="dashboard-banner__close" onClick={() => setImportBanner(null)}>✕</button>
+          <button className="dashboard-banner__close" onClick={() => setImportBanner(null)}>Fermer</button>
         </div>
       )}
 
@@ -174,7 +174,7 @@ const DashboardPage = () => {
             <>
               <input ref={importInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={(e) => { handleImportOrders(e.target.files?.[0]); e.target.value = ''; }} />
               <button className="dashboard__btn dashboard__btn--primary" onClick={() => importInputRef.current?.click()} disabled={importing}>
-                {importing ? '...' : '+ Import'}
+                {importing ? '...' : 'Import'}
               </button>
             </>
           )}
@@ -256,7 +256,7 @@ const DashboardPage = () => {
           <div className="dashboard-card dashboard-card--highlight">
             <div className="dashboard-card__header">
               <h3>Stock</h3>
-              <button className="dashboard-link" onClick={() => navigate('/stock')}>Voir →</button>
+              <button className="dashboard-link" onClick={() => navigate('/stock')}>Voir</button>
             </div>
             <div className="stock-summary">
               <div className="stock-summary__row">
