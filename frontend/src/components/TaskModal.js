@@ -246,7 +246,12 @@ const TaskModal = ({ onClose, onSave, task = null, isCommercialMode = false, isC
       payload.quantityUnit = normalizeOptionalString(payload.quantityUnit) || 'pcs';
       payload.assignedTo = payload.assignedTo ? Number(payload.assignedTo) : null;
 
-      if (isCommMode) {
+      if (isEditing) {
+        // Édition d'une fiche existante → mise à jour directe (les champs du
+        // formulaire forment le payload), PAS une création. onSave route vers
+        // taskAPI.update(id, payload) côté KanbanBoard.
+        await onSave(payload);
+      } else if (isCommMode) {
         // Commercial create mode: tasks from selected stock import articles
         const clientName = `${form.clientName || ''}`.trim();
         if (!clientName) {
