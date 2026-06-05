@@ -36,6 +36,37 @@
   gap: 0.35rem;
 }
 
+/* Actions rapides (Modifier / Supprimer) : icônes révélées au survol de la carte,
+   inline à gauche du statut → pas de chevauchement. Accès direct sans ouvrir le
+   panneau de détails (évite deux overlays superposés). */
+.task-card__actions {
+  display: none;
+  align-items: center;
+  gap: 0.25rem;
+}
+.task-card--interactive:hover .task-card__actions {
+  display: flex;
+}
+.task-card__action-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.task-card__action-btn:hover { background: #f1f5f9; color: #0f172a; }
+.task-card__action-btn--danger:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+/* Sur écran tactile (pas de hover), on affiche les actions en permanence. */
+@media (hover: none) {
+  .task-card__actions { display: flex; }
+}
+
 .task-card__meta {
   display: flex;
   flex-wrap: wrap;

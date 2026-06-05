@@ -10,10 +10,10 @@ import './StockAllocationBadge.css';
 const StockAllocationBadge = ({ task }) => {
   if (!task) return null;
 
-  const requested = Number(task.quantity || 0);
-  const allocated = Number(task.stock_allocated ?? 0);
-  const deficit = Number(task.stock_deficit || 0);
-  const unit = task.quantity_unit || 'pcs';
+  // Pièces → entiers, sans unité (« pcs » implicite).
+  const requested = Math.round(Number(task.quantity || 0));
+  const allocated = Math.round(Number(task.stock_allocated ?? 0));
+  const deficit = Math.round(Number(task.stock_deficit || 0));
   const hasDeficit = deficit > 0;
   const priorityOrder = task.priority_order;
   const isShared = priorityOrder != null && priorityOrder >= 1;
@@ -31,9 +31,9 @@ const StockAllocationBadge = ({ task }) => {
   // Détail dans une infobulle native (multi-lignes)
   const titleParts = [];
   if (isShared) titleParts.push(`Référence partagée — priorité #${priorityOrder}`);
-  titleParts.push(`Demandé : ${requested} ${unit}`);
-  titleParts.push(`Alloué : ${allocated} ${unit}`);
-  if (hasDeficit) titleParts.push(`Manquant : ${deficit} ${unit}`);
+  titleParts.push(`Demandé : ${requested}`);
+  titleParts.push(`Alloué : ${allocated}`);
+  if (hasDeficit) titleParts.push(`Manquant : ${deficit}`);
   else if (isShared) titleParts.push('✓ Stock réservé pour cette commande');
   const title = titleParts.join('\n');
 
@@ -49,7 +49,6 @@ const StockAllocationBadge = ({ task }) => {
           {allocated}
         </span>
         {hasDeficit && <span className="stock-badge__icon" aria-hidden>⚠️</span>}
-        <span className="stock-badge__unit">{unit}</span>
       </span>
     </span>
   );

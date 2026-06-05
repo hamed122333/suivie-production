@@ -5,25 +5,26 @@ import { Navigate } from 'react-router-dom';
 import { formatDate, getInitials } from '../utils/formatters';
 import Spinner from '../components/Spinner';
 import EmptyState from '../components/EmptyState';
+import { IconEdit, IconTrash, IconClose } from '../components/ui/icons';
 import './UsersPage.css';
 
 const ROLE_CONFIG = {
-  super_admin: { label: 'Super Admin', icon: '✦', color: '#7c3aed', bg: '#ede9fe' },
-  planner: { label: 'Planificateur', icon: '⚙', color: '#0052cc', bg: '#deebff' },
-  commercial: { label: 'Commercial', icon: '✉', color: '#b45309', bg: '#fef3c7' },
-  livreur: { label: 'Livreur', icon: '🚚', color: '#065f46', bg: '#d1fae5' },
-  user: { label: 'Utilisateur', icon: '○', color: '#374151', bg: '#f3f4f6' },
+  super_admin: { label: 'Super Admin', color: '#7c3aed', bg: '#ede9fe' },
+  planner: { label: 'Planificateur', color: '#0052cc', bg: '#deebff' },
+  commercial: { label: 'Commercial', color: '#b45309', bg: '#fef3c7' },
+  livreur: { label: 'Livreur', color: '#065f46', bg: '#d1fae5' },
+  user: { label: 'Utilisateur', color: '#374151', bg: '#f3f4f6' },
 };
 
 const ROLE_PERMISSIONS = [
   {
     key: 'super_admin',
     title: 'Super Admin',
-    summary: 'Acces complet',
+    summary: 'Accès complet',
     items: [
-      'Creer des utilisateurs',
-      'Gerer toutes les taches',
-      'Mettre a jour tous les statuts',
+      'Créer des utilisateurs',
+      'Gérer toutes les tâches',
+      'Mettre à jour tous les statuts',
     ],
   },
   {
@@ -31,18 +32,18 @@ const ROLE_PERMISSIONS = [
     title: 'Planificateur',
     summary: 'Pilotage du flux',
     items: [
-      'Mettre a jour les statuts',
+      'Mettre à jour les statuts',
       'Modifier les fiches',
-      'Reordonner le kanban',
+      'Réordonner le kanban',
     ],
   },
   {
     key: 'commercial',
     title: 'Commercial',
-    summary: 'Creation des commandes',
+    summary: 'Création des commandes',
     items: [
-      'Creer des taches',
-      'Uniquement dans "A faire"',
+      'Créer des tâches',
+      'Uniquement dans "À faire"',
       'Pas de modification de statut',
     ],
   },
@@ -233,8 +234,8 @@ const UsersPage = () => {
       <section className="users-page__roles" aria-label="Roles et permissions">
         <div className="users-page__roles-head">
           <div>
-            <h2>Roles et permissions</h2>
-            <p>Chaque role debloque des actions specifiques dans le projet.</p>
+            <h2>Rôles et permissions</h2>
+            <p>Chaque rôle débloque des actions spécifiques dans le projet.</p>
           </div>
         </div>
         <div className="users-page__roles-grid">
@@ -287,7 +288,7 @@ const UsersPage = () => {
                 <th>Rôle</th>
                 <th>ID Commercial</th>
                 <th>Créé le</th>
-                <th style={{ width: '170px', textAlign: 'center' }}>Actions</th>
+                <th style={{ width: '110px', textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -318,24 +319,24 @@ const UsersPage = () => {
                       <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
                         <button
                           type="button"
-                          className="btn btn-secondary"
-                          style={{ padding: '0.3rem 0.7rem', fontSize: '0.8rem' }}
+                          className="btn btn-secondary icon-btn"
                           onClick={() => openEdit(u)}
                           title="Modifier l'utilisateur"
+                          aria-label="Modifier l'utilisateur"
                         >
-                          Modifier
+                          <IconEdit />
                         </button>
                         {currentUser && u.id === currentUser.id ? (
                           <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', alignSelf: 'center' }} title="Vous ne pouvez pas supprimer votre propre compte">—</span>
                         ) : (
                           <button
                             type="button"
-                            className="btn btn-danger"
-                            style={{ padding: '0.3rem 0.7rem', fontSize: '0.8rem' }}
+                            className="btn btn-danger icon-btn"
                             onClick={() => handleDelete(u.id, u.name)}
                             title="Supprimer l'utilisateur"
+                            aria-label="Supprimer l'utilisateur"
                           >
-                            Supprimer
+                            <IconTrash />
                           </button>
                         )}
                       </div>
@@ -354,7 +355,7 @@ const UsersPage = () => {
           <div className="modal-content">
             <div className="modal-header">
               <h3 className="modal-title">{editingId ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur'}</h3>
-              <button className="modal-close" onClick={() => { setShowModal(false); setEditingId(null); setFormError(''); }}>Fermer</button>
+              <button className="modal-close" onClick={() => { setShowModal(false); setEditingId(null); setFormError(''); }} title="Fermer" aria-label="Fermer"><IconClose /></button>
             </div>
             <form onSubmit={handleSubmit}>
               {formError && (
@@ -442,12 +443,12 @@ const UsersPage = () => {
           <div className="modal-content" style={{ maxWidth: 500 }}>
             <div className="modal-header">
               <h3 className="modal-title">Importer commerciaux</h3>
-              <button className="modal-close" onClick={() => {
+              <button className="modal-close" title="Fermer" aria-label="Fermer" onClick={() => {
                 setShowImportModal(false);
                 setImportError('');
                 setImportResult(null);
                 setImportFile(null);
-              }}>Fermer</button>
+              }}><IconClose /></button>
             </div>
 
             {importResult ? (
@@ -460,13 +461,13 @@ const UsersPage = () => {
                   marginBottom: '1rem'
                 }}>
                   <div style={{ color: '#065f46', fontWeight: 600, marginBottom: '0.5rem' }}>
-                    ✓ Import terminé
+                    Import terminé
                   </div>
                   <div style={{ color: '#047857', fontSize: '0.875rem' }}>
                     {importResult.message}
                   </div>
                   <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: '#059669' }}>
-                    <div>📊 {importResult.imported} importés · {importResult.updated} mis à jour · {importResult.skipped} sautés</div>
+                    <div>{importResult.imported} importés · {importResult.updated} mis à jour · {importResult.skipped} sautés</div>
                   </div>
                 </div>
 
@@ -555,12 +556,10 @@ const UsersPage = () => {
                     <label htmlFor="commercials-file-input" style={{ cursor: 'pointer', display: 'block' }}>
                       {importFile ? (
                         <div>
-                          <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>✓</div>
                           <strong>{importFile.name}</strong>
                         </div>
                       ) : (
                         <div>
-                          <div style={{ fontSize: '1.5rem', marginBottom: '0.25rem' }}>📄</div>
                           <div><strong>Cliquez ou déposez votre fichier</strong></div>
                           <small style={{ color: 'var(--color-text-muted)' }}>Format: .xlsx ou .xls</small>
                         </div>

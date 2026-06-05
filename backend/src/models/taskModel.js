@@ -29,32 +29,26 @@ const taskBaseSelect = `
     created.role   AS created_by_role,
     blocked.name   AS blocked_by_name,
     comm_user.name AS commercial_name,
-    (
-      SELECT u.name
-      FROM task_history th
-      JOIN users u ON u.id = th.actor_id
-      WHERE th.task_id = t.id
-        AND (th.field_name IN ('plannedDate', 'dueDate', 'planned_date')
-             OR th.action_type = 'date_negotiation')
-      ORDER BY th.created_at DESC
-      LIMIT 1
-    ) AS planned_by_name,
-    (
-      SELECT u.role
-      FROM task_history th
-      JOIN users u ON u.id = th.actor_id
-      WHERE th.task_id = t.id
-        AND (th.field_name IN ('plannedDate', 'dueDate', 'planned_date')
-             OR th.action_type = 'date_negotiation')
-      ORDER BY th.created_at DESC
-      LIMIT 1
-    ) AS planned_by_role
+    planned_by.name AS planned_by_name,
+    planned_by.role AS planned_by_role
   FROM tasks t
   LEFT JOIN workspaces w ON w.id = t.workspace_id
   LEFT JOIN users assigned   ON assigned.id = t.assigned_to
   LEFT JOIN users created    ON created.id  = t.created_by
   LEFT JOIN users blocked    ON blocked.id  = t.blocked_by
   LEFT JOIN users comm_user  ON comm_user.commercial_id = t.commercial_id AND comm_user.role = 'commercial'
+  -- Dernier acteur ayant fixé/négocié la date (un seul scan via LATERAL au lieu de
+  -- 2 sous-requêtes corrélées par ligne — résultat identique, bien plus rapide).
+  LEFT JOIN LATERAL (
+    SELECT u.name, u.role
+    FROM task_history th
+    JOIN users u ON u.id = th.actor_id
+    WHERE th.task_id = t.id
+      AND (th.field_name IN ('plannedDate', 'dueDate', 'planned_date')
+           OR th.action_type = 'date_negotiation')
+    ORDER BY th.created_at DESC
+    LIMIT 1
+  ) planned_by ON true
 `;
 
 const createFieldMap = {

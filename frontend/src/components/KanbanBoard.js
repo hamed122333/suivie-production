@@ -431,6 +431,13 @@ const KanbanBoard = ({
     setPendingDeleteId(taskId);
   };
 
+  // Édition directe depuis la carte (ouvre le modal sans passer par le panneau
+  // de détails → pas de superposition de deux overlays).
+  const handleEditTask = (task) => {
+    setEditingTask(task);
+    setShowTaskModal(true);
+  };
+
   const handleDeleteConfirm = async () => {
     if (!pendingDeleteId) return;
     try {
@@ -565,6 +572,9 @@ const KanbanBoard = ({
                         task={task}
                         onOpen={(currentTask) => handleSelectTask(currentTask.id)}
                         isDragging={false}
+                        canEdit={canChangeStatus || canCreateTask || isSuperAdmin}
+                        onEdit={handleEditTask}
+                        onDelete={handleDeleteTask}
                       />
                     </div>
                   ))
@@ -618,15 +628,8 @@ const KanbanBoard = ({
         taskId={selectedTaskId}
         refreshSignal={detailRefreshSignal}
         canManage={canChangeStatus}
-        canEdit={canChangeStatus || canCreateTask || isSuperAdmin}
         canConfirmPredictive={canCreateTask || canChangeStatus}
         onClose={() => handleSelectTask(null)}
-        onEditTask={(task) => {
-          handleSelectTask(null);
-          setEditingTask(task);
-          setShowTaskModal(true);
-        }}
-        onDeleteTask={handleDeleteTask}
         onConfirmPredictive={handleConfirmPredictive}
         onTaskUpdated={refreshBoardAndPanels}
       />

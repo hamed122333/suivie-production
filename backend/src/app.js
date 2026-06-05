@@ -12,6 +12,7 @@ const stockImportRoutes = require('./routes/stockImportRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const { addClient } = require('./services/sseService');
 const errorHandler = require('./middleware/errorHandler');
+const pool = require('./config/db');
 const jwt = require('jsonwebtoken');
 
 const app = express();
@@ -101,8 +102,21 @@ app.get('/api/events', (req, res) => {
   req.on('close', () => clearInterval(keepAlive));
 });
 
+// Liveness léger (toujours 200 si le process répond).
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Suivi Production API running' });
+});
+
+// Readiness : vérifie la connectivité DB (utilisable par le health check Render).
+// 200 si la base répond, 503 sinon → évite de router du trafic vers une instance
+// dont la DB est injoignable.
+app.get('/api/ready', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'OK', db: 'up' });
+  } catch (err) {
+    res.status(503).json({ status: 'degraded', db: 'down' });
+  }
 });
 
 app.use('/api/auth', authLimiter);

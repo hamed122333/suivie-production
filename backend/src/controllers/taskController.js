@@ -304,7 +304,12 @@ const taskController = {
   async exportExcel(req, res) {
     try {
       const filters = applyTaskVisibility(buildTaskFilters(req.query), req.user);
-      const tasks = await TaskModel.getAll(filters);
+      const allTasks = await TaskModel.getAll(filters);
+
+      // Borne de sécurité : plafonne le nombre de lignes du classeur pour éviter
+      // une consommation mémoire excessive sur de très gros exports (free tier).
+      const MAX_EXPORT_ROWS = Number.parseInt(process.env.MAX_EXPORT_ROWS, 10) || 50000;
+      const tasks = allTasks.slice(0, MAX_EXPORT_ROWS);
 
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Taches');

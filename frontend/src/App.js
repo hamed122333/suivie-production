@@ -30,6 +30,18 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+// Garde de rôle (défense en profondeur — le backend reste l'autorité).
+// Redirige vers /kanban si le rôle courant n'est pas autorisé pour la page.
+const RoleRoute = ({ allow, children }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  if (Array.isArray(allow) && !allow.includes(user.role)) {
+    return <Navigate to="/kanban" replace />;
+  }
+  return children;
+};
+
 const Layout = ({ children }) => (
   <>
     <Header />
@@ -47,10 +59,10 @@ const AppRoutes = () => {
       <Route path="/dashboard" element={<ProtectedRoute><Layout><DashboardPage /></Layout></ProtectedRoute>} />
       <Route path="/reports"   element={<Navigate to="/dashboard" replace />} />
       <Route path="/kanban"    element={<ProtectedRoute><Layout><KanbanPage /></Layout></ProtectedRoute>} />
-      <Route path="/orders"         element={<ProtectedRoute><Layout><OrdersReviewPage /></Layout></ProtectedRoute>} />
+      <Route path="/orders"         element={<ProtectedRoute><RoleRoute allow={['super_admin', 'planner', 'commercial']}><Layout><OrdersReviewPage /></Layout></RoleRoute></ProtectedRoute>} />
       <Route path="/pending-orders" element={<Navigate to="/orders" replace />} />
       <Route path="/my-orders"      element={<Navigate to="/orders" replace />} />
-      <Route path="/users"     element={<ProtectedRoute><Layout><UsersPage /></Layout></ProtectedRoute>} />
+      <Route path="/users"     element={<ProtectedRoute><RoleRoute allow={['super_admin']}><Layout><UsersPage /></Layout></RoleRoute></ProtectedRoute>} />
       <Route path="/stock"     element={<ProtectedRoute><Layout><StockPage /></Layout></ProtectedRoute>} />
       <Route path="/"          element={<Navigate to="/kanban" replace />} />
     </Routes>

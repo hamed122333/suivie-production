@@ -304,3 +304,6 @@ const userController = {
 };
 
 module.exports = userController;
+// Exposé pour les tests (verrouille la liste des rôles valides, dont 'livreur').
+module.exports.VALID_ROLES = VALID_ROLES;
+module.exports.COMMERCIAL_ID_REGEX = COMMERCIAL_ID_REGEX;

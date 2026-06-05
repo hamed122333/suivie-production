@@ -8,8 +8,9 @@ import {
   getArticleCategory,
   getCoveragePercent,
 } from '../constants/task';
-import { formatDate, formatRelativeDate, getInitials } from '../utils/formatters';
+import { formatDate, formatRelativeDate, getInitials, formatQuantity } from '../utils/formatters';
 import StockAllocationBadge from './StockAllocationBadge';
+import { IconEdit, IconTrash } from './ui/icons';
 import './TaskCard.css';
 
 function getDaysUntilPlannedDate(task) {
@@ -107,7 +108,7 @@ function getDateConfirmationBadge(task) {
   return null;
 }
 
-const TaskCard = ({ task, onOpen, isDragging }) => {
+const TaskCard = ({ task, onOpen, isDragging, onEdit, onDelete, canEdit }) => {
   if (!task) return null;
   const priority = TASK_PRIORITY_CONFIG[task.priority] || TASK_PRIORITY_CONFIG.MEDIUM;
   const status = TASK_STATUS_CONFIG[task.status] || TASK_STATUS_CONFIG.TODO;
@@ -181,6 +182,22 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
           )}
         </div>
         <div className="task-card__top-right">
+          {canEdit && (onEdit || onDelete) && (
+            <div className="task-card__actions">
+              {onEdit && (
+                <button type="button" className="task-card__action-btn" title="Modifier" aria-label="Modifier"
+                  onClick={(e) => { e.stopPropagation(); onEdit(task); }}>
+                  <IconEdit width={14} height={14} />
+                </button>
+              )}
+              {onDelete && (
+                <button type="button" className="task-card__action-btn task-card__action-btn--danger" title="Supprimer" aria-label="Supprimer"
+                  onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}>
+                  <IconTrash width={14} height={14} />
+                </button>
+              )}
+            </div>
+          )}
           {isDeadlineAlert && (
             <span className={`task-card__urgency-chip ${isOverdue ? 'task-card__urgency-chip--overdue' : daysLeft <= 1 ? 'task-card__urgency-chip--j1' : 'task-card__urgency-chip--j2'}`}>
               {isOverdue ? `+${Math.abs(daysLeft)}j` : daysLeft === 0 ? 'Auj.' : `J-${daysLeft}`}
@@ -243,7 +260,7 @@ const TaskCard = ({ task, onOpen, isDragging }) => {
           <span className="task-card__time">{when}</span>
           {!hideFooterQuantity && task.quantity != null && (
             <span className={`task-card__quantity ${isPartialCoverage ? 'task-card__quantity--partial' : ''}`}>
-              {task.quantity} {task.quantity_unit || 'pcs'}
+              {formatQuantity(task.quantity)}
               {coveragePercent !== null && task.status !== 'WAITING_STOCK' && (
                 <span className={`task-card__coverage ${isPartialCoverage ? 'task-card__coverage--warn' : 'task-card__coverage--ok'}`}>
                   {coveragePercent}%

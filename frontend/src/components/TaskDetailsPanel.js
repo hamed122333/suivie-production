@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ARTICLE_CATEGORY_CONFIG, TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from '../constants/task';
 import { taskAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { formatDate, formatDateTime, formatNumber, getInitials } from '../utils/formatters';
+import { formatDate, formatDateTime, formatQuantity, getInitials } from '../utils/formatters';
 import TaskTypeToggle from './TaskTypeToggle';
+import { IconClose } from './ui/icons';
 import './TaskDetailsPanel.css';
 
 /* ─── pure helpers ───────────────────────────────────────────────────────── */
@@ -68,11 +69,8 @@ const TaskDetailsPanel = ({
   taskId,
   refreshSignal = 0,
   canManage  = false,
-  canEdit    = false,
   canConfirmPredictive = false,
   onClose,
-  onEditTask,
-  onDeleteTask,
   onTaskUpdated,
   onConfirmPredictive,
 }) => {
@@ -196,13 +194,9 @@ const TaskDetailsPanel = ({
           </div>
 
           <div className="task-detail__header-actions">
-            {canEdit && (
-              <>
-                <button type="button" className="btn btn-secondary tdp-icon-btn" title="Modifier" onClick={() => onEditTask?.(task)}>Modifier</button>
-                <button type="button" className="btn btn-secondary tdp-icon-btn task-detail__danger-btn" title="Supprimer" onClick={() => onDeleteTask?.(task.id)}>Supprimer</button>
-              </>
-            )}
-            <button type="button" className="modal-close" onClick={onClose}>Fermer</button>
+            {/* Modifier / Supprimer sont désormais sur la carte Kanban (accès direct,
+                sans superposer deux overlays) — on évite ici la duplication. */}
+            <button type="button" className="modal-close" onClick={onClose} title="Fermer" aria-label="Fermer"><IconClose /></button>
           </div>
         </div>
 
@@ -227,7 +221,7 @@ const TaskDetailsPanel = ({
               </div>
               <div className="task-detail__kpi">
                 <span>Quantité</span>
-                <strong>{formatNumber(task.quantity)} <em>{task.quantity_unit || 'pcs'}</em></strong>
+                <strong>{formatQuantity(task.quantity)}</strong>
               </div>
               <div className={`task-detail__kpi${days != null && days < 0 ? ' task-detail__kpi--danger' : days != null && days <= 2 ? ' task-detail__kpi--warn' : ''}`}>
                 <span>Livraison</span>
@@ -256,8 +250,8 @@ const TaskDetailsPanel = ({
                       />
                     </div>
                     <div className="task-detail__stock-bar-labels">
-                      <span>{formatNumber(task.stock_allocated || 0)} alloués</span>
-                      <span>{formatNumber(task.quantity)} demandés</span>
+                      <span>{formatQuantity(task.stock_allocated || 0)} alloués</span>
+                      <span>{formatQuantity(task.quantity)} demandés</span>
                     </div>
                   </div>
                 )}
@@ -267,21 +261,21 @@ const TaskDetailsPanel = ({
                   {task.stock_available_at_creation != null && (
                     <div className="task-detail-item">
                       <span className="task-detail-label">Stock global</span>
-                      <strong className="task-detail-value">{formatNumber(task.stock_available_at_creation)} {task.quantity_unit || 'pcs'}</strong>
+                      <strong className="task-detail-value">{formatQuantity(task.stock_available_at_creation)}</strong>
                     </div>
                   )}
                   {task.stock_allocated != null && (
                     <div className="task-detail-item">
                       <span className={`task-detail-label ${Number(task.stock_allocated) >= Number(task.quantity) ? 'task-detail-label--success' : ''}`}>Alloué</span>
                       <strong className={`task-detail-value ${Number(task.stock_allocated) >= Number(task.quantity) ? 'task-detail-value--success' : ''}`}>
-                        {formatNumber(task.stock_allocated)} {task.quantity_unit || 'pcs'}
+                        {formatQuantity(task.stock_allocated)}
                       </strong>
                     </div>
                   )}
                   {Number(task.stock_deficit) > 0 && (
                     <div className="task-detail-item">
                       <span className="task-detail-label task-detail-label--danger">⚠ Manquant</span>
-                      <strong className="task-detail-value task-detail-value--danger">{formatNumber(task.stock_deficit)} {task.quantity_unit || 'pcs'}</strong>
+                      <strong className="task-detail-value task-detail-value--danger">{formatQuantity(task.stock_deficit)}</strong>
                     </div>
                   )}
                 </div>

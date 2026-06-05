@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { stockImportAPI } from '../services/api';
 import { formatDate } from '../utils/formatters';
+import { IconClose } from './ui/icons';
 import './StockImportModal.css';
 
 const StockImportModal = ({ onClose, onImported }) => {
@@ -58,8 +59,8 @@ const StockImportModal = ({ onClose, onImported }) => {
             <span role="img" aria-label="package" style={{ marginRight: '8px' }}>📦</span>
             Importer des articles (Excel)
           </h3>
-          <button type="button" className="modal-close" onClick={onClose} disabled={uploading} title="Fermer">
-            Fermer
+          <button type="button" className="modal-close" onClick={onClose} disabled={uploading} title="Fermer" aria-label="Fermer">
+            <IconClose />
           </button>
         </div>
 

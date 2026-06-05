@@ -191,6 +191,10 @@ async getAll() {
         FROM stock_import si
         LEFT JOIN LATERAL (
           SELECT
+            -- Réservé = stock ENGAGÉ par toutes les commandes non encore livrées,
+            -- y compris « Prêt à Livrer » (DONE) : le stock n'est physiquement
+            -- soustrait qu'à la LIVRAISON, mais il reste engagé d'ici là (cohérent
+            -- avec le FIFO). Les DELIVERED sont exclus (stock déjà déduit).
             SUM(t.quantity) AS total_reserved,
             COUNT(*) AS task_count,
             COUNT(*) FILTER (WHERE t.status = 'WAITING_STOCK') AS waiting_count,
@@ -198,7 +202,7 @@ async getAll() {
             SUM(t.quantity) FILTER (WHERE t.status IN ('WAITING_STOCK', 'TODO', 'IN_PROGRESS', 'BLOCKED')) AS total_demand
           FROM tasks t
           WHERE UPPER(t.item_reference) = UPPER(si.article)
-            AND t.status IN ('WAITING_STOCK', 'TODO', 'IN_PROGRESS', 'BLOCKED')
+            AND t.status IN ('WAITING_STOCK', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE')
         ) alloc ON TRUE
         ORDER BY si.ready_date ASC, si.id ASC`
     );

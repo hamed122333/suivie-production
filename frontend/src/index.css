@@ -161,6 +161,16 @@ body {
   border-color: #94a3b8;
 }
 
+/* Bouton d'action compact icône-seule (tableaux) : carré, icône centrée + tooltip.
+   Se combine avec .btn / .btn-secondary / .btn-danger / .btn-success pour la couleur. */
+.icon-btn {
+  padding: 0.4rem;
+  width: 32px;
+  height: 32px;
+  line-height: 0;
+}
+.icon-btn svg { display: block; }
+
 /* ---- Form elements ---- */
 .form-input, .search-input, input, select, textarea {
   width: 100%;

@@ -2,10 +2,11 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { taskAPI, userAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { formatDate } from '../utils/formatters';
+import { formatDate, formatQuantity } from '../utils/formatters';
 import Spinner from '../components/Spinner';
 import OrderEditModal from '../components/OrderEditModal';
 import { ConfirmDialog } from '../components/ui';
+import { IconEdit, IconClose, IconCheck } from '../components/ui/icons';
 import useServerEvents from '../hooks/useServerEvents';
 import './CommercialReviewPage.css';
 import './PendingOrdersPage.css';
@@ -132,7 +133,7 @@ function DetailModal({ task, onClose, onApprove, onReject, working, canApprove }
             <span className="cr-readiness-pill" style={{ background: score.color + '18', color: score.color, border: `1px solid ${score.color}40` }}>
               {score.label}
             </span>
-            <button type="button" className="cr-modal__close" onClick={onClose} aria-label="Fermer">Fermer</button>
+            <button type="button" className="cr-modal__close" onClick={onClose} aria-label="Fermer" title="Fermer"><IconClose /></button>
           </div>
         </div>
 
@@ -146,7 +147,7 @@ function DetailModal({ task, onClose, onApprove, onReject, working, canApprove }
             </div>
             <div className="cr-modal__kv">
               <span>Quantité</span>
-              <strong>{Number(task.quantity || 0).toLocaleString('fr-FR')} {task.quantity_unit || 'pcs'}</strong>
+              <strong>{formatQuantity(task.quantity)}</strong>
             </div>
             <div className="cr-modal__kv">
               <span>Catégorie article</span>
@@ -639,8 +640,7 @@ const OrdersReviewPage = () => {
 
         {/* Quantity */}
         <td className="text-center">
-          <span className={`qty-badge ${qtyClass}`}>{Number(task.quantity || 0).toLocaleString('fr-FR')}</span>
-          <div style={{ fontSize: '0.67rem', color: '#94a3b8', marginTop: '0.15rem' }}>{task.quantity_unit || 'pcs'}</div>
+          <span className={`qty-badge ${qtyClass}`}>{formatQuantity(task.quantity)}</span>
         </td>
 
         {/* Delivery date */}
@@ -704,12 +704,12 @@ const OrdersReviewPage = () => {
           <td className="cr-col-actions" onClick={e => e.stopPropagation()}>
             <div className="cr-quick-actions">
               {canManage && (
-                <button type="button" className="por-fix-btn por-fix-btn--edit" title="Corriger la commande" onClick={() => setEditTask(task)}>Corriger</button>
+                <button type="button" className="por-fix-btn por-fix-btn--edit" title="Corriger la commande" aria-label="Corriger la commande" onClick={() => setEditTask(task)}><IconEdit /></button>
               )}
               {canApprove && (
                 <>
-                  <button type="button" className="cr-quick-btn cr-quick-btn--reject" title="Rejeter" onClick={() => handleReject(task.id)} disabled={working}>Rejeter</button>
-                  <button type="button" className="cr-quick-btn cr-quick-btn--approve" title="Valider → Production" onClick={() => handleApprove(task.id)} disabled={working}>Valider</button>
+                  <button type="button" className="cr-quick-btn cr-quick-btn--reject" title="Rejeter" aria-label="Rejeter" onClick={() => handleReject(task.id)} disabled={working}><IconClose /></button>
+                  <button type="button" className="cr-quick-btn cr-quick-btn--approve" title="Valider → Production" aria-label="Valider" onClick={() => handleApprove(task.id)} disabled={working}><IconCheck /></button>
                 </>
               )}
             </div>

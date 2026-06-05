@@ -35,6 +35,17 @@ async function setup() {
     await pool.query(schemaSql);
     console.log('Schema applied.');
 
+    // Table de suivi : n'applique chaque migration qu'UNE seule fois (évite la
+    // réexécution complète à chaque déploiement et les états partiels).
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename   TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    const appliedRows = await pool.query('SELECT filename FROM schema_migrations');
+    const applied = new Set(appliedRows.rows.map((r) => r.filename));
+
     // Apply all migrations in migrations/ folder in order
     const migrationsDir = path.join(__dirname, 'migrations');
     if (fs.existsSync(migrationsDir)) {
@@ -42,9 +53,16 @@ async function setup() {
         .filter(f => f.endsWith('.sql'))
         .sort();
       for (const file of migrationFiles) {
+        if (applied.has(file)) {
+          console.log(`Skip (already applied): ${file}`);
+          continue;
+        }
         const migrationSql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
         console.log(`Running migration: ${file}`);
+        // NB : pas de BEGIN/COMMIT externe ici — certaines migrations gèrent déjà
+        // leur propre transaction. Les migrations sont idempotentes (IF NOT EXISTS).
         await pool.query(migrationSql);
+        await pool.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
         console.log(`Applied migration: ${file}`);
       }
     }

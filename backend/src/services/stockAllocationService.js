@@ -1,3 +1,4 @@
+const pool = require('../config/db');
 const TaskModel = require('../models/taskModel');
 const StockImportModel = require('../models/stockImportModel');
 const TaskHistoryModel = require('../models/taskHistoryModel');
@@ -26,7 +27,31 @@ const { broadcast } = require('./sseService');
  * Le système ne fait QUE confirmer la disponibilité (→ Prêt à Livrer) et n'effectue
  * AUCUNE rétrogradation.
  */
+/**
+ * Wrapper concurrentiel : sérialise le recalcul d'un MÊME article via un verrou
+ * consultatif PostgreSQL (pg_advisory_lock). Deux imports/approbations/cron qui
+ * recalculent le même article ne s'entrelacent plus (intégrité de l'allocation).
+ * Les articles différents restent parallèles (clés de verrou distinctes).
+ * La logique d'allocation (ci-dessous) est inchangée.
+ */
 async function recalculateStockAllocation(itemReference, options = {}) {
+  if (!itemReference) return [];
+  const lockKey = itemReference.toUpperCase().trim();
+  const client = await pool.connect();
+  try {
+    await client.query('SELECT pg_advisory_lock(hashtext($1))', [lockKey]);
+    return await recalcAllocationCore(itemReference, options);
+  } finally {
+    try {
+      await client.query('SELECT pg_advisory_unlock(hashtext($1))', [lockKey]);
+    } catch (e) {
+      // best-effort : le verrou de session est de toute façon libéré à la fermeture
+    }
+    client.release();
+  }
+}
+
+async function recalcAllocationCore(itemReference, options = {}) {
   // options.silent — suppress the final broadcast('tasks-updated') and batch the
   // ready-to-deliver notifications into a single broadcast. Used when this function
   // is called inside a loop (large stock import, recalculateAllArticles,

@@ -85,3 +85,14 @@ export function formatNumber(value) {
     maximumFractionDigits: numericValue % 1 === 0 ? 0 : 2,
   }).format(numericValue);
 }
+
+/**
+ * Quantité de production = un nombre de PIÈCES → toujours un entier (pas de
+ * décimales parasites type « 25000,05 ») et sans unité (« pcs » implicite).
+ */
+export function formatQuantity(value) {
+  if (value == null || value === '') return '—';
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return '—';
+  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(Math.round(numericValue));
+}

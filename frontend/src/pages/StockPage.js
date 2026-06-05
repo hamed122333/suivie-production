@@ -5,7 +5,7 @@ import ManualStockModal from '../components/ManualStockModal';
 import Spinner from '../components/Spinner';
 import EmptyState from '../components/EmptyState';
 import { useAuth } from '../context/AuthContext';
-import { formatDate } from '../utils/formatters';
+import { formatDate, formatQuantity } from '../utils/formatters';
 import useServerEvents from '../hooks/useServerEvents';
 import './StockPage.css';
 
@@ -171,7 +171,7 @@ const StockPage = () => {
     <div className="stock-page-container">
       <div className="stock-page-header">
         <div className="title-section">
-          <h2>📦 Stock & Produits Finis</h2>
+          <h2>Stock &amp; Produits Finis</h2>
           <p>Consultez et gérez l'état des produits finis.</p>
         </div>
         <div className="actions-section">
@@ -260,15 +260,15 @@ const StockPage = () => {
           </div>
           <div className="stock-stat stock-stat--divider"></div>
           <div className="stock-stat">
-            <strong>{(isFiltered ? filteredQty : totalQty).toLocaleString('fr-FR')}</strong>
+            <strong>{formatQuantity(isFiltered ? filteredQty : totalQty)}</strong>
             <span>unités</span>
           </div>
           <div className="stock-stat">
-            <strong>{totalAvailable.toLocaleString('fr-FR')}</strong>
+            <strong>{formatQuantity(totalAvailable)}</strong>
             <span>dispo.</span>
           </div>
           <div className="stock-stat">
-            <strong>{totalReserved.toLocaleString('fr-FR')}</strong>
+            <strong>{formatQuantity(totalReserved)}</strong>
             <span>réservé</span>
           </div>
           {(isFiltered || categoryFilter || statusFilter) && (
@@ -369,14 +369,14 @@ const StockPage = () => {
                         </div>
                       </td>
                       <td className="item-quantity text-center">
-                        <span className={`qty-badge ${statusClass}`}>{item.quantity}</span>
+                        <span className={`qty-badge ${statusClass}`}>{formatQuantity(item.quantity)}</span>
                       </td>
                       <td className="text-center">
-                        <span className="qty-reserved">{item.total_reserved || 0}</span>
+                        <span className="qty-reserved">{formatQuantity(item.total_reserved || 0)}</span>
                       </td>
                       <td className="text-center">
                         <span className={`qty-available ${item.available_quantity > 0 ? '' : 'empty'}`}>
-                          {item.available_quantity}
+                          {formatQuantity(item.available_quantity)}
                         </span>
                       </td>
                       <td className="text-center">

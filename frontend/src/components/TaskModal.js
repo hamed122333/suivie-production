@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { TASK_PRIORITY_OPTIONS } from '../constants/task';
 import { stockImportAPI } from '../services/api';
 import { ALLOWED_ARTICLE_PREFIXES, isValidArticleCode, normalizeArticleCode } from '../utils/articleCode';
-import { formatDate } from '../utils/formatters';
+import { formatDate, formatQuantity } from '../utils/formatters';
+import { IconClose } from './ui/icons';
 import './TaskModal.css';
 
 const EMPTY_FORM = {
@@ -36,7 +37,7 @@ function buildTaskTitleFromLine(line) {
   return normalized.length > 84 ? `${normalized.slice(0, 81).trim()}...` : normalized;
 }
 
-const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = false, isCommercial = false, users = [], canAssign = false, defaultStatus = 'TODO' }) => {
+const TaskModal = ({ onClose, onSave, task = null, isCommercialMode = false, isCommercial = false, users = [], canAssign = false, defaultStatus = 'TODO' }) => {
   const isCommMode = isCommercialMode || isCommercial;
   const [form, setForm] = useState(EMPTY_FORM);
   const [lines, setLines] = useState([EMPTY_LINE]);
@@ -330,8 +331,8 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
               <span className="task-modal-classic__title-mark" aria-hidden>+</span>
               <h3 className="modal-title task-modal-classic__title">Nouvelle commande client</h3>
             </div>
-            <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
-              Fermer
+            <button type="button" className="modal-close" onClick={onClose} disabled={saving} title="Fermer" aria-label="Fermer">
+              <IconClose />
             </button>
           </div>
 
@@ -535,8 +536,8 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
               </span>
               <h3 className="modal-title task-modal-classic__title">Saisir une commande client</h3>
             </div>
-            <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
-              Fermer
+            <button type="button" className="modal-close" onClick={onClose} disabled={saving} title="Fermer" aria-label="Fermer">
+              <IconClose />
             </button>
           </div>
 
@@ -591,7 +592,7 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
             </div>
 
             <div className="form-group task-modal-classic__group">
-              <label>Niveau de priorite</label>
+              <label>Niveau de priorité</label>
               <select value={form.priority} onChange={updateForm('priority')}>
                 {CREATE_PRIORITY_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -602,7 +603,7 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
             </div>
 
             <div className="form-group task-modal-classic__group">
-              <label>Date prevue de livraison</label>
+              <label>Date prévue de livraison</label>
               <input type="date" value={form.plannedDate || ''} onChange={updateForm('plannedDate')} required />
             </div>
 
@@ -627,8 +628,8 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
           <div className="task-modal-classic__title-wrap">
             <h3 className="modal-title task-modal-classic__title">Modifier la fiche</h3>
           </div>
-          <button type="button" className="modal-close" onClick={onClose} disabled={saving}>
-            Fermer
+          <button type="button" className="modal-close" onClick={onClose} disabled={saving} title="Fermer" aria-label="Fermer">
+            <IconClose />
           </button>
         </div>
 
@@ -661,7 +662,7 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
               <div className={`task-modal-classic__stock-preview ${Number(stockPreview.quantity || 0) > 0 ? 'task-modal-classic__stock-preview--ok' : 'task-modal-classic__stock-preview--empty'}`}>
                 <div className="task-modal-classic__stock-preview-label">Stock disponible</div>
                 <div className="task-modal-classic__stock-preview-value">
-                  {Number(stockPreview.quantity || 0).toLocaleString('fr-FR')} {stockPreview.quantity_unit || 'pcs'}
+                  {formatQuantity(stockPreview.quantity)}
                 </div>
                 {stockPreview.ready_date && (
                   <div className="task-modal-classic__stock-preview-date">
@@ -677,29 +678,25 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
             ) : null)}
           </div>
 
-          <div className="form-group task-modal-classic__group">
-            <label>Quantité</label>
-            <input type="number" min="0" step="0.01" value={form.quantity} onChange={updateForm('quantity')} />
+          <div className="task-modal-classic__row">
+            <div className="form-group task-modal-classic__group">
+              <label>Quantité (pièces)</label>
+              <input type="number" min="0" step="1" value={form.quantity} onChange={updateForm('quantity')} />
+            </div>
+            <div className="form-group task-modal-classic__group">
+              <label>Niveau de priorité</label>
+              <select value={form.priority} onChange={updateForm('priority')}>
+                {TASK_PRIORITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="form-group task-modal-classic__group">
-            <label>Unité</label>
-            <input type="text" value={form.quantityUnit} onChange={updateForm('quantityUnit')} />
-          </div>
-
-          <div className="form-group task-modal-classic__group">
-            <label>Niveau de priorite</label>
-            <select value={form.priority} onChange={updateForm('priority')}>
-              {TASK_PRIORITY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group task-modal-classic__group">
-            <label>Date prevue de livraison</label>
+            <label>Date prévue de livraison</label>
             <input
               type="date"
               value={form.plannedDate || ''}
@@ -710,9 +707,9 @@ const TaskModal = ({ show, onClose, onSave, task = null, isCommercialMode = fals
 
           {canAssign && (
             <div className="form-group task-modal-classic__group">
-              <label>Assigne a (Responsable)</label>
+              <label>Assigné à (Responsable)</label>
               <select value={form.assignedTo} onChange={updateForm('assignedTo')}>
-                <option value="">Non assigne</option>
+                <option value="">Non assigné</option>
                 {assignableUsers.map((user) => (
                   <option key={user.id} value={user.id}>
                     {user.name} ({user.role})

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
+import { IconClose } from '../icons';
 import './Modal.css';
 
 const SIZE_CLASS = {
@@ -77,8 +78,8 @@ function Modal({
         {(title || onClose) && (
           <div className="ui-modal__header">
             {title && <h3 id={titleId} className="ui-modal__title">{title}</h3>}
-            <button type="button" className="ui-modal__close" onClick={onClose} aria-label="Fermer">
-              Fermer
+            <button type="button" className="ui-modal__close" onClick={onClose} aria-label="Fermer" title="Fermer">
+              <IconClose />
             </button>
           </div>
         )}

@@ -61,6 +61,20 @@
   padding: 0.85rem 0.9rem;
 }
 
+/* Deux champs courts côte à côte (Quantité/Unité, Priorité/Date) → modal moins
+   haute, plus lisible. Passe en une colonne sur petit écran. */
+.task-modal-classic__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem;
+}
+.task-modal-classic__row .task-modal-classic__group {
+  margin-bottom: 1rem;
+}
+@media (max-width: 560px) {
+  .task-modal-classic__row { grid-template-columns: 1fr; gap: 0; }
+}
+
 .task-modal-classic__group label {
   display: flex;
   align-items: baseline;

@@ -193,6 +193,13 @@ const KanbanToolbar = ({
 
   const stats = useMemo(() => computeWindowStats(tasks), [tasks]);
 
+  // Commerciaux « actifs » = ceux qui ont au moins une commande dans la vue
+  // courante (on n'encombre pas le filtre avec les comptes sans tâche).
+  const activeCommercials = useMemo(() => {
+    const activeIds = new Set(tasks.map((t) => t.commercial_id).filter(Boolean));
+    return commercials.filter((c) => activeIds.has(c.commercial_id));
+  }, [commercials, tasks]);
+
   const clearDay = () => { setSelectedDay(null); onDaySelect?.(null); };
 
   const handleSizeChange = (size) => {
@@ -276,12 +283,12 @@ const KanbanToolbar = ({
           </select>
         </label>
 
-        {commercials.length > 0 && onCommercialFilterChange && (
+        {activeCommercials.length > 0 && onCommercialFilterChange && (
           <label className="kanban-toolbar__filter">
             <span>Commercial</span>
             <select value={commercialFilter} onChange={e => onCommercialFilterChange(e.target.value)}>
               <option value="">Tous</option>
-              {commercials.map(c => (
+              {activeCommercials.map(c => (
                 <option key={c.commercial_id} value={c.commercial_id}>
                   {c.name} ({c.commercial_id})
                 </option>

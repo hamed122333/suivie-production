@@ -124,10 +124,12 @@
 
 .por-fix-actions { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; }
 .por-fix-btn {
-  padding: 0.3rem 0.65rem; border: 1px solid #e2e8f0; border-radius: 6px;
-  background: white; font-size: 0.75rem; font-weight: 600; cursor: pointer;
-  white-space: nowrap; transition: all 0.12s;
+  width: 28px; height: 28px; padding: 0; border: 1px solid #e2e8f0; border-radius: 6px;
+  background: white; cursor: pointer; line-height: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all 0.12s;
 }
+.por-fix-btn svg { display: block; }
 .por-fix-btn--edit   { color: #1d4ed8; border-color: #bfdbfe; }
 .por-fix-btn--edit:hover { background: #eff6ff; }
 .por-fix-btn--save   { color: #16a34a; border-color: #bbf7d0; }

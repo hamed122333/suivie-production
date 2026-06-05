@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { stockImportAPI, taskAPI } from '../services/api';
 import { ALLOWED_ARTICLE_PREFIXES, isValidArticleCode, normalizeArticleCode } from '../utils/articleCode';
+import { IconClose } from './ui/icons';
 import './StockImportModal.css'; // We will reuse the styles of the existing modal
 
 const ManualStockModal = ({ onClose, onAdded }) => {
@@ -130,7 +131,7 @@ const ManualStockModal = ({ onClose, onAdded }) => {
             <span role="img" aria-label="pen" style={{ marginRight: '8px' }}>✍️</span>
             Gestion manuelle stock PF
           </h3>
-          <button type="button" className="modal-close" onClick={onClose} disabled={submitting} title="Fermer">Fermer</button>
+          <button type="button" className="modal-close" onClick={onClose} disabled={submitting} title="Fermer" aria-label="Fermer"><IconClose /></button>
         </div>
 
         <div className="stock-import-modal__body">
