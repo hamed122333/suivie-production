@@ -10,6 +10,12 @@ const api = axios.create({
   timeout: 20000, // 20 s — prevents hung requests from leaking forever
 });
 
+// Les imports Excel (gros volumes + recalcul FIFO + latence Render→Supabase +
+// éventuel cold start free tier) peuvent dépasser largement 20 s. On leur donne
+// un timeout dédié bien plus long pour éviter les faux « échec » alors que le
+// backend finit le traitement.
+const IMPORT_TIMEOUT = 180000; // 3 min
+
 // Attach token to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
@@ -58,6 +64,7 @@ export const taskAPI = {
   importOrders: (formData) =>
     api.post('/tasks/import-orders', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: IMPORT_TIMEOUT,
     }),
   update: (id, data) => api.put(`/tasks/${id}`, data),
   updateStatus: (id, status, reasonBlocked) => api.put(`/tasks/${id}/status`, { status, reasonBlocked }),
@@ -77,6 +84,7 @@ export const userAPI = {
   delete: (id) => api.delete(`/users/${id}`),
   importCommercials: (formData) => api.post('/users/import-commercials', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: IMPORT_TIMEOUT,
   }),
 };
 
@@ -95,6 +103,7 @@ export const stockImportAPI = {
   upload: (formData) =>
     api.post('/stock-import/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: IMPORT_TIMEOUT,
     }),
   createManual: (data) => api.post('/stock-import/manual', data),
   getActiveTasks: (id) => api.get(`/stock-import/${id}/active-tasks`),

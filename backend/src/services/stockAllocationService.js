@@ -29,25 +29,45 @@ const { broadcast } = require('./sseService');
  */
 /**
  * Wrapper concurrentiel : sérialise le recalcul d'un MÊME article via un verrou
- * consultatif PostgreSQL (pg_advisory_lock). Deux imports/approbations/cron qui
- * recalculent le même article ne s'entrelacent plus (intégrité de l'allocation).
- * Les articles différents restent parallèles (clés de verrou distinctes).
- * La logique d'allocation (ci-dessous) est inchangée.
+ * consultatif PostgreSQL. Deux imports/approbations/cron sur le même article ne
+ * s'entrelacent plus (intégrité). Les articles différents restent parallèles.
+ *
+ * Important (prod / Supabase) : on utilise pg_advisory_xact_lock DANS une
+ * transaction (et non un verrou de SESSION) car le pooler transaction de Supabase
+ * (pgBouncer) ne conserve pas la session entre deux requêtes → un verrou de
+ * session « fuit ». Le verrou de transaction est, lui, lié à la transaction qui
+ * épingle la connexion serveur, puis libéré au COMMIT.
+ *
+ * Best-effort : si le verrou ne peut pas être pris (latence, pooler, timeout),
+ * on poursuit SANS verrou plutôt que de faire échouer l'import. `lock_timeout`
+ * empêche tout blocage prolongé. La logique d'allocation est inchangée.
  */
 async function recalculateStockAllocation(itemReference, options = {}) {
   if (!itemReference) return [];
   const lockKey = itemReference.toUpperCase().trim();
-  const client = await pool.connect();
+  let client = null;
   try {
-    await client.query('SELECT pg_advisory_lock(hashtext($1))', [lockKey]);
+    client = await pool.connect();
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey]);
+  } catch (e) {
+    // Verrou indisponible → dégradation gracieuse (recalcul sans verrou).
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch (_) { /* ignore */ }
+      try { client.release(); } catch (_) { /* ignore */ }
+      client = null;
+    }
+  }
+  try {
     return await recalcAllocationCore(itemReference, options);
   } finally {
-    try {
-      await client.query('SELECT pg_advisory_unlock(hashtext($1))', [lockKey]);
-    } catch (e) {
-      // best-effort : le verrou de session est de toute façon libéré à la fermeture
+    if (client) {
+      try { await client.query('COMMIT'); } catch (_) {
+        try { await client.query('ROLLBACK'); } catch (_) { /* ignore */ }
+      }
+      try { client.release(); } catch (_) { /* ignore */ }
     }
-    client.release();
   }
 }
 
