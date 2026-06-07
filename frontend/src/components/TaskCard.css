@@ -127,6 +127,27 @@
   white-space: nowrap;
 }
 
+/* Préparation partielle — badge compact + mini barre (visibilité sans encombrer) */
+.task-card__partial-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.16rem 0.45rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.task-card__partial-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: #fde68a;
+  overflow: hidden;
+  margin: 0 0 0.55rem;
+}
+.task-card__partial-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #d97706;
+}
+
 .task-card__title {
   font-size: 0.96rem;
   font-weight: 700;

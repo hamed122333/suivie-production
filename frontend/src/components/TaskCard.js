@@ -4,6 +4,8 @@ import {
   TASK_STATUS_CONFIG,
   TASK_TYPE_CONFIG,
   WAITING_STOCK_ALERT_DAYS,
+  PARTIAL_PREP_STATUS,
+  PARTIAL_REMAINDER_BADGE,
   getTaskKey,
   getArticleCategory,
   getCoveragePercent,
@@ -152,6 +154,17 @@ const TaskCard = ({ task, onOpen, isDragging, onEdit, onDelete, canEdit }) => {
 
   const hasStockBadge = task.status === 'WAITING_STOCK' || (task.priority_order != null && task.status !== 'DONE');
 
+  // Préparation partielle — indicateur COMPACT (badge + mini barre), détail dans le panneau.
+  const partialPending = task.partial_preparation_status === 'PENDING_CUSTOMER';
+  const partialBadge = partialPending
+    ? PARTIAL_PREP_STATUS.PENDING_CUSTOMER
+    : (task.partial_split_part === 'REMAINDER' ? PARTIAL_REMAINDER_BADGE : null);
+  const partialTotal = Math.round(Number(task.quantity || 0));
+  const partialPrepared = Math.round(Number(task.partial_prepared_quantity || 0));
+  const partialPercent = partialPending && partialTotal > 0
+    ? Math.max(0, Math.min(100, Math.round((partialPrepared / partialTotal) * 100)))
+    : 0;
+
   return (
     <article
       className={`task-card ${isDragging ? 'task-card--dragging' : ''} ${onOpen ? 'task-card--interactive' : ''} ${urgencyClass}`}
@@ -178,6 +191,15 @@ const TaskCard = ({ task, onOpen, isDragging, onEdit, onDelete, canEdit }) => {
           ) : (
             <span className={`task-card__priority task-card__priority--${(task.priority || 'MEDIUM').toLowerCase()}`}>
               <span aria-hidden>{priority.icon}</span> {priority.label}
+            </span>
+          )}
+          {partialBadge && (
+            <span
+              className="task-card__partial-badge"
+              style={{ background: partialBadge.bg, color: partialBadge.color }}
+              title={partialPending ? `Préparation partielle : ${partialPrepared}/${partialTotal} — en attente de validation client` : `Reliquat${task.partial_parent_order_code ? ` de ${task.partial_parent_order_code}` : ''}`}
+            >
+              {partialPending ? `${partialBadge.label} · ${partialPercent}%` : partialBadge.label}
             </span>
           )}
         </div>
@@ -212,6 +234,13 @@ const TaskCard = ({ task, onOpen, isDragging, onEdit, onDelete, canEdit }) => {
       {/* ── Title + subtitle ── */}
       <h4 className="task-card__title">{task.title}</h4>
       {subtitle && <div className="task-card__subtitle">{subtitle}</div>}
+
+      {/* ── Préparation partielle : mini-barre compacte (détail dans le panneau) ── */}
+      {partialPending && (
+        <div className="task-card__partial-bar" title={`${partialPrepared}/${partialTotal} préparés — en attente validation client`}>
+          <div className="task-card__partial-bar-fill" style={{ width: `${partialPercent}%` }} />
+        </div>
+      )}
 
       {/* ── Ops message ── */}
       {shortOpsMessage

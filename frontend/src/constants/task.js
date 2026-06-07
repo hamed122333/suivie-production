@@ -59,6 +59,13 @@ export const TASK_TYPE_CONFIG = {
 // Seuil (jours) à partir duquel une date de livraison est considérée urgente dans la colonne Hors stock
 export const WAITING_STOCK_ALERT_DAYS = 2;
 
+// Préparation partielle — libellés/couleurs des badges (sous-état, pas un statut Kanban)
+export const PARTIAL_PREP_STATUS = {
+  PENDING_CUSTOMER: { label: 'Partielle · attente client', color: '#b45309', bg: '#fef3c7' },
+  APPROVED:         { label: 'Partielle approuvée',        color: '#15803d', bg: '#dcfce7' },
+};
+export const PARTIAL_REMAINDER_BADGE = { label: 'Reliquat', color: '#7c3aed', bg: '#ede9fe' };
+
 // Article category configuration (derived from article code prefix)
 export const ARTICLE_CATEGORY_CONFIG = {
   CI: { label: 'Carterie', color: '#2563eb', bg: '#dbeafe' },

@@ -74,7 +74,7 @@ const TaskDetailsPanel = ({
   onTaskUpdated,
   onConfirmPredictive,
 }) => {
-  const { isPlanner, isCommercial, canMarkDelivered } = useAuth();
+  const { user, isPlanner, isCommercial, canMarkDelivered } = useAuth();
 
   const [detail,         setDetail]         = useState(null);
   const [loading,        setLoading]        = useState(false);
@@ -157,6 +157,17 @@ const TaskDetailsPanel = ({
       await fetchDetail(); await onTaskUpdated?.();
     } catch (err) {
       setError(err?.response?.data?.error || 'Impossible de confirmer la date.');
+    } finally { setSavingAction(false); }
+  };
+
+  const handlePartialDecision = async (action) => {
+    if (!task) return;
+    setSavingAction(true); setError('');
+    try {
+      await taskAPI.partialPreparation(task.id, { action });
+      await fetchDetail(); await onTaskUpdated?.();
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Impossible d\'enregistrer la décision.');
     } finally { setSavingAction(false); }
   };
 
@@ -316,6 +327,59 @@ const TaskDetailsPanel = ({
                     }}>
                     {savingAction ? 'Enregistrement…' : 'Marquer livré'}
                   </button>
+                )}
+              </section>
+            )}
+
+            {/* ╔══════════════════════════ PRÉPARATION PARTIELLE ════════╗ */}
+            {(task.partial_preparation_status === 'PENDING_CUSTOMER' || task.partial_split_part) && (
+              <section className="task-detail__section">
+                <div className="task-detail__section-head">
+                  <h4>Préparation partielle</h4>
+                  {task.partial_preparation_status === 'PENDING_CUSTOMER' && (
+                    <span className="tdp-negot-status-pill" style={{ background: '#fef3c7', color: '#b45309' }}>En attente client</span>
+                  )}
+                  {task.partial_split_part === 'REMAINDER' && (
+                    <span className="tdp-negot-status-pill" style={{ background: '#ede9fe', color: '#7c3aed' }}>Reliquat</span>
+                  )}
+                  {task.partial_split_part === 'PREPARED' && (
+                    <span className="tdp-negot-status-pill" style={{ background: '#dcfce7', color: '#15803d' }}>Part préparée</span>
+                  )}
+                </div>
+
+                {task.partial_preparation_status === 'PENDING_CUSTOMER' && (() => {
+                  const total = Math.round(Number(task.quantity || 0));
+                  const prep = Math.round(Number(task.partial_prepared_quantity || 0));
+                  const rem = Math.max(0, total - prep);
+                  const pct = total > 0 ? Math.round((prep / total) * 100) : 0;
+                  const isResponsible = isCommercial && user?.commercial_id && user.commercial_id === task.commercial_id;
+                  return (
+                    <div className="tdp-pending-card">
+                      <div className="tdp-pending-card__left">
+                        <div><strong>{formatQuantity(prep)}</strong> / {formatQuantity(total)} préparés ({pct}%)</div>
+                        <div>Restant (reliquat) : <strong>{formatQuantity(rem)}</strong></div>
+                        {task.commercial_name && <div>Commercial : {task.commercial_name}</div>}
+                        {task.planned_date && <div>Date promise : {formatDate(task.planned_date)}</div>}
+                        {!isResponsible && <div style={{ color: 'var(--color-text-muted)' }}>En attente de validation par le commercial responsable.</div>}
+                      </div>
+                      {isResponsible && (
+                        <div className="tdp-pending-card__actions" style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button type="button" className="btn btn-secondary" disabled={savingAction} onClick={() => handlePartialDecision('APPROVE')}>
+                            {savingAction ? '…' : 'Approuver'}
+                          </button>
+                          <button type="button" className="btn btn-danger" disabled={savingAction} onClick={() => handlePartialDecision('REJECT')}>
+                            Refuser
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {task.partial_split_part === 'REMAINDER' && task.partial_parent_order_code && (
+                  <p style={{ margin: '0.5rem 0 0', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                    Reliquat de la commande <strong>{task.partial_parent_order_code}</strong>.
+                  </p>
                 )}
               </section>
             )}

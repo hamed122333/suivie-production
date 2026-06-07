@@ -81,6 +81,16 @@ const createFieldMap = {
   stockDeficit: 'stock_deficit',
   urgentDatePending: 'urgent_date_pending',
   commercialId: 'commercial_id',
+  // Préparation partielle (sous-état + relations parent/enfant)
+  partialPreparationStatus: 'partial_preparation_status',
+  partialPreparedQuantity: 'partial_prepared_quantity',
+  partialOriginTaskId: 'partial_origin_task_id',
+  partialParentOrderCode: 'partial_parent_order_code',
+  partialSplitPart: 'partial_split_part',
+  partialRequestedAt: 'partial_requested_at',
+  partialRequestedBy: 'partial_requested_by',
+  partialDecidedAt: 'partial_decided_at',
+  partialDecidedBy: 'partial_decided_by',
 };
 
 const updateFieldMap = {
@@ -114,6 +124,16 @@ const updateFieldMap = {
   priorityOrder: 'priority_order',
   urgentDatePending: 'urgent_date_pending',
   commercialId: 'commercial_id',
+  // Préparation partielle
+  partialPreparationStatus: 'partial_preparation_status',
+  partialPreparedQuantity: 'partial_prepared_quantity',
+  partialOriginTaskId: 'partial_origin_task_id',
+  partialParentOrderCode: 'partial_parent_order_code',
+  partialSplitPart: 'partial_split_part',
+  partialRequestedAt: 'partial_requested_at',
+  partialRequestedBy: 'partial_requested_by',
+  partialDecidedAt: 'partial_decided_at',
+  partialDecidedBy: 'partial_decided_by',
 };
 
 function appendFilters(filters, params) {

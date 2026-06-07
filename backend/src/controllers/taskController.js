@@ -1421,6 +1421,174 @@ const taskController = {
     }
   },
 
+  // ── Préparation partielle (À Préparer → En Préparation) ────────────────────
+  // Calqué sur applyDateNegotiation : actions REQUEST (planificateur) / APPROVE /
+  // REJECT (commercial responsable). Voir migration 019.
+  async applyPartialPreparation(req, res) {
+    try {
+      const task = await TaskModel.getById(req.params.id);
+      if (!task) return res.status(404).json({ error: 'Task not found' });
+
+      const role = req.user?.role;
+      const action = `${req.body.action || ''}`.trim().toUpperCase();
+      const now = new Date();
+      const total = Math.round(Number(task.quantity || 0));
+      const parentOrderCode = task.order_code || `SP-${task.id}`;
+
+      if (action === 'REQUEST') {
+        if (!['planner', 'super_admin'].includes(role)) {
+          return res.status(403).json({ error: 'Acces refuse' });
+        }
+        if (!['TODO', 'IN_PROGRESS'].includes(task.status)) {
+          return res.status(400).json({ error: 'La préparation partielle se déclare au passage en préparation.' });
+        }
+        if (task.partial_preparation_status === 'PENDING_CUSTOMER') {
+          return res.status(400).json({ error: 'Une validation client est déjà en attente pour cette commande.' });
+        }
+        const prepared = Math.round(Number(req.body.preparedQuantity));
+        if (!Number.isFinite(prepared) || prepared <= 0 || prepared >= total) {
+          return res.status(400).json({ error: 'Quantité préparée invalide (entre 1 et la quantité totale - 1).' });
+        }
+
+        if (task.status !== 'IN_PROGRESS') {
+          await TaskModel.updateStatus(task.id, 'IN_PROGRESS', null, req.user.id, role);
+        }
+        const updated = await TaskModel.update(task.id, {
+          partialPreparationStatus: 'PENDING_CUSTOMER',
+          partialPreparedQuantity: prepared,
+          partialSplitPart: null,
+          partialParentOrderCode: parentOrderCode,
+          partialRequestedAt: now,
+          partialRequestedBy: req.user.id,
+          partialDecidedAt: null,
+          partialDecidedBy: null,
+        });
+        await TaskHistoryModel.log({
+          taskId: task.id, actorId: req.user.id, actionType: 'partial_preparation',
+          fieldName: 'partial_preparation_status', oldValue: task.partial_preparation_status || null, newValue: 'PENDING_CUSTOMER',
+          message: `Préparation partielle déclarée : ${prepared}/${total} — en attente validation client`,
+        });
+        // Notifier le(s) commercial(aux) responsable(s) de cette commande
+        const commercials = await UserModel.findByRoles(['commercial']);
+        const ids = commercials.filter((c) => c.commercial_id && c.commercial_id === task.commercial_id).map((c) => c.id);
+        if (ids.length > 0) {
+          await NotificationModel.createPartialPrepRequestNotifications({
+            taskId: task.id, recipientUserIds: ids, plannerName: req.user.name,
+            preparedQuantity: prepared, totalQuantity: total,
+          });
+        }
+        broadcast('tasks-updated', { source: 'partial_prep', taskId: task.id });
+        broadcast('notifications-updated', { source: 'partial_prep', taskId: task.id });
+        return res.json(updated);
+      }
+
+      if (action === 'APPROVE' || action === 'REJECT') {
+        if (task.partial_preparation_status !== 'PENDING_CUSTOMER') {
+          return res.status(400).json({ error: 'Aucune préparation partielle en attente pour cette commande.' });
+        }
+        const isResponsible = role === 'commercial' && req.user.commercial_id && req.user.commercial_id === task.commercial_id;
+        if (!isResponsible && role !== 'super_admin') {
+          return res.status(403).json({ error: 'Seul le commercial responsable peut valider la préparation partielle.' });
+        }
+        const prepared = Math.round(Number(task.partial_prepared_quantity || 0));
+
+        const planners = await UserModel.findByRoles(['planner', 'super_admin']);
+        const plannerIds = planners.map((p) => p.id);
+
+        if (action === 'REJECT') {
+          // Annulation : retour en « À Préparer » avec la quantité totale, flags nettoyés.
+          await TaskModel.updateStatus(task.id, 'TODO', null, req.user.id, 'super_admin');
+          await TaskModel.update(task.id, {
+            partialPreparationStatus: null,
+            partialPreparedQuantity: null,
+            partialSplitPart: null,
+            partialRequestedAt: null,
+            partialRequestedBy: null,
+            partialDecidedAt: null,
+            partialDecidedBy: null,
+          });
+          await TaskHistoryModel.log({
+            taskId: task.id, actorId: req.user.id, actionType: 'partial_preparation',
+            fieldName: 'partial_preparation_status', oldValue: 'PENDING_CUSTOMER', newValue: 'REJECTED',
+            message: `Préparation partielle refusée par le client — retour en « À Préparer » (quantité totale ${total})`,
+          });
+          if (plannerIds.length > 0) {
+            await NotificationModel.createPartialPrepDecisionNotifications({
+              taskId: task.id, recipientUserIds: plannerIds, commercialName: req.user.name, decision: 'REJECTED',
+            });
+          }
+          if (task.item_reference) await recalculateStockAllocation(task.item_reference);
+          broadcast('tasks-updated', { source: 'partial_prep', taskId: task.id });
+          broadcast('notifications-updated', { source: 'partial_prep', taskId: task.id });
+          return res.json(await TaskModel.getById(task.id));
+        }
+
+        // APPROVE → split : origine = part préparée, + nouvelle tâche reliquat.
+        const remainderQty = total - prepared;
+        await TaskModel.update(task.id, {
+          quantity: prepared,
+          partialPreparationStatus: 'APPROVED',
+          partialSplitPart: 'PREPARED',
+          partialParentOrderCode: parentOrderCode,
+          partialDecidedAt: now,
+          partialDecidedBy: req.user.id,
+        });
+        const createdRemainder = await TaskModel.createMany({
+          tasks: [{
+            title: task.title,
+            description: task.description,
+            priority: task.priority,
+            clientName: task.client_name,
+            clientCode: task.client_code,
+            orderCode: task.order_code,
+            itemReference: task.item_reference,
+            quantity: remainderQty,
+            quantityUnit: task.quantity_unit,
+            dueDate: task.due_date,
+            plannedDate: task.planned_date,
+            commercialId: task.commercial_id,
+            assignedTo: task.assigned_to,
+            partialOriginTaskId: task.id,
+            partialParentOrderCode: parentOrderCode,
+            partialSplitPart: 'REMAINDER',
+          }],
+          createdBy: task.created_by || req.user.id,
+          workspaceId: task.workspace_id,
+          status: 'WAITING_STOCK',
+        });
+        const remainder = createdRemainder[0];
+        await TaskHistoryModel.log({
+          taskId: task.id, actorId: req.user.id, actionType: 'partial_preparation',
+          fieldName: 'partial_preparation_status', oldValue: 'PENDING_CUSTOMER', newValue: 'APPROVED',
+          message: `Préparation partielle approuvée par le client : ${prepared}/${total} préparés — reliquat ${remainderQty} créé (SP-${remainder?.id})`,
+        });
+        if (remainder?.id) {
+          await TaskHistoryModel.log({
+            taskId: remainder.id, actorId: req.user.id, actionType: 'created',
+            message: `Reliquat de SP-${task.id} (${parentOrderCode}) : ${remainderQty} restant — en attente stock`,
+          });
+        }
+        if (task.item_reference) await recalculateStockAllocation(task.item_reference);
+        if (plannerIds.length > 0) {
+          await NotificationModel.createPartialPrepDecisionNotifications({
+            taskId: task.id, recipientUserIds: plannerIds, commercialName: req.user.name, decision: 'APPROVED',
+          });
+        }
+        broadcast('tasks-updated', { source: 'partial_prep', taskId: task.id });
+        broadcast('notifications-updated', { source: 'partial_prep', taskId: task.id });
+        return res.json({ task: await TaskModel.getById(task.id), remainder });
+      }
+
+      return res.status(400).json({ error: 'Action invalide. Utilisez REQUEST, APPROVE ou REJECT.' });
+    } catch (err) {
+      if (isHttpError(err)) {
+        return res.status(err.status).json({ error: err.message });
+      }
+      console.error('Partial preparation failed:', err);
+      return res.status(500).json({ error: 'Server error' });
+    }
+  },
+
   async confirmPredictive(req, res) {
     try {
       const task = await TaskModel.getById(req.params.id);

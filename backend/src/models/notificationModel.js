@@ -162,6 +162,54 @@ const NotificationModel = {
     broadcast('notifications-updated', { type: 'date_negotiation' });
   },
 
+  // Préparation partielle : le planificateur demande une validation client →
+  // notifier le(s) commercial(aux) responsable(s).
+  async createPartialPrepRequestNotifications({ taskId, recipientUserIds, plannerName, preparedQuantity, totalQuantity }) {
+    if (!taskId || !Array.isArray(recipientUserIds) || recipientUserIds.length === 0) return;
+    const title = `📦 Validation client — préparation partielle SP-${taskId}`;
+    const body = `${plannerName || 'Le planificateur'} déclare ${preparedQuantity}/${totalQuantity} préparés pour SP-${taskId}. Contactez le client pour approuver ou refuser la préparation partielle.`;
+    const values = [];
+    const placeholders = [];
+    let index = 1;
+    for (const uid of recipientUserIds) {
+      values.push(uid, taskId, 'partial_prep_request', title, body);
+      placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
+      index += 5;
+    }
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ${placeholders.join(', ')}`,
+      values
+    );
+    broadcast('notifications-updated', { type: 'partial_prep_request', taskId });
+  },
+
+  // Décision du commercial (APPROVED/REJECTED) → notifier les planificateurs.
+  async createPartialPrepDecisionNotifications({ taskId, recipientUserIds, commercialName, decision }) {
+    if (!taskId || !Array.isArray(recipientUserIds) || recipientUserIds.length === 0) return;
+    const approved = decision === 'APPROVED';
+    const title = approved
+      ? `✅ Préparation partielle approuvée — SP-${taskId}`
+      : `❌ Préparation partielle refusée — SP-${taskId}`;
+    const body = approved
+      ? `${commercialName || 'Le commercial'} a fait approuver la préparation partielle de SP-${taskId} par le client. Un reliquat a été créé.`
+      : `${commercialName || 'Le commercial'} a refusé la préparation partielle de SP-${taskId}. La commande revient en « À Préparer ».`;
+    const values = [];
+    const placeholders = [];
+    let index = 1;
+    for (const uid of recipientUserIds) {
+      values.push(uid, taskId, 'partial_prep_decision', title, body);
+      placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
+      index += 5;
+    }
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ${placeholders.join(', ')}`,
+      values
+    );
+    broadcast('notifications-updated', { type: 'partial_prep_decision', taskId });
+  },
+
   async createEscalationNotification({ taskId, recipientUserId, commercialName, taskTitle }) {
     if (!taskId || !recipientUserId) return;
     await pool.query(

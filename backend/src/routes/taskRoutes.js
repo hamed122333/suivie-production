@@ -31,6 +31,8 @@ router.post('/', authenticate, requireCommercial, taskController.create);
 // Modifier une tâche complète : planificateur et commercial
 router.put('/:id', authenticate, requireRoles(['planner', 'commercial', 'super_admin']), taskController.update);
 router.put('/:id/date-negotiation', authenticate, requireRoles(['planner', 'commercial']), taskController.applyDateNegotiation);
+// Préparation partielle : REQUEST (planificateur) / APPROVE / REJECT (commercial responsable)
+router.put('/:id/partial-preparation', authenticate, requireRoles(['planner', 'commercial', 'super_admin']), taskController.applyPartialPreparation);
 
 // Confirmer une tâche prédictive : commercial et planner
 router.put('/:id/confirm-predictive', authenticate, requireRoles(['planner', 'commercial']), taskController.confirmPredictive);

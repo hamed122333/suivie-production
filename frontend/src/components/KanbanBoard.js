@@ -2,6 +2,7 @@ import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useSt
 import { useSearchParams } from 'react-router-dom';
 import BlockReasonModal from './BlockReasonModal';
 import DateValidationModal from './DateValidationModal';
+import PreparationModal from './PreparationModal';
 import TaskCard from './TaskCard';
 import TaskDetailsPanel from './TaskDetailsPanel';
 import TaskModal from './TaskModal';
@@ -168,6 +169,8 @@ const KanbanBoard = ({
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const [dateModal, setDateModal] = useState({ open: false, task: null });
   const [dateModalWorking, setDateModalWorking] = useState(false);
+  const [prepModal, setPrepModal] = useState({ open: false, task: null });
+  const [prepModalWorking, setPrepModalWorking] = useState(false);
   const errorTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -311,6 +314,13 @@ const KanbanBoard = ({
       return;
     }
 
+    // Passage en préparation : À Préparer → En Préparation → complète ou partielle
+    if (task.status === 'TODO' && targetStatus === 'IN_PROGRESS' && canChangeStatus) {
+      setPrepModal({ open: true, task });
+      clearDragHighlights();
+      return;
+    }
+
     // Same column → local reorder only (ordering is not persisted in the global view)
     if (task.status === targetStatus) {
       setTasks(applyMove(tasks, draggedId, targetStatus, insertBeforeId));
@@ -395,6 +405,27 @@ const KanbanBoard = ({
     } catch (err) {
       setErrorShort(err.response?.data?.error || 'Impossible de proposer cette date.');
     } finally { setDateModalWorking(false); }
+  };
+
+  // ── Passage en préparation (À Préparer → En Préparation) : complète/partielle ──
+  const closePrepModal = () => setPrepModal({ open: false, task: null });
+
+  const handlePrepConfirm = async ({ mode, quantity }) => {
+    const task = prepModal.task;
+    if (!task) return;
+    setPrepModalWorking(true);
+    try {
+      if (mode === 'PARTIAL') {
+        // Reste UNE seule carte ; le commercial responsable est notifié pour validation.
+        await taskAPI.partialPreparation(task.id, { action: 'REQUEST', preparedQuantity: quantity });
+      } else {
+        await taskAPI.updateStatus(task.id, 'IN_PROGRESS');
+      }
+      await refreshBoardAndPanels();
+      closePrepModal();
+    } catch (err) {
+      setErrorShort(err.response?.data?.error || 'Impossible de passer en préparation.');
+    } finally { setPrepModalWorking(false); }
   };
 
   const handleSaveTask = async (formData) => {
@@ -641,6 +672,15 @@ const KanbanBoard = ({
           onClose={closeDateModal}
           onValidate={handleDateValidate}
           onPropose={handleDatePropose}
+        />
+      )}
+
+      {prepModal.open && (
+        <PreparationModal
+          task={prepModal.task}
+          working={prepModalWorking}
+          onClose={closePrepModal}
+          onConfirm={handlePrepConfirm}
         />
       )}
     </div>

@@ -69,6 +69,7 @@ export const taskAPI = {
   update: (id, data) => api.put(`/tasks/${id}`, data),
   updateStatus: (id, status, reasonBlocked) => api.put(`/tasks/${id}/status`, { status, reasonBlocked }),
   dateNegotiation: (id, payload) => api.put(`/tasks/${id}/date-negotiation`, payload),
+  partialPreparation: (id, payload) => api.put(`/tasks/${id}/partial-preparation`, payload),
   addComment: (id, body) => api.post(`/tasks/${id}/comments`, { body }),
   delete: (id) => api.delete(`/tasks/${id}`),
   confirmPredictive: (id) => api.put(`/tasks/${id}/confirm-predictive`),
