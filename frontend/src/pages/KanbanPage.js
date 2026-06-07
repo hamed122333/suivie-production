@@ -5,9 +5,15 @@ import KanbanToolbar from '../components/KanbanToolbar';
 import ExportModal from '../components/ExportModal';
 import Spinner from '../components/Spinner';
 import { taskAPI, userAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import useServerEvents from '../hooks/useServerEvents';
 
 const KanbanPage = () => {
+  // La liste d'utilisateurs (filtre « Commercial ») est réservée au planificateur
+  // et au super_admin (GET /api/users). On ne l'appelle PAS pour les autres rôles
+  // afin d'éviter un 403 inutile à la connexion.
+  const { isPlanner, isSuperAdmin } = useAuth();
+  const canSeeUsers = isPlanner || isSuperAdmin;
   const [tasks, setTasks]         = useState([]);
   const [users, setUsers]         = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -54,14 +60,13 @@ const KanbanPage = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        // La liste d'utilisateurs (filtre commercial) est réservée aux rôles
-        // privilégiés → un 403 ne doit pas bloquer le chargement du board.
-        const [tasksRes, usersRes] = await Promise.all([
-          taskAPI.getAll({}),
-          userAPI.getAll().catch(() => ({ data: [] })),
-        ]);
+        const tasksRes = await taskAPI.getAll({});
         setTasks(tasksRes.data);
-        setUsers(usersRes.data || []);
+        // Liste d'utilisateurs uniquement pour les rôles autorisés (sinon 403).
+        if (canSeeUsers) {
+          const usersRes = await userAPI.getAll().catch(() => ({ data: [] }));
+          setUsers(usersRes.data || []);
+        }
       } catch (err) {
         console.error('Failed to load kanban', err);
       } finally {
@@ -69,7 +74,7 @@ const KanbanPage = () => {
       }
     };
     load();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canSeeUsers]);
 
   // ── Sync search from URL ──────────────────────────────────────────────────
 
