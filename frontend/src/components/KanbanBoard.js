@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import BlockReasonModal from './BlockReasonModal';
 import DateValidationModal from './DateValidationModal';
 import PreparationModal from './PreparationModal';
+import DeliveryModal from './DeliveryModal';
 import TaskCard from './TaskCard';
 import TaskDetailsPanel from './TaskDetailsPanel';
 import TaskModal from './TaskModal';
@@ -27,7 +28,7 @@ const COLUMNS_FOR_ROLE = {
 
 function getColumnSubtitle(columnId, isLivreur) {
   if (isLivreur) {
-    if (columnId === 'DONE')      return 'Glissez vers "Livré" pour confirmer';
+    if (columnId === 'DONE')      return 'Glissez vers « Livré » — une commande, livraisons progressives';
     if (columnId === 'DELIVERED') return 'Livraisons confirmées ✓';
   }
   if (columnId === 'WAITING_STOCK') return 'Entrée — glissez vers À Préparer (planificateur)';
@@ -171,6 +172,8 @@ const KanbanBoard = ({
   const [dateModalWorking, setDateModalWorking] = useState(false);
   const [prepModal, setPrepModal] = useState({ open: false, task: null });
   const [prepModalWorking, setPrepModalWorking] = useState(false);
+  const [deliveryModal, setDeliveryModal] = useState({ open: false, task: null });
+  const [deliveryModalWorking, setDeliveryModalWorking] = useState(false);
   const errorTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -273,7 +276,7 @@ const KanbanBoard = ({
       return;
     }
 
-    // Livreur: can only confirm delivery (DONE → DELIVERED)
+    // Livreur : DONE → DELIVERED (livraison complète ou partielle via modale)
     if (targetStatus === 'DELIVERED') {
       if (!canMarkDelivered) {
         setErrorShort('Seul le livreur peut confirmer une livraison.');
@@ -281,16 +284,11 @@ const KanbanBoard = ({
         return;
       }
       if (task.status !== 'DONE') {
-        setErrorShort('Glissez uniquement les fiches "Prêt à Livrer" vers la colonne Livré.');
+        setErrorShort('Glissez uniquement les fiches « Prêt à Livrer » vers la colonne Livré.');
         clearDragHighlights();
         return;
       }
-      try {
-        await taskAPI.markDelivered(draggedId);
-        await refreshBoardAndPanels();
-      } catch (err) {
-        setErrorShort(err.response?.data?.error || 'Impossible de confirmer la livraison.');
-      }
+      setDeliveryModal({ open: true, task });
       clearDragHighlights();
       return;
     }
@@ -405,6 +403,26 @@ const KanbanBoard = ({
     } catch (err) {
       setErrorShort(err.response?.data?.error || 'Impossible de proposer cette date.');
     } finally { setDateModalWorking(false); }
+  };
+
+  // ── Livraison (Prêt à Livrer → Livré) : complète/partielle ──
+  const closeDeliveryModal = () => setDeliveryModal({ open: false, task: null });
+
+  const handleDeliveryConfirm = async ({ mode, quantity }) => {
+    const task = deliveryModal.task;
+    if (!task) return;
+    setDeliveryModalWorking(true);
+    try {
+      if (mode === 'PARTIAL') {
+        await taskAPI.markDelivered(task.id, { deliveredQuantity: quantity });
+      } else {
+        await taskAPI.markDelivered(task.id);
+      }
+      await refreshBoardAndPanels();
+      closeDeliveryModal();
+    } catch (err) {
+      setErrorShort(err.response?.data?.error || 'Impossible de confirmer la livraison.');
+    } finally { setDeliveryModalWorking(false); }
   };
 
   // ── Passage en préparation (À Préparer → En Préparation) : complète/partielle ──
@@ -635,6 +653,7 @@ const KanbanBoard = ({
 
       {blockModal.open && (
         <BlockReasonModal
+          key={blockModal.task?.id}
           task={blockModal.task}
           onConfirm={handleBlockConfirm}
           onCancel={() => setBlockModal({ open: false, task: null })}
@@ -667,6 +686,7 @@ const KanbanBoard = ({
 
       {dateModal.open && (
         <DateValidationModal
+          key={dateModal.task?.id}
           task={dateModal.task}
           working={dateModalWorking}
           onClose={closeDateModal}
@@ -677,10 +697,21 @@ const KanbanBoard = ({
 
       {prepModal.open && (
         <PreparationModal
+          key={prepModal.task?.id}
           task={prepModal.task}
           working={prepModalWorking}
           onClose={closePrepModal}
           onConfirm={handlePrepConfirm}
+        />
+      )}
+
+      {deliveryModal.open && (
+        <DeliveryModal
+          key={deliveryModal.task?.id}
+          task={deliveryModal.task}
+          working={deliveryModalWorking}
+          onClose={closeDeliveryModal}
+          onConfirm={handleDeliveryConfirm}
         />
       )}
     </div>

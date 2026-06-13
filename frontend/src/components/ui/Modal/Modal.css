@@ -85,6 +85,17 @@
 }
 
 @media (max-width: 600px) {
+  .ui-modal__overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .ui-modal {
+    max-width: 100%;
+    border-radius: 16px 16px 0 0;
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px));
+  }
+
   .ui-modal__header, .ui-modal__footer { padding: var(--space-3) var(--space-4); }
   .ui-modal__body { padding: var(--space-4); }
 }

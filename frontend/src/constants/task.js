@@ -65,6 +65,25 @@ export const PARTIAL_PREP_STATUS = {
   APPROVED:         { label: 'Partielle approuvée',        color: '#15803d', bg: '#dcfce7' },
 };
 export const PARTIAL_REMAINDER_BADGE = { label: 'Reliquat', color: '#7c3aed', bg: '#ede9fe' };
+export const DELIVERY_PROGRESS_BADGE = { label: 'Livraison en cours', color: '#15803d', bg: '#dcfce7' };
+
+/** Progression livraison cumulative (une seule fiche, pas de split). */
+export function getDeliveryProgress(task) {
+  if (!task) return null;
+  const total = Math.round(Number(task.quantity || 0));
+  if (total <= 0) return null;
+
+  const delivered = task.status === 'DELIVERED'
+    ? total
+    : Math.round(Number(task.quantity_delivered || 0));
+
+  if (delivered <= 0) return null;
+
+  const remaining = Math.max(0, total - delivered);
+  const pct = Math.min(100, Math.round((delivered / total) * 100));
+
+  return { total, delivered, remaining, pct, inProgress: task.status === 'DONE' && remaining > 0 };
+}
 
 // Article category configuration (derived from article code prefix)
 export const ARTICLE_CATEGORY_CONFIG = {

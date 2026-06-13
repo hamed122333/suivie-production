@@ -91,6 +91,7 @@ const createFieldMap = {
   partialRequestedBy: 'partial_requested_by',
   partialDecidedAt: 'partial_decided_at',
   partialDecidedBy: 'partial_decided_by',
+  quantityDelivered: 'quantity_delivered',
 };
 
 const updateFieldMap = {
@@ -134,6 +135,7 @@ const updateFieldMap = {
   partialRequestedBy: 'partial_requested_by',
   partialDecidedAt: 'partial_decided_at',
   partialDecidedBy: 'partial_decided_by',
+  quantityDelivered: 'quantity_delivered',
 };
 
 function appendFilters(filters, params) {

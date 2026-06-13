@@ -75,7 +75,7 @@ export const taskAPI = {
   confirmPredictive: (id) => api.put(`/tasks/${id}/confirm-predictive`),
 
   convertType: (id, newType) => api.post(`/tasks/${id}/convert-type`, { newType }),
-  markDelivered: (id) => api.post(`/tasks/${id}/mark-delivered`),
+  markDelivered: (id, payload) => api.post(`/tasks/${id}/mark-delivered`, payload || {}),
 };
 
 export const userAPI = {

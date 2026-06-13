@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { IconClose } from '../icons';
 import './Modal.css';
@@ -13,16 +13,8 @@ const SIZE_CLASS = {
 /**
  * Modale accessible et réutilisable.
  * - Ferme sur Échap et clic sur l'arrière-plan (configurable)
- * - role="dialog" + aria-modal + focus initial
+ * - role="dialog" + aria-modal + focus initial à l'ouverture uniquement
  * - bloque le scroll de l'arrière-plan tant qu'elle est ouverte
- *
- * @param {boolean} isOpen
- * @param {() => void} onClose
- * @param {string} [title]
- * @param {'sm'|'md'|'lg'|'xl'} [size='md']
- * @param {React.ReactNode} [footer]
- * @param {boolean} [closeOnOverlay=true]
- * @param {boolean} [closeOnEsc=true]
  */
 function Modal({
   isOpen,
@@ -36,27 +28,37 @@ function Modal({
   children,
 }) {
   const dialogRef = useRef(null);
+  const onCloseRef = useRef(onClose);
   const titleId = useRef(`ui-modal-${Math.random().toString(36).slice(2, 9)}`).current;
 
-  const handleKeyDown = useCallback(
-    (e) => {
-      if (closeOnEsc && e.key === 'Escape') onClose?.();
-    },
-    [closeOnEsc, onClose]
-  );
+  onCloseRef.current = onClose;
+
+  // Écoute Échap — onClose via ref pour ne pas ré-abonner à chaque render parent.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const handleKeyDown = (e) => {
+      if (closeOnEsc && e.key === 'Escape') onCloseRef.current?.();
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, closeOnEsc]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
-    document.addEventListener('keydown', handleKeyDown);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    // Focus initial sur la boîte de dialogue
-    dialogRef.current?.focus();
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = previousOverflow;
     };
-  }, [isOpen, handleKeyDown]);
+  }, [isOpen]);
+
+  // Focus initial une seule fois à l'ouverture — ne pas voler le focus des champs à l'intérieur.
+  useEffect(() => {
+    if (!isOpen) return;
+    dialogRef.current?.focus();
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -64,7 +66,7 @@ function Modal({
     <div
       className="ui-modal__overlay"
       onMouseDown={(e) => {
-        if (closeOnOverlay && e.target === e.currentTarget) onClose?.();
+        if (closeOnOverlay && e.target === e.currentTarget) onCloseRef.current?.();
       }}
     >
       <div
@@ -78,7 +80,7 @@ function Modal({
         {(title || onClose) && (
           <div className="ui-modal__header">
             {title && <h3 id={titleId} className="ui-modal__title">{title}</h3>}
-            <button type="button" className="ui-modal__close" onClick={onClose} aria-label="Fermer" title="Fermer">
+            <button type="button" className="ui-modal__close" onClick={() => onCloseRef.current?.()} aria-label="Fermer" title="Fermer">
               <IconClose />
             </button>
           </div>

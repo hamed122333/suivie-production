@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ARTICLE_CATEGORY_CONFIG, TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG } from '../constants/task';
+import { ARTICLE_CATEGORY_CONFIG, TASK_PRIORITY_CONFIG, TASK_STATUS_CONFIG, getDeliveryProgress } from '../constants/task';
 import { taskAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { formatDate, formatDateTime, formatQuantity, getInitials } from '../utils/formatters';
+import DeliveryModal from './DeliveryModal';
 import TaskTypeToggle from './TaskTypeToggle';
 import { IconClose } from './ui/icons';
 import './TaskDetailsPanel.css';
@@ -80,6 +81,8 @@ const TaskDetailsPanel = ({
   const [loading,        setLoading]        = useState(false);
   const [error,          setError]          = useState('');
   const [savingAction,   setSavingAction]   = useState(false);
+  const [deliveryModalOpen, setDeliveryModalOpen] = useState(false);
+  const [deliveryModalWorking, setDeliveryModalWorking] = useState(false);
   const [dateProposal,   setDateProposal]   = useState('');
   const [proposeOpen,    setProposeOpen]    = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
@@ -319,13 +322,8 @@ const TaskDetailsPanel = ({
                   <button type="button" className="btn btn-primary"
                     style={{ width: '100%', marginTop: '0.65rem', background: '#374151' }}
                     disabled={savingAction}
-                    onClick={async () => {
-                      setSavingAction(true);
-                      try { await taskAPI.markDelivered(task.id); await fetchDetail(); onTaskUpdated?.(); }
-                      catch (err) { setError(err?.response?.data?.error || 'Impossible de marquer livré.'); }
-                      finally { setSavingAction(false); }
-                    }}>
-                    {savingAction ? 'Enregistrement…' : 'Marquer livré'}
+                    onClick={() => setDeliveryModalOpen(true)}>
+                    Confirmer la livraison
                   </button>
                 )}
               </section>
@@ -383,6 +381,33 @@ const TaskDetailsPanel = ({
                 )}
               </section>
             )}
+
+            {/* ╔══════════════════════════════ LIVRAISON (progression) ═══╗ */}
+            {(() => {
+              const dp = getDeliveryProgress(task);
+              if (!dp) return null;
+              return (
+                <section className="task-detail__section">
+                  <div className="task-detail__section-head">
+                    <h4>Livraison</h4>
+                    <span className="tdp-negot-status-pill" style={{ background: '#dcfce7', color: '#15803d' }}>
+                      {dp.inProgress ? `${dp.pct}% livré` : 'Complet'}
+                    </span>
+                  </div>
+                  <div className="tdp-pending-card">
+                    <div className="tdp-pending-card__left">
+                      <div><strong>{formatQuantity(dp.delivered)}</strong> / {formatQuantity(dp.total)} livrés</div>
+                      {dp.inProgress && (
+                        <div>Reste à livrer : <strong>{formatQuantity(dp.remaining)}</strong> pcs</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="task-card__partial-bar task-card__partial-bar--delivery" style={{ marginTop: '0.5rem' }}>
+                    <div className="task-card__partial-bar-fill task-card__partial-bar-fill--delivery" style={{ width: `${dp.pct}%` }} />
+                  </div>
+                </section>
+              );
+            })()}
 
             {/* ╔══════════════════════════════ DATE NÉGOCIATION ═════════╗ */}
             {canAct && (
@@ -586,6 +611,32 @@ const TaskDetailsPanel = ({
           </>
         ) : null}
       </aside>
+
+      {deliveryModalOpen && task?.status === 'DONE' && (
+        <DeliveryModal
+          key={task.id}
+          task={task}
+          working={deliveryModalWorking}
+          onClose={() => setDeliveryModalOpen(false)}
+          onConfirm={async ({ mode, quantity }) => {
+            setDeliveryModalWorking(true);
+            try {
+              if (mode === 'PARTIAL') {
+                await taskAPI.markDelivered(task.id, { deliveredQuantity: quantity });
+              } else {
+                await taskAPI.markDelivered(task.id);
+              }
+              setDeliveryModalOpen(false);
+              await fetchDetail();
+              await onTaskUpdated?.();
+            } catch (err) {
+              setError(err?.response?.data?.error || 'Impossible de confirmer la livraison.');
+            } finally {
+              setDeliveryModalWorking(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

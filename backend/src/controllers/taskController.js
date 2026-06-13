@@ -1,3 +1,4 @@
+const pool = require('../config/db');
 const TaskModel = require('../models/taskModel');
 const TaskCommentModel = require('../models/taskCommentModel');
 const TaskHistoryModel = require('../models/taskHistoryModel');
@@ -9,7 +10,7 @@ const { recalculateStockAllocation } = require('../services/stockAllocationServi
 const { TASK_STATUSES, TASK_STATUS_LABELS, TRACKED_TASK_FIELDS, URGENT_DATE_THRESHOLD_DAYS } = require('../constants/task');
 const { createHttpError, isHttpError } = require('../utils/httpErrors');
 const { applyTaskVisibility, buildTaskFilters, canAccessTask, parseWorkspaceId } = require('../utils/taskScope');
-const { normalizeCommentBody, normalizeTaskBatch, normalizeTaskDraft, normalizeTaskUpdatePayload } = require('../utils/taskValidation');
+const { normalizeCommentBody, normalizeTaskBatch, normalizeTaskDraft, normalizeTaskUpdatePayload, validatePartialPreparationQuantity, validateDeliveryQuantity } = require('../utils/taskValidation');
 const ExcelJS = require('exceljs'); // Add ExcelJS import for exports
 const { normalizeArticleCode, isValidArticleCode } = require('../utils/articleCode');
 
@@ -26,6 +27,25 @@ function formatDateFR(dateStr) {
   if (Number.isNaN(d.getTime())) return '—';
   const pad = (n) => String(n).padStart(2, '0');
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+/** Commercial responsable (commercial_id) + planificateurs — pour alertes livraison. */
+async function getDeliveryNotificationRecipientIds(task, actorId) {
+  const planners = await UserModel.findByRoles(['planner', 'super_admin']);
+  const plannerIds = planners.map((p) => p.id).filter((id) => id !== actorId);
+
+  const commercialIds = [];
+  if (task?.commercial_id) {
+    const commercials = await UserModel.findByRoles(['commercial']);
+    commercialIds.push(
+      ...commercials
+        .filter((c) => c.commercial_id === task.commercial_id)
+        .map((c) => c.id)
+        .filter((id) => id !== actorId)
+    );
+  }
+
+  return [...new Set([...plannerIds, ...commercialIds])];
 }
 
 const fieldLabels = {
@@ -1409,7 +1429,8 @@ const taskController = {
 
       // Le stock n'est déduit qu'à la livraison → on ne réintègre que pour une tâche Livrée.
       if (taskToDelete && taskToDelete.status === 'DELIVERED') {
-        await addStockForTask(taskToDelete);
+        const restoredQty = Number(taskToDelete.quantity_delivered ?? taskToDelete.quantity ?? 0);
+        await addStockForTask(taskToDelete, restoredQty);
       }
       if (taskToDelete?.item_reference) {
         await recalculateStockAllocation(taskToDelete.item_reference);
@@ -1445,10 +1466,9 @@ const taskController = {
         if (task.partial_preparation_status === 'PENDING_CUSTOMER') {
           return res.status(400).json({ error: 'Une validation client est déjà en attente pour cette commande.' });
         }
-        const prepared = Math.round(Number(req.body.preparedQuantity));
-        if (!Number.isFinite(prepared) || prepared <= 0 || prepared >= total) {
-          return res.status(400).json({ error: 'Quantité préparée invalide (entre 1 et la quantité totale - 1).' });
-        }
+        const prepCheck = validatePartialPreparationQuantity(req.body.preparedQuantity, total);
+        if (!prepCheck.ok) return res.status(400).json({ error: prepCheck.error });
+        const prepared = prepCheck.value;
 
         if (task.status !== 'IN_PROGRESS') {
           await TaskModel.updateStatus(task.id, 'IN_PROGRESS', null, req.user.id, role);
@@ -1758,60 +1778,141 @@ const taskController = {
     }
   },
 
-  // POST /tasks/:id/mark-delivered — livreur (or super_admin) marks a DONE task as DELIVERED
+  // POST /tasks/:id/mark-delivered — livreur : livraison cumulative sur une seule fiche
   async markDelivered(req, res) {
+    const taskIdParam = req.params.id;
+    let lockClient = null;
     try {
-      const task = await TaskModel.getById(req.params.id);
+      // Verrou consultatif par tâche : sérialise les livraisons concurrentes du
+      // MÊME ordre → empêche la sur-livraison / double déduction (deux livreurs).
+      // Best-effort + pooler-safe (xact lock + lock_timeout) ; dégrade sans verrou.
+      try {
+        lockClient = await pool.connect();
+        await lockClient.query('BEGIN');
+        await lockClient.query("SET LOCAL lock_timeout = '5s'");
+        await lockClient.query('SELECT pg_advisory_xact_lock($1)', [Number(taskIdParam)]);
+      } catch (e) {
+        if (lockClient) {
+          try { await lockClient.query('ROLLBACK'); } catch (_) { /* ignore */ }
+          try { lockClient.release(); } catch (_) { /* ignore */ }
+          lockClient = null;
+        }
+      }
+
+      // Lecture FRAÎCHE après acquisition du verrou (quantity_delivered à jour).
+      const task = await TaskModel.getById(taskIdParam);
       if (!task) return res.status(404).json({ error: 'Tâche introuvable' });
 
       if (task.status !== 'DONE') {
-        return res.status(400).json({ error: 'Seules les tâches avec le statut "Terminée" peuvent être marquées comme livrées.' });
+        return res.status(400).json({ error: 'Seules les fiches « Prêt à Livrer » peuvent être livrées.' });
       }
 
-      const updatedTask = await TaskModel.updateStatus(req.params.id, 'DELIVERED', null, req.user.id, req.user.role);
-      if (!updatedTask) return res.status(404).json({ error: 'Tâche introuvable' });
+      const total = Math.round(Number(task.quantity || 0));
+      const alreadyDelivered = Math.round(Number(task.quantity_delivered || 0));
+      const remaining = total - alreadyDelivered;
 
-      // Le produit fini quitte physiquement l'inventaire à la LIVRAISON → déduire le stock PF.
-      await deductStockForTask(updatedTask);
-      if (updatedTask.item_reference) {
-        await recalculateStockAllocation(updatedTask.item_reference);
+      if (remaining <= 0) {
+        return res.status(400).json({ error: 'Cette commande est déjà entièrement livrée.' });
+      }
+
+      const body = req.body || {};
+      const hasThisShip = body.deliveredQuantity != null && body.deliveredQuantity !== '';
+      const requestedShip = hasThisShip ? body.deliveredQuantity : remaining;
+      const shipCheck = validateDeliveryQuantity(requestedShip, remaining);
+      if (!shipCheck.ok) return res.status(400).json({ error: shipCheck.error });
+      const thisShip = shipCheck.value;
+
+      await deductStockForTask(task, thisShip);
+
+      const newDelivered = alreadyDelivered + thisShip;
+      const isComplete = newDelivered >= total;
+      const pct = total > 0 ? Math.round((newDelivered / total) * 100) : 100;
+
+      const recipientIds = await getDeliveryNotificationRecipientIds(task, req.user.id);
+      const livreurName = req.user.name || 'Livreur';
+
+      if (isComplete) {
+        await TaskModel.update(task.id, { quantityDelivered: total });
+        const updatedTask = await TaskModel.updateStatus(req.params.id, 'DELIVERED', null, req.user.id, req.user.role);
+        if (!updatedTask) return res.status(404).json({ error: 'Tâche introuvable' });
+
+        if (updatedTask.item_reference) {
+          await recalculateStockAllocation(updatedTask.item_reference);
+        }
+
+        const msg = alreadyDelivered > 0
+          ? `Livraison terminée : +${thisShip} pcs (${total}/${total} — 100 %)`
+          : `Statut changé de ${TASK_STATUS_LABELS['DONE']} vers ${TASK_STATUS_LABELS['DELIVERED']}`;
+
+        await TaskHistoryModel.log({
+          taskId: task.id,
+          actorId: req.user.id,
+          actionType: alreadyDelivered > 0 ? 'partial_delivery' : 'status_updated',
+          fieldName: 'status',
+          oldValue: 'DONE',
+          newValue: 'DELIVERED',
+          message: msg,
+        });
+
+        if (recipientIds.length > 0) {
+          await NotificationModel.createDeliveryCompletedNotificationBatch({
+            taskId: task.id,
+            recipientUserIds: recipientIds,
+            livreurName,
+            total,
+            completedAfterPartial: alreadyDelivered > 0,
+            lastShip: thisShip,
+            taskTitle: task.title,
+          });
+        }
+
+        broadcast('tasks-updated', { source: 'mark_delivered', taskId: updatedTask.id });
+        return res.json(await TaskModel.getById(task.id));
+      }
+
+      // Livraison partielle : reste en « Prêt à Livrer », progression cumulée
+      await TaskModel.update(task.id, { quantityDelivered: newDelivered });
+
+      if (task.item_reference) {
+        await recalculateStockAllocation(task.item_reference);
       }
 
       await TaskHistoryModel.log({
-        taskId: updatedTask.id,
+        taskId: task.id,
         actorId: req.user.id,
-        actionType: 'status_updated',
-        fieldName: 'status',
-        oldValue: 'DONE',
-        newValue: 'DELIVERED',
-        message: `Statut changé de ${TASK_STATUS_LABELS['DONE']} vers ${TASK_STATUS_LABELS['DELIVERED']}`,
+        actionType: 'partial_delivery',
+        fieldName: 'quantity_delivered',
+        oldValue: String(alreadyDelivered),
+        newValue: String(newDelivered),
+        message: `Livraison partielle : +${thisShip} pcs — ${newDelivered}/${total} livrés (${pct} %)`,
       });
 
-      // Notify planners + assigned commercial — one batch each (no N+1)
-      const planners = await UserModel.findByRoles(['planner', 'super_admin']);
-      const plannerIds = planners.map((p) => p.id).filter((id) => id !== req.user.id);
-
-      // Collect all commercial recipients: assigned_to + all other commercials
-      const allCommercials = await UserModel.findByRoles(['commercial']);
-      const commercialIds = allCommercials.map((c) => c.id).filter((id) => id !== req.user.id);
-
-      const allRecipients = [...new Set([...plannerIds, ...commercialIds])];
-      if (allRecipients.length > 0) {
-        await NotificationModel.createStatusChangedNotificationBatch({
-          taskId: updatedTask.id,
-          recipientUserIds: allRecipients,
-          changedByName: req.user.name || 'Livreur',
-          oldStatusLabel: TASK_STATUS_LABELS['DONE'],
-          newStatusLabel: TASK_STATUS_LABELS['DELIVERED'],
+      if (recipientIds.length > 0) {
+        await NotificationModel.createPartialDeliveryNotificationBatch({
+          taskId: task.id,
+          recipientUserIds: recipientIds,
+          livreurName,
+          thisShip,
+          newDelivered,
+          total,
+          pct,
+          remaining: total - newDelivered,
+          taskTitle: task.title,
         });
       }
 
-      broadcast('tasks-updated', { source: 'mark_delivered', taskId: updatedTask.id });
-
-      return res.json(updatedTask);
+      broadcast('tasks-updated', { source: 'partial_delivery', taskId: task.id });
+      return res.json(await TaskModel.getById(task.id));
     } catch (err) {
       console.error('markDelivered error:', err);
       return res.status(500).json({ error: 'Erreur serveur' });
+    } finally {
+      if (lockClient) {
+        try { await lockClient.query('COMMIT'); } catch (_) {
+          try { await lockClient.query('ROLLBACK'); } catch (__) { /* ignore */ }
+        }
+        try { lockClient.release(); } catch (_) { /* ignore */ }
+      }
     }
   }
 };

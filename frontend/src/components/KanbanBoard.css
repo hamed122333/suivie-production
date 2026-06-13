@@ -513,7 +513,8 @@
 
 @media (max-width: 720px) {
   .kanban-board-wrap {
-    padding-inline: 0.9rem;
+    padding-inline: 0.5rem;
+    scroll-snap-type: x proximity;
   }
 
   .kanban-board__heading {
@@ -526,8 +527,14 @@
     overflow-x: auto;
   }
 
+  .kanban-board {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .kanban-column {
-    flex-basis: 88vw;
+    flex-basis: min(88vw, 340px);
+    scroll-snap-align: start;
   }
 }
 

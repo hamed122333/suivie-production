@@ -125,8 +125,11 @@ const Header = () => {
     const taskId = notification.task_id;
     if (notification.type === 'task_created' || notification.type === 'orders_imported') {
       navigate('/orders');
-    } else if (notification.type === 'ready_to_deliver') {
-      // Livreur: go straight to kanban scoped to DONE column
+    } else if (
+      notification.type === 'ready_to_deliver'
+      || notification.type === 'partial_delivery'
+      || notification.type === 'delivery_completed'
+    ) {
       navigate(taskId ? `/kanban?taskId=${taskId}` : '/kanban');
     } else {
       navigate(taskId ? `/kanban?taskId=${taskId}` : '/kanban');
@@ -288,12 +291,17 @@ const Header = () => {
       </div>
 
       {/* Navigation */}
-      <nav className="header-nav" aria-label="Navigation principale">
+      <nav className="header-nav header-nav--mobile-bottom" aria-label="Navigation principale">
         {navItem('/kanban', 'Production', '▤')}
         {canViewPending && navItem('/orders', 'Commandes', '◈', pendingCount)}
         {navItem('/dashboard', 'Dashboard', '◱')}
         {navItem('/stock', 'Stock', '▦')}
-        {isSuperAdmin && navItem('/users', 'Utilisateurs', '◉')}
+        {isSuperAdmin && (
+          <Link to="/users" className="header-nav__link header-nav__link--desktop-only">
+            <span className="header-nav__icon" aria-hidden>◉</span>
+            Utilisateurs
+          </Link>
+        )}
       </nav>
     </header>
   );

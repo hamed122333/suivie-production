@@ -196,6 +196,34 @@ function normalizeCommentBody(body) {
   return value;
 }
 
+/**
+ * Valide la quantité d'une préparation PARTIELLE : entier strict, 0 < prepared < total.
+ * Fonction pure (testable) → renvoie { ok, value } ou { ok:false, error }.
+ */
+function validatePartialPreparationQuantity(prepared, total) {
+  const t = Math.round(Number(total));
+  const p = Math.round(Number(prepared));
+  if (!Number.isFinite(p)) return { ok: false, error: 'Quantité préparée invalide.' };
+  if (p <= 0) return { ok: false, error: 'La quantité préparée doit être supérieure à 0.' };
+  if (p >= t) return { ok: false, error: 'Quantité préparée invalide (entre 1 et la quantité totale - 1).' };
+  return { ok: true, value: p };
+}
+
+/**
+ * Valide la quantité d'une LIVRAISON (partielle ou complète) : entier, 1 ≤ ship ≤ remaining.
+ * Fonction pure (testable).
+ */
+function validateDeliveryQuantity(thisShip, remaining) {
+  const r = Math.round(Number(remaining));
+  const s = Math.round(Number(thisShip));
+  if (!Number.isFinite(s)) return { ok: false, error: 'Quantité de livraison invalide.' };
+  if (s <= 0) return { ok: false, error: 'La quantité livrée doit être supérieure à 0.' };
+  if (s > r) {
+    return { ok: false, error: r === 1 ? 'Il reste 1 pièce — utilisez la livraison complète.' : `Quantité invalide (entre 1 et ${r}).` };
+  }
+  return { ok: true, value: s };
+}
+
 module.exports = {
   normalizeCreationStatus,
   normalizeCommentBody,
@@ -203,4 +231,6 @@ module.exports = {
   normalizeTaskDraft,
   normalizeTaskMetadata,
   normalizeTaskUpdatePayload,
+  validatePartialPreparationQuantity,
+  validateDeliveryQuantity,
 };

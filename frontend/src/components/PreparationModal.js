@@ -1,85 +1,151 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Modal, Button, Input } from './ui';
 import { formatQuantity } from '../utils/formatters';
+import { WorkflowStepper, WorkflowTaskSummary } from './WorkflowModalShared';
 
-/**
- * Modal affiché lorsque le planificateur passe une commande en préparation
- * (drag « À Préparer » → « En Préparation »).
- *
- * - « Complète »  → toute la quantité passe en préparation (flux normal).
- * - « Partielle » → saisie de la quantité préparée ; le reste est calculé,
- *   et le commercial responsable sera notifié pour validation client.
- *
- * @param {object} task            Tâche déplacée
- * @param {boolean} working        Action en cours
- * @param {() => void} onClose     Annuler (la fiche ne bouge pas)
- * @param {({mode, quantity}) => void} onConfirm  mode = 'COMPLETE' | 'PARTIAL'
- */
+const MIN_PARTIAL_QTY = 1;
+
+function defaultQty(total) {
+  if (total <= 1) return '';
+  const max = total - 1;
+  return String(Math.min(max, Math.max(MIN_PARTIAL_QTY, Math.floor(total / 2))));
+}
+
+function parseQty(value, total) {
+  const max = Math.max(MIN_PARTIAL_QTY, total - 1);
+  const n = parseInt(String(value).trim(), 10);
+  if (!Number.isFinite(n)) return null;
+  if (n < MIN_PARTIAL_QTY || n > max) return null;
+  return n;
+}
+
 function PreparationModal({ task, working = false, onClose, onConfirm }) {
   const total = Math.round(Number(task?.quantity || 0));
-  const [mode, setMode] = useState('COMPLETE');
-  const [quantity, setQuantity] = useState(() => (total > 1 ? Math.floor(total / 2) : ''));
+  const maxPartial = Math.max(MIN_PARTIAL_QTY, total - 1);
 
-  const prepared = Number(quantity);
-  const partialInvalid = mode === 'PARTIAL' && (!Number.isFinite(prepared) || prepared <= 0 || prepared >= total);
-  const remaining = mode === 'PARTIAL' && !partialInvalid ? total - Math.round(prepared) : 0;
-  const progress = useMemo(() => {
-    if (mode !== 'PARTIAL' || partialInvalid || total <= 0) return mode === 'COMPLETE' ? 100 : 0;
-    return Math.max(0, Math.min(100, Math.round((prepared / total) * 100)));
-  }, [mode, prepared, total, partialInvalid]);
+  const [mode, setMode] = useState('COMPLETE');
+  const [quantity, setQuantity] = useState(() => defaultQty(total));
 
   if (!task) return null;
 
+  const prepared = parseQty(quantity, total);
+  const partialReady = mode !== 'PARTIAL' || prepared != null;
+  const remaining = prepared != null ? total - prepared : 0;
+  const prepPct = prepared != null && total > 0 ? Math.round((prepared / total) * 100) : 0;
+  const remainPct = prepared != null && total > 0 ? 100 - prepPct : 0;
+
+  const handleClose = () => {
+    if (!working) onClose();
+  };
+
+  const handleConfirm = () => {
+    if (mode === 'PARTIAL') {
+      const n = parseQty(quantity, total);
+      if (n == null) return;
+      onConfirm({ mode, quantity: n });
+      return;
+    }
+    onConfirm({ mode, quantity: total });
+  };
+
   const footer = (
     <>
-      <Button variant="ghost" onClick={onClose} disabled={working}>Annuler</Button>
-      <Button
-        variant="primary"
-        loading={working}
-        disabled={partialInvalid}
-        onClick={() => onConfirm({ mode, quantity: mode === 'PARTIAL' ? Math.round(prepared) : total })}
-      >
-        Confirmer
+      <Button variant="ghost" onClick={handleClose} disabled={working}>Annuler</Button>
+      <Button variant="primary" loading={working} disabled={!partialReady} onClick={handleConfirm}>
+        {mode === 'PARTIAL' ? 'Envoyer au commercial' : 'Lancer la préparation'}
       </Button>
     </>
   );
 
   return (
-    <Modal isOpen onClose={onClose} title="Passage en préparation" size="sm" footer={footer}>
-      <p style={{ margin: 0, marginBottom: 'var(--space-4)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
-        Commande <strong>{task.title}</strong> — quantité totale <strong>{formatQuantity(total)}</strong>
-      </p>
+    <Modal
+      isOpen
+      onClose={handleClose}
+      title="Passage en préparation"
+      size="md"
+      className="wf-modal"
+      closeOnOverlay={!working}
+      closeOnEsc={!working}
+      footer={footer}
+    >
+      <div className="wf-modal__layout">
+        <WorkflowStepper fromStatus="TODO" toStatus="IN_PROGRESS" compact />
+        <p className="wf-modal__lead">
+          Indiquez si toute la quantité part en production ou seulement une partie.
+        </p>
 
-      <div style={{ display: 'grid', gap: '0.6rem', marginBottom: 'var(--space-4)' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, cursor: 'pointer' }}>
-          <input type="radio" name="prep-mode" value="COMPLETE" checked={mode === 'COMPLETE'} disabled={working} onChange={() => setMode('COMPLETE')} />
-          Préparation complète ({formatQuantity(total)})
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, cursor: 'pointer' }}>
-          <input type="radio" name="prep-mode" value="PARTIAL" checked={mode === 'PARTIAL'} disabled={working} onChange={() => setMode('PARTIAL')} />
-          Préparation partielle
-        </label>
+        <hr className="wf-modal__divider" />
+
+        <WorkflowTaskSummary task={task} />
+
+        <hr className="wf-modal__divider" />
+
+        <span className="wf-modal__label" id="prep-mode-label">Type de préparation</span>
+        <div className="wf-modal__choice-grid" role="radiogroup" aria-labelledby="prep-mode-label">
+          <label className={`wf-modal__choice${mode === 'COMPLETE' ? ' wf-modal__choice--selected' : ''}`}>
+            <input type="radio" name="prep-mode" checked={mode === 'COMPLETE'} disabled={working} onChange={() => setMode('COMPLETE')} />
+            <span className="wf-modal__choice-title">Complète</span>
+            <span className="wf-modal__choice-desc">{formatQuantity(total)} pcs</span>
+          </label>
+
+          <label className={`wf-modal__choice${mode === 'PARTIAL' ? ' wf-modal__choice--selected' : ''}${total <= 1 ? ' wf-modal__choice--disabled' : ''}`}>
+            <input
+              type="radio"
+              name="prep-mode"
+              checked={mode === 'PARTIAL'}
+              disabled={working || total <= 1}
+              onChange={() => {
+                setMode('PARTIAL');
+                if (!quantity) setQuantity(defaultQty(total));
+              }}
+            />
+            <span className="wf-modal__choice-title">Partielle</span>
+            <span className="wf-modal__choice-desc">
+              {total <= 1 ? 'Non disponible' : 'Reliquat à valider par le client'}
+            </span>
+          </label>
+        </div>
+
+        {mode === 'PARTIAL' && total > 1 && (
+          <>
+            <Input
+              id="prep-qty-input"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              label="Quantité préparable maintenant"
+              value={quantity}
+              disabled={working}
+              onChange={(e) => setQuantity(e.target.value.replace(/\D/g, ''))}
+              hint={`Entre ${MIN_PARTIAL_QTY} et ${maxPartial} sur ${formatQuantity(total)} pcs`}
+            />
+            {prepared != null && (
+              <div className="wf-modal__pct">
+                <span className="wf-modal__label">Répartition</span>
+                <div
+                  className="wf-modal__pct-bar"
+                  role="img"
+                  aria-label={`${prepPct} % en préparation, ${remainPct} % en reliquat`}
+                >
+                  <div className="wf-modal__pct-bar-seg wf-modal__pct-bar-seg--prep" style={{ width: `${prepPct}%` }} />
+                  <div className="wf-modal__pct-bar-seg wf-modal__pct-bar-seg--remain" style={{ width: `${remainPct}%` }} />
+                </div>
+                <div className="wf-modal__pct-row">
+                  <span>
+                    Préparation <strong>{prepPct}%</strong>
+                    <em>{formatQuantity(prepared)} pcs</em>
+                  </span>
+                  <span>
+                    Reliquat <strong>{remainPct}%</strong>
+                    <em>{formatQuantity(remaining)} pcs</em>
+                  </span>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
-
-      {mode === 'PARTIAL' && (
-        <>
-          <Input
-            type="number"
-            label="Quantité préparable maintenant"
-            min="1"
-            max={Math.max(1, total - 1)}
-            value={quantity}
-            disabled={working}
-            onChange={(e) => setQuantity(e.target.value)}
-            hint="Le commercial responsable sera notifié pour validation client."
-          />
-          <div style={{ marginTop: 'var(--space-4)', padding: '0.75rem', borderRadius: 8, background: '#f8fafc', color: '#334155', fontSize: 'var(--font-size-sm)' }}>
-            <div><strong>Préparé :</strong> {partialInvalid ? '—' : formatQuantity(prepared)} / {formatQuantity(total)} ({progress}%)</div>
-            <div><strong>Restant (reliquat) :</strong> {partialInvalid ? '—' : formatQuantity(remaining)}</div>
-          </div>
-        </>
-      )}
     </Modal>
   );
 }

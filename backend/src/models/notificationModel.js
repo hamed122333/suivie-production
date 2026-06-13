@@ -320,6 +320,76 @@ const NotificationModel = {
   },
 
   /**
+   * Livraison partielle cumulative — notifier le commercial responsable + planificateurs.
+   */
+  async createPartialDeliveryNotificationBatch({
+    taskId,
+    recipientUserIds,
+    livreurName,
+    thisShip,
+    newDelivered,
+    total,
+    pct,
+    remaining,
+    taskTitle,
+  }) {
+    if (!taskId || !Array.isArray(recipientUserIds) || recipientUserIds.length === 0) return;
+    const title = `Livraison partielle — SP-${taskId} (${pct} %)`;
+    const body = `${livreurName || 'Le livreur'} a livré ${thisShip} pcs pour SP-${taskId}${taskTitle ? ` (${taskTitle})` : ''}. `
+      + `Progression : ${newDelivered}/${total} livrés — il reste ${remaining} pcs en « Prêt à Livrer ».`;
+    const values = [];
+    const placeholders = [];
+    let index = 1;
+    for (const uid of recipientUserIds) {
+      values.push(uid, taskId, 'partial_delivery', title, body);
+      placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
+      index += 5;
+    }
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ${placeholders.join(', ')}`,
+      values
+    );
+    broadcast('notifications-updated', { type: 'partial_delivery', taskId });
+  },
+
+  /**
+   * Livraison complète (100 %) — y compris clôture après livraisons partielles.
+   */
+  async createDeliveryCompletedNotificationBatch({
+    taskId,
+    recipientUserIds,
+    livreurName,
+    total,
+    completedAfterPartial,
+    lastShip,
+    taskTitle,
+  }) {
+    if (!taskId || !Array.isArray(recipientUserIds) || recipientUserIds.length === 0) return;
+    const title = completedAfterPartial
+      ? `Livraison terminée — SP-${taskId}`
+      : `Commande livrée — SP-${taskId}`;
+    const body = completedAfterPartial
+      ? `${livreurName || 'Le livreur'} a terminé la livraison de SP-${taskId}${taskTitle ? ` (${taskTitle})` : ''} `
+        + `(+${lastShip} pcs, ${total}/${total} — 100 %).`
+      : `${livreurName || 'Le livreur'} a livré SP-${taskId}${taskTitle ? ` (${taskTitle})` : ''} : ${total} pcs — commande complète.`;
+    const values = [];
+    const placeholders = [];
+    let index = 1;
+    for (const uid of recipientUserIds) {
+      values.push(uid, taskId, 'delivery_completed', title, body);
+      placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
+      index += 5;
+    }
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ${placeholders.join(', ')}`,
+      values
+    );
+    broadcast('notifications-updated', { type: 'delivery_completed', taskId });
+  },
+
+  /**
    * Batch-insert status-change notifications for multiple recipients.
    * One SQL statement instead of N individual INSERTs — eliminates N+1.
    */

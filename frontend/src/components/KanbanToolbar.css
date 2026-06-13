@@ -234,7 +234,15 @@
 }
 
 @media (max-width: 768px) {
-  .kanban-toolbar__main   { padding: 0.5rem 0.75rem; }
-  .kanban-toolbar__search { flex: 0 0 100%; }
+  .kanban-toolbar__main   { padding: 0.5rem 0.75rem; gap: 0.35rem; }
+  .kanban-toolbar__search { flex: 0 0 100%; min-width: 0; }
   .kanban-toolbar__wstats { display: none; }
+  .kanban-toolbar__window-row { min-height: auto; }
+  .kanban-toolbar__daybars { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .kanban-toolbar__right { flex-wrap: wrap; gap: 0.5rem; }
+}
+
+@media (max-width: 480px) {
+  .kanban-toolbar__reset span { display: none; }
+  .kanban-toolbar__checkbox { font-size: 0.7rem; padding: 0 0.4rem; }
 }

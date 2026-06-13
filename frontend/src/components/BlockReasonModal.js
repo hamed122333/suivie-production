@@ -1,87 +1,133 @@
 import React, { useState } from 'react';
-import { IconClose } from './ui/icons';
+import PropTypes from 'prop-types';
+import { Modal, Button, Select } from './ui';
+import { WorkflowStepper, WorkflowTaskSummary } from './WorkflowModalShared';
 
 const COMMON_REASONS = [
-  'Rupture de matiere premiere',
-  'Machine occupee ou en maintenance',
+  'Rupture de matière première',
+  'Machine occupée ou en maintenance',
   'Manque de personnel',
   'Attente de validation',
   'Retard fournisseur',
-  'Probleme technique',
+  'Problème technique',
 ];
 
-const BlockReasonModal = ({ task, onConfirm, onCancel }) => {
+function BlockReasonModal({ task, onConfirm, onCancel }) {
   const [reason, setReason] = useState('');
   const [custom, setCustom] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!reason.trim()) return;
-    onConfirm(reason.trim());
+  if (!task) return null;
+
+  const fromStatus = task.status === 'BLOCKED' ? 'IN_PROGRESS' : task.status;
+
+  const handleClose = () => {
+    if (!submitting) onCancel();
   };
 
-  return (
-    <div className="modal-overlay">
-      <div className="modal-content">
-        <div className="modal-header">
-          <h3 className="modal-title">🚫 Bloquer la tache</h3>
-          <button className="modal-close" onClick={onCancel} title="Fermer" aria-label="Fermer"><IconClose /></button>
-        </div>
-        <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '1rem' }}>
-          Tache : <strong>{task?.title}</strong>
-        </p>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Motif du blocage</label>
-            {!custom ? (
-              <>
-                <select
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  style={{ marginBottom: '0.5rem' }}
-                >
-                  <option value="">Selectionner un motif...</option>
-                  {COMMON_REASONS.map(r => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setCustom(true)}
-                  style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}
-                >
-                  + Saisir un motif personnalise
-                </button>
-              </>
-            ) : (
-              <>
-                <textarea
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Decrire le motif du blocage..."
-                  rows={3}
-                  style={{ resize: 'vertical' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => { setCustom(false); setReason(''); }}
-                  style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}
-                >
-                  Revenir a la liste
-                </button>
-              </>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
-            <button type="button" className="btn btn-secondary" onClick={onCancel}>Annuler</button>
-            <button type="submit" className="btn btn-danger" disabled={!reason.trim()}>
-              Confirmer le blocage
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!reason.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      await onConfirm(reason.trim());
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const footer = (
+    <>
+      <Button variant="ghost" onClick={handleClose} disabled={submitting}>Annuler</Button>
+      <Button
+        variant="danger"
+        type="submit"
+        form="block-reason-form"
+        disabled={!reason.trim()}
+        loading={submitting}
+      >
+        Confirmer le blocage
+      </Button>
+    </>
   );
+
+  return (
+    <Modal
+      isOpen
+      onClose={handleClose}
+      title="Bloquer la commande"
+      size="md"
+      className="wf-modal"
+      closeOnOverlay={!submitting}
+      closeOnEsc={!submitting}
+      footer={footer}
+    >
+      <form id="block-reason-form" className="wf-modal__layout" onSubmit={handleSubmit}>
+        <WorkflowStepper fromStatus={fromStatus} toStatus="BLOCKED" compact />
+        <p className="wf-modal__lead">
+          Sélectionnez ou saisissez le motif du blocage.
+        </p>
+
+        <hr className="wf-modal__divider" />
+
+        <WorkflowTaskSummary task={task} />
+
+        <hr className="wf-modal__divider" />
+
+        {!custom ? (
+          <>
+            <Select
+              label="Motif"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              disabled={submitting}
+              placeholder="Sélectionner un motif…"
+              options={COMMON_REASONS.map((r) => ({ value: r, label: r }))}
+            />
+            <button
+              type="button"
+              className="wf-modal__link"
+              disabled={submitting}
+              onClick={() => setCustom(true)}
+            >
+              Saisir un motif personnalisé
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="ui-field">
+              <label className="ui-field__label" htmlFor="block-custom-reason">
+                Motif personnalisé
+              </label>
+              <textarea
+                id="block-custom-reason"
+                className="ui-field__control wf-modal__textarea"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Décrire le motif…"
+                rows={3}
+                disabled={submitting}
+              />
+            </div>
+            <button
+              type="button"
+              className="wf-modal__link wf-modal__link--muted"
+              disabled={submitting}
+              onClick={() => { setCustom(false); setReason(''); }}
+            >
+              Revenir à la liste
+            </button>
+          </>
+        )}
+      </form>
+    </Modal>
+  );
+}
+
+BlockReasonModal.propTypes = {
+  task: PropTypes.object,
+  onConfirm: PropTypes.func.isRequired,
+  onCancel: PropTypes.func.isRequired,
 };
 
 export default BlockReasonModal;

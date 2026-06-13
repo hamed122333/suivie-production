@@ -50,4 +50,21 @@ describe('Modal', () => {
     render(<Modal isOpen onClose={() => {}} title="T" footer={<span>pied</span>}>x</Modal>);
     expect(screen.getByText('pied')).toBeInTheDocument();
   });
+
+  test('ne vole pas le focus d\'un champ lors d\'un re-render', () => {
+    const Stateful = () => {
+      const [value, setValue] = React.useState('');
+      return (
+        <Modal isOpen onClose={() => {}} title="Saisie">
+          <input aria-label="quantité" value={value} onChange={(e) => setValue(e.target.value)} />
+        </Modal>
+      );
+    };
+    render(<Stateful />);
+    const input = screen.getByLabelText('quantité');
+    input.focus();
+    fireEvent.change(input, { target: { value: '12' } });
+    expect(document.activeElement).toBe(input);
+    expect(input).toHaveValue('12');
+  });
 });
