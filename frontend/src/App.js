@@ -9,6 +9,7 @@ import KanbanPage from "./pages/KanbanPage";
 import UsersPage from "./pages/UsersPage";
 import StockPage from "./pages/StockPage";
 import OrdersReviewPage from "./pages/OrdersReviewPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -59,10 +60,11 @@ const AppRoutes = () => {
       <Route path="/dashboard" element={<ProtectedRoute><Layout><DashboardPage /></Layout></ProtectedRoute>} />
       <Route path="/reports"   element={<Navigate to="/dashboard" replace />} />
       <Route path="/kanban"    element={<ProtectedRoute><Layout><KanbanPage /></Layout></ProtectedRoute>} />
-      <Route path="/orders"         element={<ProtectedRoute><RoleRoute allow={['super_admin', 'planner', 'commercial']}><Layout><OrdersReviewPage /></Layout></RoleRoute></ProtectedRoute>} />
+      <Route path="/orders"         element={<ProtectedRoute><RoleRoute allow={['super_admin', 'planner', 'commercial', 'importer']}><Layout><OrdersReviewPage /></Layout></RoleRoute></ProtectedRoute>} />
       <Route path="/pending-orders" element={<Navigate to="/orders" replace />} />
       <Route path="/my-orders"      element={<Navigate to="/orders" replace />} />
       <Route path="/users"     element={<ProtectedRoute><RoleRoute allow={['super_admin']}><Layout><UsersPage /></Layout></RoleRoute></ProtectedRoute>} />
+      <Route path="/analytics" element={<ProtectedRoute><RoleRoute allow={['super_admin']}><Layout><AnalyticsPage /></Layout></RoleRoute></ProtectedRoute>} />
       <Route path="/stock"     element={<ProtectedRoute><Layout><StockPage /></Layout></ProtectedRoute>} />
       <Route path="/"          element={<Navigate to="/kanban" replace />} />
     </Routes>

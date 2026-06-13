@@ -87,15 +87,16 @@ export const AuthProvider = ({ children }) => {
         isPlanner: user?.role === 'planner',
         isCommercial: user?.role === 'commercial',
         isLivreur: user?.role === 'livreur',
+        isImporter: user?.role === 'importer',
         // Le commercial cree les taches, uniquement dans TODO.
         canCreateTask: user?.role === 'commercial',
         canCreateWorkspace: false, // workspaces are now generated automatically each day
-        // Le super_admin et le planner ont une vue globale.
-        canViewAll: user?.role === 'super_admin' || user?.role === 'planner',
-        // Le planificateur gère les mouvements et les statuts.
+        // Vue globale (lecture) : super_admin (observateur), planner, importateur.
+        canViewAll: ['super_admin', 'planner', 'importer'].includes(user?.role),
+        // Le planificateur gère les mouvements et les statuts (super_admin = lecture seule).
         canChangeStatus: user?.role === 'planner',
-        // Le livreur (ou super_admin) peut marquer une tâche comme livrée.
-        canMarkDelivered: user?.role === 'livreur' || user?.role === 'super_admin',
+        // Seul le livreur marque une tâche comme livrée.
+        canMarkDelivered: user?.role === 'livreur',
       }}
     >
       {children}

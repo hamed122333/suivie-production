@@ -148,7 +148,7 @@ const KanbanBoard = ({
   filterCommercial = '',
   filterDate = null,
 }) => {
-  const { canChangeStatus, canCreateTask, isCommercial, isSuperAdmin, isLivreur, canMarkDelivered, user } = useAuth();
+  const { canChangeStatus, canCreateTask, isCommercial, isLivreur, canMarkDelivered, user } = useAuth();
 
   // Build the column list based on the current user's role
   const COLUMNS = useMemo(() => {
@@ -621,7 +621,7 @@ const KanbanBoard = ({
                         task={task}
                         onOpen={(currentTask) => handleSelectTask(currentTask.id)}
                         isDragging={false}
-                        canEdit={canChangeStatus || canCreateTask || isSuperAdmin}
+                        canEdit={canChangeStatus || canCreateTask}
                         onEdit={handleEditTask}
                         onDelete={handleDeleteTask}
                       />

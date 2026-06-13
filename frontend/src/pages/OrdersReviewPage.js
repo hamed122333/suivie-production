@@ -263,13 +263,13 @@ function DetailModal({ task, onClose, onApprove, onReject, working, canApprove }
 // ─────────────────────────────────────────────────────────────────────────────
 
 const OrdersReviewPage = () => {
-  const { isSuperAdmin, isPlanner, isCommercial } = useAuth();
+  const { isSuperAdmin, isPlanner, isCommercial, isImporter } = useAuth();
   const { refreshWorkspaces, selectWorkspace } = useWorkspace();
 
   // Permissions
-  const canManage   = isSuperAdmin;                 // import (correction = héritage à l'import)
-  const canApprove  = isSuperAdmin || isCommercial; // approve / reject
-  const isGrouped   = isSuperAdmin || isPlanner;    // grouped-by-commercial view
+  const canManage   = isImporter;                   // import Excel + correction des anomalies
+  const canApprove  = isCommercial;                 // validation/refus client (commercial)
+  const isGrouped   = isSuperAdmin || isPlanner;    // vue groupée par commercial (spectateurs)
 
   const [tasks, setTasks]                 = useState([]);
   const [loading, setLoading]             = useState(true);

@@ -51,7 +51,8 @@ const StockPage = () => {
   const handleImported = () => { fetchStock(); };
   const handleManualAdded = () => { fetchStock(); };
 
-  const isPlanner = user?.role === 'planner' || user?.role === 'super_admin';
+  // Saisie/import stock : planificateur (opérationnel) + importateur. (super_admin = lecture seule)
+  const canEditStock = user?.role === 'planner' || user?.role === 'importer';
 
   const safeArray = useMemo(() => Array.isArray(stockItems) ? stockItems : [], [stockItems]);
 
@@ -230,7 +231,7 @@ const StockPage = () => {
             </select>
           </div>
 
-          {isPlanner && (
+          {canEditStock && (
             <div className="buttons-group">
               <button className="btn btn-outline" onClick={() => setIsManualModalOpen(true)}>Ajout Manuel</button>
               <button className="btn btn-secondary" onClick={() => setIsModalOpen(true)}>Importer Excel</button>

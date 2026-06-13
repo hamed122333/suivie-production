@@ -1,6 +1,9 @@
 const { createHttpError } = require('./httpErrors');
 
-const PRIVILEGED_TASK_ROLES = new Set(['super_admin', 'planner']);
+// super_admin/planner : vue complète. importer : vue complète aussi (il importe
+// et corrige les anomalies des commandes), mais ses droits d'action sont limités
+// aux imports/corrections côté routes.
+const PRIVILEGED_TASK_ROLES = new Set(['super_admin', 'planner', 'importer']);
 
 function isPrivilegedTaskRole(role) {
   return PRIVILEGED_TASK_ROLES.has(role);

@@ -7,13 +7,13 @@ const { authenticate, requireSuperAdmin, requireRoles } = require('../middleware
 // Récupérer tous les utilisateurs — réservé aux rôles qui en ont besoin
 // (filtres/affectations). Évite la divulgation des emails de tous les comptes
 // aux rôles non privilégiés (commercial/livreur/user).
-router.get('/', authenticate, requireRoles(['planner', 'super_admin']), userController.getAll);
+router.get('/', authenticate, requireRoles(['planner', 'super_admin', 'importer']), userController.getAll);
 
 // Créer un utilisateur : super admin uniquement
 router.post('/', authenticate, requireSuperAdmin, userController.create);
 
-// Importer une liste de commerciaux : super admin uniquement
-router.post('/import-commercials', authenticate, requireSuperAdmin, upload.single('file'), userController.importCommercials);
+// Importer une liste de commerciaux : importateur (rôle dédié aux imports)
+router.post('/import-commercials', authenticate, requireRoles(['importer']), upload.single('file'), userController.importCommercials);
 
 // Modifier un utilisateur : super admin uniquement
 router.put('/:id', authenticate, requireSuperAdmin, userController.update);

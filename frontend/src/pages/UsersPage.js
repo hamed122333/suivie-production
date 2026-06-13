@@ -13,6 +13,7 @@ const ROLE_CONFIG = {
   planner: { label: 'Planificateur', color: '#0052cc', bg: '#deebff' },
   commercial: { label: 'Commercial', color: '#b45309', bg: '#fef3c7' },
   livreur: { label: 'Livreur', color: '#065f46', bg: '#d1fae5' },
+  importer: { label: 'Importateur', color: '#0e7490', bg: '#cffafe' },
   user: { label: 'Utilisateur', color: '#374151', bg: '#f3f4f6' },
 };
 
@@ -20,11 +21,21 @@ const ROLE_PERMISSIONS = [
   {
     key: 'super_admin',
     title: 'Super Admin',
-    summary: 'Accès complet',
+    summary: 'Observateur + comptes',
     items: [
-      'Créer des utilisateurs',
-      'Gérer toutes les tâches',
-      'Mettre à jour tous les statuts',
+      'Gérer les utilisateurs',
+      'Voir toutes les pages (lecture seule)',
+      'Page Analytics (performance)',
+    ],
+  },
+  {
+    key: 'importer',
+    title: 'Importateur',
+    summary: 'Imports Excel',
+    items: [
+      'Importer commandes / stock / commerciaux',
+      'Corriger les anomalies des commandes',
+      'Aucune autre action',
     ],
   },
   {
@@ -382,7 +393,8 @@ const UsersPage = () => {
                   <option value="commercial">Commercial (crée les tâches)</option>
                   <option value="planner">Planificateur (gère les statuts)</option>
                   <option value="livreur">Livreur (marque les livraisons)</option>
-                  <option value="super_admin">Super Admin (accès complet)</option>
+                  <option value="importer">Importateur (imports Excel)</option>
+                  <option value="super_admin">Super Admin (observateur + comptes)</option>
                   <option value="user">Utilisateur</option>
                 </select>
               </div>

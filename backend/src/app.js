@@ -10,6 +10,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const workspaceRoutes = require('./routes/workspaceRoutes');
 const stockImportRoutes = require('./routes/stockImportRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 const { addClient } = require('./services/sseService');
 const errorHandler = require('./middleware/errorHandler');
 const pool = require('./config/db');
@@ -133,6 +134,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/stock-import', stockImportRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 app.get('/', (req, res) => {
   res.send('API Suivi Production is running. Access the frontend app instead.');

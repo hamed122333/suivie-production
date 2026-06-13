@@ -8,7 +8,11 @@ if (isProduction && !JWT_SECRET) {
   throw new Error('JWT_SECRET environment variable is required in production');
 }
 
-const hasRole = (userRole, allowed) => userRole === 'super_admin' || allowed.includes(userRole);
+// NB : plus de « pass implicite » super_admin. Le super_admin est désormais
+// observateur (lecture seule) + gestion utilisateurs ; il doit être listé
+// EXPLICITEMENT là où il a le droit (lecture, /users). Les mutations
+// opérationnelles ne l'incluent volontairement plus.
+const hasRole = (userRole, allowed) => allowed.includes(userRole);
 
 const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;

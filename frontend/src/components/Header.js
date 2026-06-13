@@ -19,7 +19,7 @@ const ROLE_CONFIG = {
 const NOTIFICATION_POLL_INTERVAL_MS = 60000;
 
 const Header = () => {
-  const { user, logout, isSuperAdmin, isPlanner, isCommercial, isLivreur } = useAuth();
+  const { user, logout, isSuperAdmin, isPlanner, isCommercial, isLivreur, isImporter } = useAuth();
   // Keep workspace context imported for notification navigation (selectWorkspace)
   const { selectWorkspace } = useWorkspace();
   const location = useLocation();
@@ -31,9 +31,9 @@ const Header = () => {
   const [notifLoading, setNotifLoading] = useState(false);
   const menuRef = useRef(null);
   const notifRef = useRef(null);
-  const canViewNotifications = isSuperAdmin || isPlanner || isCommercial || isLivreur;
-  // /orders nav link + badge: super_admin, commercial, planner (planner read-only)
-  const canViewPending = isSuperAdmin || isCommercial || isPlanner;
+  const canViewNotifications = isSuperAdmin || isPlanner || isCommercial || isLivreur || isImporter;
+  // /orders nav link + badge: super_admin (lecture), commercial, planner, importateur
+  const canViewPending = isSuperAdmin || isCommercial || isPlanner || isImporter;
   const [pendingCount, setPendingCount] = useState(0);
 
   const roleInfo = ROLE_CONFIG[user?.role] || ROLE_CONFIG.user;
@@ -296,6 +296,7 @@ const Header = () => {
         {canViewPending && navItem('/orders', 'Commandes', '◈', pendingCount)}
         {navItem('/dashboard', 'Dashboard', '◱')}
         {navItem('/stock', 'Stock', '▦')}
+        {isSuperAdmin && navItem('/analytics', 'Analytics', '◷')}
         {isSuperAdmin && (
           <Link to="/users" className="header-nav__link header-nav__link--desktop-only">
             <span className="header-nav__icon" aria-hidden>◉</span>

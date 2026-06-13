@@ -93,6 +93,10 @@ export const dashboardAPI = {
   getStats: (workspaceId = null) => api.get('/dashboard', { params: workspaceId ? { workspaceId } : {} }),
 };
 
+export const analyticsAPI = {
+  commercials: () => api.get('/analytics/commercials'),
+};
+
 export const workspaceAPI = {
   getAll: () => api.get('/workspaces'),
   create: (data) => api.post('/workspaces', data),

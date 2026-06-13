@@ -8,16 +8,16 @@ const { authenticate, requireRoles } = require('../middleware/auth');
 router.post(
   '/upload',
   authenticate,
-  requireRoles(['planner', 'super_admin']),
+  requireRoles(['planner', 'importer']),
   upload.single('file'),
   stockImportController.upload
 );
 
-// Manually add stock — planner and super_admin only
+// Manually add stock — planner et importateur
 router.post(
   '/manual',
   authenticate,
-  requireRoles(['planner', 'super_admin']),
+  requireRoles(['planner', 'importer']),
   stockImportController.createManual
 );
 
@@ -34,7 +34,7 @@ router.get('/:id/active-tasks', authenticate, stockImportController.getActiveTas
 router.put(
   '/:id',
   authenticate,
-  requireRoles(['planner', 'super_admin']),
+  requireRoles(['planner']),
   stockImportController.update
 );
 
@@ -42,7 +42,7 @@ router.put(
 router.delete(
   '/:id',
   authenticate,
-  requireRoles(['planner', 'super_admin']),
+  requireRoles(['planner']),
   stockImportController.delete
 );
 
@@ -50,7 +50,7 @@ router.delete(
 router.patch(
   '/:id/adjust',
   authenticate,
-  requireRoles(['planner', 'super_admin']),
+  requireRoles(['planner']),
   stockImportController.adjustQuantity
 );
 
@@ -58,7 +58,7 @@ router.patch(
 router.patch(
   '/article/:article/quantity',
   authenticate,
-  requireRoles(['planner', 'super_admin']),
+  requireRoles(['planner']),
   stockImportController.setQuantity
 );
 
@@ -66,7 +66,7 @@ router.patch(
 router.post(
   '/recalculate-all',
   authenticate,
-  requireRoles(['super_admin']),
+  requireRoles(['planner']),
   stockImportController.recalculateAll
 );
 

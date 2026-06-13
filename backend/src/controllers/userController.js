@@ -2,7 +2,7 @@ const UserModel = require('../models/userModel');
 const ExcelJS = require('exceljs');
 const bcrypt = require('bcryptjs');
 
-const VALID_ROLES = ['super_admin', 'planner', 'commercial', 'livreur', 'user'];
+const VALID_ROLES = ['super_admin', 'planner', 'commercial', 'livreur', 'importer', 'user'];
 const COMMERCIAL_ID_REGEX = /^VL\d{6}$/;
 
 // Helper: normalize column header
