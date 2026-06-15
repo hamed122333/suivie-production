@@ -16,6 +16,8 @@ const StockPage = () => {
   const [error, setError] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [droppedFile, setDroppedFile] = useState(null);
 
   const [inputValue, setInputValue] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,6 +55,18 @@ const StockPage = () => {
 
   // Saisie/import stock : planificateur (opérationnel) + importateur. (super_admin = lecture seule)
   const canEditStock = user?.role === 'planner' || user?.role === 'importer';
+
+  // Import par glisser-déposer sur toute la page (comme la page Commandes).
+  const openImport = (file = null) => { setDroppedFile(file); setIsModalOpen(true); };
+  const handleDragOver = (e) => { if (canEditStock) { e.preventDefault(); setIsDragOver(true); } };
+  const handleDragLeave = (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsDragOver(false); };
+  const handleDrop = (e) => {
+    if (!canEditStock) return;
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file && /\.(xlsx|xls)$/i.test(file.name)) openImport(file);
+  };
 
   const safeArray = useMemo(() => Array.isArray(stockItems) ? stockItems : [], [stockItems]);
 
@@ -169,7 +183,21 @@ const StockPage = () => {
   const isFiltered = Boolean(searchTerm);
 
   return (
-    <div className="stock-page-container">
+    <div
+      className={`stock-page-container${isDragOver ? ' stock-page-container--drop' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragOver && canEditStock && (
+        <div className="stock-drop-overlay">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          Déposer le fichier Excel pour importer le stock
+        </div>
+      )}
       <div className="stock-page-header">
         <div className="title-section">
           <h2>Stock &amp; Produits Finis</h2>
@@ -234,7 +262,7 @@ const StockPage = () => {
           {canEditStock && (
             <div className="buttons-group">
               <button className="btn btn-outline" onClick={() => setIsManualModalOpen(true)}>Ajout Manuel</button>
-              <button className="btn btn-secondary" onClick={() => setIsModalOpen(true)}>Importer Excel</button>
+              <button className="btn btn-secondary" onClick={() => openImport()}>Importer Excel</button>
             </div>
           )}
         </div>
@@ -292,6 +320,13 @@ const StockPage = () => {
         ) : sortedStock.length === 0 ? (
           isFiltered ? (
             <EmptyState icon="🔍" message={`Aucun résultat pour « ${searchTerm} ». Vérifiez l'orthographe ou effacez le filtre.`} />
+          ) : canEditStock ? (
+            <div className="stock-import-cta">
+              <div className="stock-import-cta__icon">📥</div>
+              <strong>Aucun produit en stock</strong>
+              <p>Importez un fichier Excel ou glissez-le sur cette page pour commencer.</p>
+              <button type="button" className="btn btn-secondary" onClick={() => openImport()}>Importer Excel</button>
+            </div>
           ) : (
             <EmptyState icon="📭" message="Aucun produit en stock trouvé." />
           )
@@ -461,7 +496,11 @@ const StockPage = () => {
       </div>
 
       {isModalOpen && (
-        <StockImportModal onClose={() => setIsModalOpen(false)} onImported={handleImported} />
+        <StockImportModal
+          initialFile={droppedFile}
+          onClose={() => { setIsModalOpen(false); setDroppedFile(null); }}
+          onImported={handleImported}
+        />
       )}
       {isManualModalOpen && (
         <ManualStockModal onClose={() => setIsManualModalOpen(false)} onAdded={handleManualAdded} />

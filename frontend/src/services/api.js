@@ -95,6 +95,7 @@ export const dashboardAPI = {
 
 export const analyticsAPI = {
   commercials: () => api.get('/analytics/commercials'),
+  flow: () => api.get('/analytics/flow'),
 };
 
 export const workspaceAPI = {

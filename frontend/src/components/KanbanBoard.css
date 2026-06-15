@@ -371,6 +371,27 @@
   padding: 0.22rem 0.5rem;
 }
 
+/* Limite de WIP (soft) — indicateur de charge de la colonne */
+.kanban-column__wip {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #475569;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 0.22rem 0.5rem;
+  white-space: nowrap;
+}
+.kanban-column__wip--near {
+  background: #fef3c7;
+  color: #92400e;
+}
+.kanban-column__wip--over {
+  background: #fee2e2;
+  color: #b91c1c;
+  box-shadow: 0 0 0 1px #fecaca inset;
+}
+
 .kanban-column__body {
   padding: 0.65rem;
   overflow-y: auto;

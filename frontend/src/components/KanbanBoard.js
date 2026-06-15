@@ -7,7 +7,7 @@ import DeliveryModal from './DeliveryModal';
 import TaskCard from './TaskCard';
 import TaskDetailsPanel from './TaskDetailsPanel';
 import TaskModal from './TaskModal';
-import { TASK_STATUS_CONFIG, TASK_STATUS_ORDER } from '../constants/task';
+import { TASK_STATUS_CONFIG, TASK_STATUS_ORDER, TASK_WIP_LIMITS } from '../constants/task';
 import { useAuth } from '../context/AuthContext';
 import { taskAPI } from '../services/api';
 import './KanbanBoard.css';
@@ -548,6 +548,10 @@ const KanbanBoard = ({
           const isDragTarget = dragOverColumn === column.id;
           const filteredEmpty = totalInColumn > 0 && columnTasks.length === 0 && hasActiveFilters;
           const priorityCount = columnTasks.filter((task) => task.priority === 'URGENT' || task.priority === 'HIGH').length;
+          // Limite de WIP (soft) : alerte visuelle si la colonne dépasse sa capacité conseillée.
+          const wipLimit = TASK_WIP_LIMITS[column.id] ?? null;
+          const wipOver = wipLimit != null && totalInColumn > wipLimit;
+          const wipNear = wipLimit != null && !wipOver && totalInColumn >= Math.ceil(wipLimit * 0.8);
 
           return (
             <section
@@ -583,6 +587,16 @@ const KanbanBoard = ({
                 </div>
                 <div className="kanban-column__metrics">
                   {priorityCount > 0 && <span className="kanban-column__priority-count">{priorityCount} prio.</span>}
+                  {wipLimit != null && (
+                    <span
+                      className={`kanban-column__wip${wipOver ? ' kanban-column__wip--over' : wipNear ? ' kanban-column__wip--near' : ''}`}
+                      title={wipOver
+                        ? `Limite de WIP dépassée : ${totalInColumn}/${wipLimit} — réduisez l'en-cours pour fluidifier le flux`
+                        : `En-cours : ${totalInColumn}/${wipLimit} (limite conseillée)`}
+                    >
+                      WIP {totalInColumn}/{wipLimit}
+                    </span>
+                  )}
                   <span className="kanban-column__count">
                     {hasActiveFilters ? `${columnTasks.length}/${totalInColumn}` : totalInColumn}
                   </span>

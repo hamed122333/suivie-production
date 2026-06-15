@@ -8,6 +8,7 @@ import {
   PARTIAL_REMAINDER_BADGE,
   DELIVERY_PROGRESS_BADGE,
   getDeliveryProgress,
+  getTaskAging,
   getTaskKey,
   getArticleCategory,
   getCoveragePercent,
@@ -170,6 +171,9 @@ const TaskCard = ({ task, onOpen, isDragging, onEdit, onDelete, canEdit }) => {
     ? Math.max(0, Math.min(100, Math.round((partialPrepared / partialTotal) * 100)))
     : 0;
 
+  // Aging Kanban : ancienneté dans la colonne courante (chip compact, colonnes actives only).
+  const aging = getTaskAging(task);
+
   return (
     <article
       className={`task-card ${isDragging ? 'task-card--dragging' : ''} ${onOpen ? 'task-card--interactive' : ''} ${urgencyClass}`}
@@ -232,6 +236,14 @@ const TaskCard = ({ task, onOpen, isDragging, onEdit, onDelete, canEdit }) => {
           {isDeadlineAlert && (
             <span className={`task-card__urgency-chip ${isOverdue ? 'task-card__urgency-chip--overdue' : daysLeft <= 1 ? 'task-card__urgency-chip--j1' : 'task-card__urgency-chip--j2'}`}>
               {isOverdue ? `+${Math.abs(daysLeft)}j` : daysLeft === 0 ? 'Auj.' : `J-${daysLeft}`}
+            </span>
+          )}
+          {aging && (
+            <span
+              className={`task-card__aging-chip${aging.level ? ` task-card__aging-chip--${aging.level}` : ''}`}
+              title={`${aging.days} jour${aging.days > 1 ? 's' : ''} dans la colonne « ${status.shortLabel} »`}
+            >
+              {aging.days}j
             </span>
           )}
           <span className="task-card__status" style={{ background: status.bg, color: status.color }}>

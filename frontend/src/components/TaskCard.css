@@ -415,6 +415,33 @@
   color: #b91c1c;
 }
 
+/* Aging Kanban : temps passé dans la colonne (neutre par défaut, alerte selon seuils) */
+.task-card__aging-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.63rem;
+  font-weight: 700;
+  padding: 0.22rem 0.4rem;
+  border-radius: 6px;
+  white-space: nowrap;
+  background: #f1f5f9;
+  color: #475569;
+}
+.task-card__aging-chip::before {
+  content: '⏱';
+  margin-right: 2px;
+  font-size: 0.6rem;
+}
+.task-card__aging-chip--warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+.task-card__aging-chip--danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 
 /* ── Badge date urgente ── */
 .task-card__date-check--warn {

@@ -89,6 +89,40 @@
 }
 .analytics-badge--active { background: #dcfce7; color: #15803d; }
 .analytics-badge--inactive { background: #f1f5f9; color: #64748b; }
+.analytics-badge--warn { background: #fef3c7; color: #92400e; }
+
+/* Onglets (Flux / Performance commerciale) */
+.analytics-tabs {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: #f1f5f9;
+  border-radius: 10px;
+  margin-bottom: 1.25rem;
+}
+.analytics-tab {
+  border: none;
+  background: transparent;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #5e6c84;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.analytics-tab:hover { color: #172b4d; }
+.analytics-tab--active {
+  background: #fff;
+  color: #172b4d;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.analytics-hint {
+  margin: -0.5rem 0 1.25rem;
+  font-size: 0.8rem;
+  color: #5e6c84;
+}
 
 @media (max-width: 900px) {
   .analytics-kpis { grid-template-columns: repeat(3, 1fr); }

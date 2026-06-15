@@ -4,9 +4,9 @@ import { formatDate } from '../utils/formatters';
 import { IconClose } from './ui/icons';
 import './StockImportModal.css';
 
-const StockImportModal = ({ onClose, onImported }) => {
+const StockImportModal = ({ onClose, onImported, initialFile = null }) => {
   const fileInputRef = useRef(null);
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(initialFile);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);

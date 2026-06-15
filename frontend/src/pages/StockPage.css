@@ -6,7 +6,48 @@
   border-radius: 12px;
   background-color: transparent;
   box-sizing: border-box;
+  position: relative;
 }
+
+/* Import par glisser-déposer (aligné sur la page Commandes) */
+.stock-page-container--drop {
+  outline: 2px dashed #2563eb;
+  outline-offset: -8px;
+  border-radius: 16px;
+}
+.stock-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  background: rgba(239, 246, 255, 0.92);
+  color: #1d4ed8;
+  font-weight: 700;
+  font-size: 1.05rem;
+  border-radius: 16px;
+  pointer-events: none;
+}
+
+/* Carte d'import centrale (état vide) — call-to-action visible */
+.stock-import-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  background: #fff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  color: #475569;
+}
+.stock-import-cta__icon { font-size: 2.4rem; line-height: 1; }
+.stock-import-cta strong { font-size: 1.05rem; color: #0f172a; }
+.stock-import-cta p { margin: 0 0 0.4rem; font-size: 0.875rem; color: #64748b; max-width: 28rem; }
 
 .stock-page-header {
   display: flex;

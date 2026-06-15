@@ -482,6 +482,7 @@ const TaskModel = {
              blocked_at = $4,
              blocked_by = $5,
              completed_at = $6,
+             status_changed_at = NOW(),
              updated_at = NOW()
          WHERE id = $7`,
         [status, nextPosition, blockedReason, blockedAt, blockedBy, completedAt, id]
@@ -511,6 +512,7 @@ const TaskModel = {
            is_known_product = $3,
            stock_available_at_creation = $4,
            stock_deficit = $5,
+           status_changed_at = NOW(),
            updated_at = NOW()
        WHERE id = $1 AND status = 'PENDING_APPROVAL'
        RETURNING id`,

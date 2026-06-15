@@ -16,6 +16,40 @@ export const TASK_STATUS_CONFIG = {
   DELIVERED:     { label: 'Livré',           shortLabel: 'Livré',      color: '#374151', bg: '#f9fafb', headerBg: '#e5e7eb' },
 };
 
+// Limites de WIP (Work In Progress) par colonne — méthode Kanban. SOFT : alerte visuelle
+// uniquement, jamais bloquant. null = pas de limite. (Miroir de backend/constants/task.js)
+export const TASK_WIP_LIMITS = {
+  WAITING_STOCK: null,
+  TODO: 25,
+  IN_PROGRESS: 10,
+  BLOCKED: 8,
+  DONE: null,
+  DELIVERED: null,
+};
+
+// Aging : seuils (jours dans la colonne) avant alerte sur la carte, et colonnes concernées.
+export const TASK_AGING_THRESHOLDS = { warn: 3, danger: 7 };
+export const TASK_AGING_STATUSES = ['WAITING_STOCK', 'TODO', 'IN_PROGRESS', 'BLOCKED'];
+
+/**
+ * Ancienneté d'une carte dans sa colonne courante (depuis status_changed_at).
+ * Retourne null si non applicable (statut non concerné, pas d'horodatage, < 1 jour).
+ * level : 'warn' | 'danger' selon les seuils ; sert au style du badge.
+ */
+export function getTaskAging(task) {
+  if (!task || !TASK_AGING_STATUSES.includes(task.status)) return null;
+  const ref = task.status_changed_at || task.updated_at;
+  if (!ref) return null;
+  const ms = Date.now() - new Date(ref).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const days = Math.floor(ms / 86400000);
+  if (days < 1) return null;
+  let level = null;
+  if (days >= TASK_AGING_THRESHOLDS.danger) level = 'danger';
+  else if (days >= TASK_AGING_THRESHOLDS.warn) level = 'warn';
+  return { days, level };
+}
+
 export const TASK_PRIORITY_CONFIG = {
   LOW: { color: '#6b7280', bg: '#f3f4f6', label: 'Basse', icon: '▾' },
   MEDIUM: { color: '#d97706', bg: '#fef3c7', label: 'Moyenne', icon: '◆' },

@@ -1,17 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid,
-  PieChart, Pie, Cell,
+  PieChart, Pie, Cell, AreaChart, Area,
 } from 'recharts';
 import { analyticsAPI } from '../services/api';
 import { formatDate, formatQuantity } from '../utils/formatters';
+import { TASK_STATUS_CONFIG } from '../constants/task';
 import Spinner from '../components/Spinner';
 import EmptyState from '../components/EmptyState';
 import './AnalyticsPage.css';
 
 const COLORS = { validated: '#16a34a', pending: '#f59e0b', delivered: '#2563eb' };
 
-function AnalyticsPage() {
+function CommercialSection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [data, setData] = useState({ commercials: [], summary: null });
@@ -33,7 +34,6 @@ function AnalyticsPage() {
 
   const { commercials, summary } = data;
 
-  // Top commerciaux par commandes validées (pour le graphique en barres)
   const barData = useMemo(
     () => commercials
       .filter((c) => c.totalOrders > 0)
@@ -48,16 +48,10 @@ function AnalyticsPage() {
   ] : [], [summary]);
 
   if (loading) return <Spinner message="Chargement des analyses…" />;
-  if (error) return <div className="analytics-page"><div className="analytics-error">{error}</div></div>;
+  if (error) return <div className="analytics-error">{error}</div>;
 
   return (
-    <div className="analytics-page">
-      <div className="analytics-header">
-        <h1>Analytics — Performance commerciale</h1>
-        <p>Vue d'ensemble de l'activité des commerciaux (lecture seule).</p>
-      </div>
-
-      {/* KPIs */}
+    <>
       <div className="analytics-kpis">
         <div className="analytics-kpi"><span>Commerciaux</span><strong>{summary.commercialsCount}</strong></div>
         <div className="analytics-kpi analytics-kpi--ok"><span>Actifs (&lt; {summary.activeDays} j)</span><strong>{summary.activeCount}</strong></div>
@@ -75,7 +69,6 @@ function AnalyticsPage() {
       )}
 
       <div className="analytics-grid">
-        {/* Barres : commandes par commercial */}
         <section className="analytics-card analytics-card--wide">
           <h3>Commandes par commercial</h3>
           {barData.length === 0 ? <EmptyState message="Aucune commande." /> : (
@@ -86,14 +79,13 @@ function AnalyticsPage() {
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="validées" stackId="a" fill={COLORS.validated} radius={[0, 0, 0, 0]} />
+                <Bar dataKey="validées" stackId="a" fill={COLORS.validated} />
                 <Bar dataKey="en attente" stackId="a" fill={COLORS.pending} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </section>
 
-        {/* Donut : validées vs en attente */}
         <section className="analytics-card">
           <h3>Validées vs en attente</h3>
           {summary.totalOrders === 0 ? <EmptyState message="Aucune commande." /> : (
@@ -110,7 +102,6 @@ function AnalyticsPage() {
         </section>
       </div>
 
-      {/* Tableau : actifs / inactifs */}
       <section className="analytics-card">
         <h3>Détail commerciaux</h3>
         <div className="analytics-table-wrap">
@@ -146,6 +137,195 @@ function AnalyticsPage() {
           </table>
         </div>
       </section>
+    </>
+  );
+}
+
+function statusLabel(status) {
+  return TASK_STATUS_CONFIG[status]?.shortLabel || status;
+}
+
+function FlowSection() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [flow, setFlow] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await analyticsAPI.flow();
+        if (!cancelled) setFlow(res.data);
+      } catch (err) {
+        if (!cancelled) setError(err?.response?.data?.error || 'Impossible de charger les métriques de flux.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const throughputData = useMemo(
+    () => (flow?.throughput || []).map((t) => ({ name: formatDate(t.week), livrées: t.delivered })),
+    [flow]
+  );
+
+  const columnData = useMemo(
+    () => (flow?.timePerColumn || [])
+      .filter((c) => c.samples > 0)
+      .map((c) => ({ name: statusLabel(c.status), jours: c.avgDays })),
+    [flow]
+  );
+
+  const cfdData = useMemo(
+    () => (flow?.cfd || []).map((row) => {
+      const point = { name: formatDate(row.day) };
+      (flow.statuses || []).forEach((s) => { point[statusLabel(s)] = row[s] || 0; });
+      return point;
+    }),
+    [flow]
+  );
+
+  if (loading) return <Spinner message="Calcul des métriques de flux…" />;
+  if (error) return <div className="analytics-error">{error}</div>;
+  if (!flow) return <EmptyState message="Aucune donnée de flux." />;
+
+  const totalThroughput = throughputData.reduce((s, t) => s + t.livrées, 0);
+
+  return (
+    <>
+      <div className="analytics-kpis">
+        <div className="analytics-kpi"><span>Lead time moyen</span><strong>{flow.leadTime.avgDays} j</strong></div>
+        <div className="analytics-kpi"><span>Lead time médian</span><strong>{flow.leadTime.medianDays} j</strong></div>
+        <div className="analytics-kpi analytics-kpi--ok"><span>Cycle time moyen</span><strong>{flow.cycleTime.avgDays} j</strong></div>
+        <div className="analytics-kpi"><span>Cycle time médian</span><strong>{flow.cycleTime.medianDays} j</strong></div>
+        <div className="analytics-kpi analytics-kpi--ok"><span>Livrées / {flow.window.throughputWeeks} sem.</span><strong>{totalThroughput}</strong></div>
+        <div className="analytics-kpi analytics-kpi--muted"><span>Base de calcul</span><strong>{flow.leadTime.count} livrées</strong></div>
+      </div>
+      <p className="analytics-hint">
+        <strong>Lead time</strong> = création → livraison · <strong>Cycle time</strong> = mise en production → livraison.
+        Calculés sur les {flow.window.leadTimeDays} derniers jours.
+      </p>
+
+      <section className="analytics-card analytics-card--wide">
+        <h3>Diagramme de flux cumulé (CFD) — {flow.window.cfdDays} jours</h3>
+        {cfdData.length === 0 ? <EmptyState message="Pas assez d'historique." /> : (
+          <ResponsiveContainer width="100%" height={340}>
+            <AreaChart data={cfdData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={24} />
+              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+              <Tooltip />
+              <Legend />
+              {(flow.statuses || []).map((s) => {
+                const label = statusLabel(s);
+                const color = TASK_STATUS_CONFIG[s]?.color || '#94a3b8';
+                return <Area key={s} type="monotone" dataKey={label} stackId="1" stroke={color} fill={color} fillOpacity={0.55} />;
+              })}
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </section>
+
+      <div className="analytics-grid">
+        <section className="analytics-card">
+          <h3>Débit hebdomadaire (commandes livrées)</h3>
+          {throughputData.length === 0 ? <EmptyState message="Aucune livraison récente." /> : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={throughputData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="livrées" fill={COLORS.delivered} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </section>
+
+        <section className="analytics-card">
+          <h3>Temps moyen par colonne (jours)</h3>
+          {columnData.length === 0 ? <EmptyState message="Pas assez d'historique." /> : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={columnData} layout="vertical" margin={{ top: 8, right: 16, left: 24, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
+                <XAxis type="number" tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
+                <Tooltip />
+                <Bar dataKey="jours" fill="#7c3aed" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </section>
+      </div>
+
+      <section className="analytics-card">
+        <h3>Cartes les plus anciennes en colonne (aging WIP)</h3>
+        {(!flow.aging || flow.aging.length === 0) ? <EmptyState message="Aucune carte active." /> : (
+          <div className="analytics-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Tâche</th>
+                  <th>Article</th>
+                  <th className="text-center">Colonne</th>
+                  <th className="text-center">Jours en colonne</th>
+                </tr>
+              </thead>
+              <tbody>
+                {flow.aging.map((a) => (
+                  <tr key={a.id}>
+                    <td><strong>SP-{a.id}</strong> {a.title}</td>
+                    <td>{a.itemReference || '—'}</td>
+                    <td className="text-center">{statusLabel(a.status)}</td>
+                    <td className="text-center">
+                      <span className={`analytics-badge ${a.days >= 7 ? 'analytics-badge--inactive' : a.days >= 3 ? 'analytics-badge--warn' : 'analytics-badge--active'}`}>
+                        {a.days} j
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+function AnalyticsPage() {
+  const [tab, setTab] = useState('flow');
+
+  return (
+    <div className="analytics-page">
+      <div className="analytics-header">
+        <h1>Analytics</h1>
+        <p>Vue d'ensemble de l'activité et du flux de production (lecture seule).</p>
+      </div>
+
+      <div className="analytics-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'flow'}
+          className={`analytics-tab${tab === 'flow' ? ' analytics-tab--active' : ''}`}
+          onClick={() => setTab('flow')}
+        >
+          Flux de production
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'commercial'}
+          className={`analytics-tab${tab === 'commercial' ? ' analytics-tab--active' : ''}`}
+          onClick={() => setTab('commercial')}
+        >
+          Performance commerciale
+        </button>
+      </div>
+
+      {tab === 'flow' ? <FlowSection /> : <CommercialSection />}
     </div>
   );
 }
