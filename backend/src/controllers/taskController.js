@@ -1002,7 +1002,8 @@ const taskController = {
           return res.json([]);
         }
         filters.commercialId = req.user.commercial_id;
-      } else if (!['super_admin', 'planner'].includes(role)) {
+      } else if (!['super_admin', 'planner', 'importer'].includes(role)) {
+        // importer : vue complète des commandes en attente (corrections d'anomalies)
         return res.status(403).json({ error: 'Accès refusé' });
       }
 
