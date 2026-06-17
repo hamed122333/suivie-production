@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
@@ -22,6 +23,14 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.disable('x-powered-by');
+
+// En-têtes de sécurité (HSTS, nosniff, frameguard, etc.). API JSON consommée par un
+// SPA sur un autre domaine : on désactive la CSP (inutile pour du JSON, risque de
+// casse) et on laisse les ressources cross-origin (le front appelle via CORS/XHR).
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
 // CORS : restreint à l'origin frontend en prod via CORS_ORIGIN (liste séparée par
 // des virgules, ex. "https://mon-app.vercel.app"). Repli ouvert si non défini pour
