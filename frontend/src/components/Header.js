@@ -13,6 +13,7 @@ const ROLE_CONFIG = {
   planner:     { label: 'Planificateur', icon: '⚙', color: '#0052cc' },
   commercial:  { label: 'Commercial', icon: '✉', color: '#b45309' },
   livreur:     { label: 'Livreur', icon: '🚚', color: '#065f46' },
+  importer:    { label: 'Importateur', icon: '⇪', color: '#0e7490' },
   user:        { label: 'Utilisateur', icon: '○', color: '#374151' },
 };
 // SSE handles real-time — polling is only a long-interval safety net (H2 fix: no 429)
