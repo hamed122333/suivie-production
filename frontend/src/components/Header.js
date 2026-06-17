@@ -5,7 +5,6 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import { notificationAPI, taskAPI } from '../services/api';
 import { formatRelativeDate, getInitials } from '../utils/formatters';
 import useServerEvents from '../hooks/useServerEvents';
-import DevRoleSwitcher from './DevRoleSwitcher';
 import logo from '../assets/logo.png';
 import './Header.css';
 
@@ -32,10 +31,10 @@ const Header = () => {
   const [notifLoading, setNotifLoading] = useState(false);
   const menuRef = useRef(null);
   const notifRef = useRef(null);
-  // L'importateur n'est PAS dans la boucle de notifications (il déclenche des notifs vers les
-  // commerciaux à l'import, mais n'en reçoit pas). Pas de cloche → interface « simple user ».
+  // L'importateur n'est PAS dans la boucle de notifications (il declenche des notifs vers les
+  // commerciaux a l'import, mais n'en recoit pas). Pas de cloche -> interface « simple user ».
   const canViewNotifications = isSuperAdmin || isPlanner || isCommercial || isLivreur;
-  // /orders nav link + badge: super_admin (lecture), commercial, planner, importateur (corrections)
+  // /orders nav link + badge: super_admin (lecture), commercial, planner, importateur
   const canViewPending = isSuperAdmin || isCommercial || isPlanner || isImporter;
   const [pendingCount, setPendingCount] = useState(0);
 
@@ -171,7 +170,6 @@ const Header = () => {
 
         {/* Actions */}
         <div className="app-header__actions">
-          <DevRoleSwitcher />
           {canViewNotifications && (
             <div className="app-header__notif-wrap" ref={notifRef}>
               <button
@@ -300,10 +298,6 @@ const Header = () => {
         {canViewPending && navItem('/orders', 'Commandes', '◈', pendingCount)}
         {navItem('/dashboard', 'Dashboard', '◱')}
         {navItem('/stock', 'Stock', '▦')}
-        {navItem('/capture', 'Scan OCR', '◎')}
-        {navItem('/scans', 'Bobines', '▥')}
-        {navItem('/boxes', 'Boîtes', '▢')}
-        {navItem('/ia', 'IA', '✸')}
         {isSuperAdmin && navItem('/analytics', 'Analytics', '◷')}
         {isSuperAdmin && (
           <Link to="/users" className="header-nav__link header-nav__link--desktop-only">
