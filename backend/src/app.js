@@ -99,7 +99,9 @@ app.get('/api/events', (req, res) => {
   });
   res.write(':\n\n');
   addClient(res);
-  const keepAlive = setInterval(() => res.write(':\n\n'), 30000);
+  // Ping toutes les 15s : sous le délai d'inactivité QUIC/HTTP3 de Chrome (~30s)
+  // pour éviter ERR_QUIC_PROTOCOL_ERROR.QUIC_NETWORK_IDLE_TIMEOUT (reconnexions + bruit console).
+  const keepAlive = setInterval(() => res.write(':\n\n'), 15000);
   req.on('close', () => clearInterval(keepAlive));
 });
 
