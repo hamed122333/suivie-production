@@ -308,6 +308,17 @@ const KanbanBoard = ({
       return;
     }
 
+    // Saut d'étape « Hors Stock PF → En Préparation » : on saute « À Préparer » (et sa
+    // validation de date). Plutôt que de bloquer sèchement, on GUIDE : alerte explicite +
+    // ouverture de l'étape correcte (À Préparer). La mise en préparation se fera ensuite
+    // depuis cette colonne, dans l'ordre du cycle de vie.
+    if (canChangeStatus && task.status === 'WAITING_STOCK' && targetStatus === 'IN_PROGRESS') {
+      setErrorShort('Étape sautée : une commande « Hors Stock PF » doit d\'abord passer par « À Préparer ». On ouvre cette étape — lancez la préparation ensuite.');
+      setDateModal({ open: true, task });
+      clearDragHighlights();
+      return;
+    }
+
     // Anti-parachutage : on n'autorise que les transitions du flux (et retours contrôlés).
     // Empêche de sauter des étapes (ex. Hors Stock PF → En Préparation) ou de changer de
     // statut sans passer par l'étape qui saisit la bonne information.
