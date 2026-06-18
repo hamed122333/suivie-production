@@ -1,11 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { TASK_PRIORITY_OPTIONS } from '../constants/task';
 import './KanbanToolbar.css';
-
-const PRIORITIES = [
-  { value: '', label: 'Toutes les priorites' },
-  ...TASK_PRIORITY_OPTIONS,
-];
 
 const CATEGORIES = [
   { value: '', label: 'Toutes categories' },
@@ -142,14 +136,8 @@ function computeWindowStats(tasks) {
 const KanbanToolbar = ({
   search,
   onSearchChange,
-  priority,
-  onPriorityChange,
   category,
   onCategoryChange,
-  criticalDeficit,
-  onCriticalDeficitChange,
-  predictiveOnly,
-  onPredictiveOnlyChange,
   dateFrom,
   onDateChange = () => {},
   onDaySelect,
@@ -160,7 +148,6 @@ const KanbanToolbar = ({
   onImportOrders,
   commercialFilter = '',
   onCommercialFilterChange,
-  commercials = [],
 }) => {
   const importInputRef = useRef(null);
   const [inputValue, setInputValue] = useState(search);
@@ -172,7 +159,7 @@ const KanbanToolbar = ({
   );
   const [selectedDay, setSelectedDay] = useState(null);
 
-  const activeFilters = [search.trim(), priority, category, criticalDeficit, predictiveOnly, commercialFilter].filter(Boolean).length;
+  const activeFilters = [search.trim(), category, commercialFilter].filter(Boolean).length;
 
   useEffect(() => {
     const { start, end } = getWindowBounds(anchor, windowSize);
@@ -193,12 +180,20 @@ const KanbanToolbar = ({
 
   const stats = useMemo(() => computeWindowStats(tasks), [tasks]);
 
-  // Commerciaux « actifs » = ceux qui ont au moins une commande dans la vue
-  // courante (on n'encombre pas le filtre avec les comptes sans tâche).
+  // Commerciaux « actifs » = dérivés directement des commandes affichées (nom + code).
+  // Source = les tâches elles-mêmes → le filtre marche pour TOUS les rôles (livreur
+  // inclus), sans dépendre d'un appel /users réservé aux planner/super_admin.
   const activeCommercials = useMemo(() => {
-    const activeIds = new Set(tasks.map((t) => t.commercial_id).filter(Boolean));
-    return commercials.filter((c) => activeIds.has(c.commercial_id));
-  }, [commercials, tasks]);
+    const map = new Map();
+    for (const t of tasks) {
+      if (t.commercial_id && !map.has(t.commercial_id)) {
+        map.set(t.commercial_id, t.commercial_name || t.commercial_id);
+      }
+    }
+    return [...map.entries()]
+      .map(([commercial_id, name]) => ({ commercial_id, name }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }, [tasks]);
 
   const clearDay = () => { setSelectedDay(null); onDaySelect?.(null); };
 
@@ -270,13 +265,6 @@ const KanbanToolbar = ({
         </div>
 
         <label className="kanban-toolbar__filter">
-          <span>Priorité</span>
-          <select value={priority} onChange={e => onPriorityChange(e.target.value)}>
-            {PRIORITIES.map(item => <option key={item.value||'all'} value={item.value}>{item.label}</option>)}
-          </select>
-        </label>
-
-        <label className="kanban-toolbar__filter">
           <span>Catégorie</span>
           <select value={category} onChange={e => onCategoryChange(e.target.value)}>
             {CATEGORIES.map(item => <option key={item.value||'all'} value={item.value}>{item.label}</option>)}
@@ -297,22 +285,10 @@ const KanbanToolbar = ({
           </label>
         )}
 
-        <div className="kanban-toolbar__checkboxes">
-          <label className="kanban-toolbar__checkbox">
-            <input type="checkbox" checked={criticalDeficit} onChange={e => onCriticalDeficitChange(e.target.checked)}/>
-            <span title="Fiches avec stock insuffisant">Déficit</span>
-          </label>
-          <label className="kanban-toolbar__checkbox">
-            <input type="checkbox" checked={predictiveOnly} onChange={e => onPredictiveOnlyChange(e.target.checked)}/>
-            <span title="Commandes prévisionnelles uniquement">Prév.</span>
-          </label>
-        </div>
-
         {activeFilters > 0 && (
           <button type="button" className="kanban-toolbar__reset" onClick={() => {
             setInputValue(''); onSearchChange('');
-            onPriorityChange(''); onCategoryChange('');
-            onCriticalDeficitChange(false); onPredictiveOnlyChange(false);
+            onCategoryChange('');
             onCommercialFilterChange?.('');
           }}>Effacer</button>
         )}
