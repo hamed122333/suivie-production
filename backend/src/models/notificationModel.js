@@ -30,8 +30,8 @@ const NotificationModel = {
           recipientUserId,
           taskId,
           'task_created',
-          `${createdByName || 'Un commercial'} — Nouvelle commande`,
-          `${createdByName || 'Un commercial'} a créé la tâche SP-${taskId}`
+          `Nouvelle commande SP-${taskId}`,
+          `${createdByName || 'Un commercial'} a créé la commande SP-${taskId}.`
         );
         placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
         index += 5;
@@ -166,8 +166,8 @@ const NotificationModel = {
   // notifier le(s) commercial(aux) responsable(s).
   async createPartialPrepRequestNotifications({ taskId, recipientUserIds, plannerName, preparedQuantity, totalQuantity }) {
     if (!taskId || !Array.isArray(recipientUserIds) || recipientUserIds.length === 0) return;
-    const title = `📦 Validation client — préparation partielle SP-${taskId}`;
-    const body = `${plannerName || 'Le planificateur'} déclare ${preparedQuantity}/${totalQuantity} préparés pour SP-${taskId}. Contactez le client pour approuver ou refuser la préparation partielle.`;
+    const title = `Validation client requise — préparation partielle SP-${taskId}`;
+    const body = `${plannerName || 'Le planificateur'} indique ${preparedQuantity}/${totalQuantity} pièces préparées pour la commande SP-${taskId}. Merci de recueillir l'accord du client pour approuver ou refuser la préparation partielle.`;
     const values = [];
     const placeholders = [];
     let index = 1;
@@ -189,8 +189,8 @@ const NotificationModel = {
     if (!taskId || !Array.isArray(recipientUserIds) || recipientUserIds.length === 0) return;
     const approved = decision === 'APPROVED';
     const title = approved
-      ? `✅ Préparation partielle approuvée — SP-${taskId}`
-      : `❌ Préparation partielle refusée — SP-${taskId}`;
+      ? `Préparation partielle approuvée — SP-${taskId}`
+      : `Préparation partielle refusée — SP-${taskId}`;
     const body = approved
       ? `${commercialName || 'Le commercial'} a fait approuver la préparation partielle de SP-${taskId} par le client. Un reliquat a été créé.`
       : `${commercialName || 'Le commercial'} a refusé la préparation partielle de SP-${taskId}. La commande revient en « À Préparer ».`;
@@ -219,8 +219,8 @@ const NotificationModel = {
         recipientUserId,
         taskId,
         'escalation',
-        `🔥 Escalade urgente — ${commercialName}`,
-        `${commercialName} a marqué SP-${taskId}${taskTitle ? ` (${taskTitle})` : ''} comme URGENTE hors stock. Action requise.`,
+        `Escalade urgente — ${commercialName}`,
+        `${commercialName} a signalé la commande SP-${taskId}${taskTitle ? ` (${taskTitle})` : ''} comme urgente et hors stock. Une intervention est requise.`,
       ]
     );
     broadcast('notifications-updated', { type: 'escalation' });
@@ -240,7 +240,7 @@ const NotificationModel = {
         uid,
         taskId,
         'ready_to_deliver',
-        `🚚 Prêt à livrer — SP-${taskId}`,
+        `Commande SP- prête à livrer`,
         `${plannerName || 'Le planificateur'} a validé SP-${taskId}${taskTitle ? ` (${taskTitle})` : ''} — commande prête à livrer.`
       );
       placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
@@ -275,7 +275,7 @@ const NotificationModel = {
           uid,
           taskId,
           'ready_to_deliver',
-          `🚚 Prêt à livrer — SP-${taskId}`,
+          `Commande SP- prête à livrer`,
           `${plannerName || 'Le planificateur'} a validé SP-${taskId}${title ? ` (${title})` : ''} — commande prête à livrer.`
         );
         placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
@@ -288,6 +288,37 @@ const NotificationModel = {
       values
     );
     broadcast('notifications-updated', { type: 'ready_to_deliver', count: taskList.length });
+  },
+
+  /**
+   * Notifier le commercial responsable que SA commande est passée en « Prêt à Livrer »
+   * (promotion automatique dès que le stock PF est disponible). Une entrée = un couple
+   * (commercial, commande).
+   * @param {Array<{recipientUserId:number, taskId:number, title?:string}>} entries
+   */
+  async createReadyToDeliverCommercialNotifications({ entries }) {
+    const list = (entries || []).filter((e) => e && e.recipientUserId && e.taskId);
+    if (list.length === 0) return;
+    const values = [];
+    const placeholders = [];
+    let index = 1;
+    for (const { recipientUserId, taskId, title } of list) {
+      values.push(
+        recipientUserId,
+        taskId,
+        'ready_to_deliver',
+        `Commande SP-${taskId} prête à livrer`,
+        `La commande SP-${taskId}${title ? ` (${title})` : ''} dispose désormais du stock produit fini requis et passe en phase de livraison.`
+      );
+      placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);
+      index += 5;
+    }
+    await pool.query(
+      `INSERT INTO notifications (recipient_user_id, task_id, type, title, body)
+       VALUES ${placeholders.join(', ')}`,
+      values
+    );
+    broadcast('notifications-updated', { type: 'ready_to_deliver', count: list.length });
   },
 
   /**
@@ -305,7 +336,7 @@ const NotificationModel = {
         recipientUserId,
         null,
         'orders_imported',
-        `📥 ${count} nouvelle${count > 1 ? 's' : ''} commande${count > 1 ? 's' : ''} à valider`,
+        `${count} nouvelle${count > 1 ? 's' : ''} commande${count > 1 ? 's' : ''} à valider`,
         `${count} commande${count > 1 ? 's' : ''} vous ${count > 1 ? 'ont' : 'a'} été affectée${count > 1 ? 's' : ''} — à vérifier et valider dans « Commandes ».`
       );
       placeholders.push(`($${index}, $${index + 1}, $${index + 2}, $${index + 3}, $${index + 4})`);

@@ -128,6 +128,7 @@ async function recalcAllocationCore(itemReference, options = {}) {
       currentStatus: task.status,
       stockImportId: task.stock_import_id || null,
       title: task.title,
+      commercialId: task.commercial_id || null,
       priorityOrder: i + 1,
       quantityRequested: requested,
       quantityAllocated: allocated,
@@ -173,7 +174,7 @@ async function recalcAllocationCore(itemReference, options = {}) {
         });
         // Pas de déduction ici : le stock est seulement ENGAGÉ. La soustraction
         // réelle se fait à la LIVRAISON (markDelivered → statut Livré).
-        promotedToDone.push({ id: alloc.taskId, title: alloc.title });
+        promotedToDone.push({ id: alloc.taskId, title: alloc.title, commercialId: alloc.commercialId });
       } catch (err) {
         console.error(`[Allocation] Failed to promote task ${alloc.taskId} → DONE:`, err.message);
       }
@@ -197,6 +198,27 @@ async function recalcAllocationCore(itemReference, options = {}) {
       }
     } catch (err) {
       console.error('[Allocation] Failed to notify livreurs of ready-to-deliver tasks:', err.message);
+    }
+
+    // 4c. Notifier AUSSI le commercial responsable de chaque commande devenue
+    //     « Prêt à Livrer » : sans ça, le commercial ne voit pas passer ses
+    //     commandes en phase de livraison (promotion système, hors contrôleur).
+    try {
+      const withCommercial = promotedToDone.filter((t) => t.commercialId);
+      if (withCommercial.length > 0) {
+        const commercials = await UserModel.findByRoles(['commercial']);
+        const byCode = new Map(
+          commercials.filter((c) => c.commercial_id).map((c) => [c.commercial_id, c.id])
+        );
+        const entries = withCommercial
+          .map((t) => ({ recipientUserId: byCode.get(t.commercialId), taskId: t.id, title: t.title }))
+          .filter((e) => e.recipientUserId);
+        if (entries.length > 0) {
+          await NotificationModel.createReadyToDeliverCommercialNotifications({ entries });
+        }
+      }
+    } catch (err) {
+      console.error('[Allocation] Failed to notify commercials of ready-to-deliver tasks:', err.message);
     }
   }
 
