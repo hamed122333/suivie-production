@@ -259,6 +259,17 @@
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25), 0 18px 40px rgba(15, 23, 42, 0.1);
 }
 
+/* Cible de drop invalide pour la fiche en cours de glissement (anti-parachutage) :
+   colonne grisée + curseur interdit, pour guider vers les transitions autorisées. */
+.kanban-column--invalid-target {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+  cursor: not-allowed;
+}
+.kanban-column--invalid-target .kanban-column__body {
+  cursor: not-allowed;
+}
+
 /* Blocked column — red tint when non-empty */
 .kanban-column--has-blocked {
   border-color: #fecaca !important;

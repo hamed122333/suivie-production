@@ -16,6 +16,22 @@ export const TASK_STATUS_CONFIG = {
   DELIVERED:     { label: 'Livré',           shortLabel: 'Livré',      color: '#374151', bg: '#f9fafb', headerBg: '#e5e7eb' },
 };
 
+// Transitions de statut AUTORISÉES par glisser-déposer (anti-parachutage). On suit le
+// flux : Hors Stock PF → À Préparer → En Préparation → (Prêt à Livrer = AUTO) → Livré.
+// - DONE (Prêt à Livrer) n'est jamais une cible manuelle : il est posé par le système
+//   à la confirmation du stock PF.
+// - Les retours en arrière contrôlés (révision / déblocage) sont permis.
+// Toute transition absente de cette table est refusée côté board.
+export const TASK_DRAG_TRANSITIONS = {
+  WAITING_STOCK: ['TODO', 'BLOCKED'],
+  TODO:          ['IN_PROGRESS', 'WAITING_STOCK', 'BLOCKED'],
+  IN_PROGRESS:   ['TODO', 'BLOCKED'],
+  BLOCKED:       ['WAITING_STOCK', 'TODO', 'IN_PROGRESS'],
+  DONE:          ['DELIVERED'],
+  DELIVERED:     [],
+  PENDING_APPROVAL: [],
+};
+
 // Limites de WIP (Work In Progress) par colonne — méthode Kanban. SOFT : alerte visuelle
 // uniquement, jamais bloquant. null = pas de limite. (Miroir de backend/constants/task.js)
 export const TASK_WIP_LIMITS = {

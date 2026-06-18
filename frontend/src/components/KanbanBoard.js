@@ -7,7 +7,7 @@ import DeliveryModal from './DeliveryModal';
 import TaskCard from './TaskCard';
 import TaskDetailsPanel from './TaskDetailsPanel';
 import TaskModal from './TaskModal';
-import { TASK_STATUS_CONFIG, TASK_STATUS_ORDER, TASK_WIP_LIMITS } from '../constants/task';
+import { TASK_STATUS_CONFIG, TASK_STATUS_ORDER, TASK_WIP_LIMITS, TASK_DRAG_TRANSITIONS } from '../constants/task';
 import { useAuth } from '../context/AuthContext';
 import { taskAPI } from '../services/api';
 import './KanbanBoard.css';
@@ -161,6 +161,7 @@ const KanbanBoard = ({
   const [blockModal, setBlockModal] = useState({ open: false, task: null });
   const [dragOverColumn, setDragOverColumn] = useState(null);
   const [dragOverTaskId, setDragOverTaskId] = useState(null);
+  const [draggedStatus, setDraggedStatus] = useState(null);
   const [selectedTaskId, setSelectedTaskId] = useState(() => {
     const taskIdString = searchParams.get('taskId');
     return taskIdString ? parseInt(taskIdString, 10) : null;
@@ -255,11 +256,19 @@ const KanbanBoard = ({
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData(DRAG_MIME, JSON.stringify({ id: task.id, status: task.status }));
     event.dataTransfer.setData('text/plain', JSON.stringify({ id: task.id, status: task.status }));
+    setDraggedStatus(task.status);
   };
+
+  // Une colonne est une cible valide pour la fiche en cours de glissement ?
+  const isValidDropTarget = useCallback((columnId) => {
+    if (!draggedStatus || draggedStatus === columnId) return true;
+    return (TASK_DRAG_TRANSITIONS[draggedStatus] || []).includes(columnId);
+  }, [draggedStatus]);
 
   const clearDragHighlights = () => {
     setDragOverColumn(null);
     setDragOverTaskId(null);
+    setDraggedStatus(null);
   };
 
   const runDrop = async (draggedId, targetStatus, insertBeforeId) => {
@@ -297,6 +306,20 @@ const KanbanBoard = ({
     if (isLivreur) {
       clearDragHighlights();
       return;
+    }
+
+    // Anti-parachutage : on n'autorise que les transitions du flux (et retours contrôlés).
+    // Empêche de sauter des étapes (ex. Hors Stock PF → En Préparation) ou de changer de
+    // statut sans passer par l'étape qui saisit la bonne information.
+    if (task.status !== targetStatus) {
+      const allowed = TASK_DRAG_TRANSITIONS[task.status] || [];
+      if (!allowed.includes(targetStatus)) {
+        const fromLabel = TASK_STATUS_CONFIG[task.status]?.label || task.status;
+        const toLabel = TASK_STATUS_CONFIG[targetStatus]?.label || targetStatus;
+        setErrorShort(`Transition non autorisée : « ${fromLabel} » → « ${toLabel} ». Suivez le flux À Préparer → En Préparation → Prêt à Livrer (auto) → Livré.`);
+        clearDragHighlights();
+        return;
+      }
     }
 
     if (targetStatus === 'BLOCKED' && task.status !== 'BLOCKED') {
@@ -545,7 +568,10 @@ const KanbanBoard = ({
         {COLUMNS.map((column) => {
           const columnTasks = getTasksByStatus(column.id);
           const totalInColumn = getColumnCount(column.id);
-          const isDragTarget = dragOverColumn === column.id;
+          // Pendant un glissement : cette colonne est-elle une cible valide ?
+          const validTarget = isValidDropTarget(column.id);
+          const isInvalidTarget = draggedStatus != null && !validTarget;
+          const isDragTarget = dragOverColumn === column.id && validTarget;
           const filteredEmpty = totalInColumn > 0 && columnTasks.length === 0 && hasActiveFilters;
           const priorityCount = columnTasks.filter((task) => task.priority === 'URGENT' || task.priority === 'HIGH').length;
           // Limite de WIP (soft) : alerte visuelle si la colonne dépasse sa capacité conseillée.
@@ -556,10 +582,11 @@ const KanbanBoard = ({
           return (
             <section
               key={column.id}
-              className={`kanban-column ${isDragTarget ? 'kanban-column--drop' : ''}`}
+              className={`kanban-column ${isDragTarget ? 'kanban-column--drop' : ''} ${isInvalidTarget ? 'kanban-column--invalid-target' : ''}`}
               onDragOver={(event) => {
                 event.preventDefault();
-                event.dataTransfer.dropEffect = 'move';
+                // Curseur « interdit » sur une colonne non autorisée pour cette fiche.
+                event.dataTransfer.dropEffect = validTarget ? 'move' : 'none';
                 setDragOverColumn(column.id);
               }}
               onDrop={(event) => handleDropOnColumn(event, column.id)}
