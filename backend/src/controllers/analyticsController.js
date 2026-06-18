@@ -121,7 +121,7 @@ const analyticsController = {
         pool.query(`
           SELECT date_trunc('week', created_at) AS week, COUNT(*)::int AS delivered
           FROM task_history
-          WHERE action_type = 'status_changed' AND new_value = 'DELIVERED'
+          WHERE field_name = 'status' AND new_value = 'DELIVERED'
             AND created_at >= NOW() - ($1 || ' weeks')::interval
           GROUP BY week ORDER BY week
         `, [THROUGHPUT_WEEKS]),
@@ -131,14 +131,14 @@ const analyticsController = {
           WITH delivered AS (
             SELECT task_id, MAX(created_at) AS delivered_at
             FROM task_history
-            WHERE action_type = 'status_changed' AND new_value = 'DELIVERED'
+            WHERE field_name = 'status' AND new_value = 'DELIVERED'
               AND created_at >= NOW() - ($1 || ' days')::interval
             GROUP BY task_id
           ),
           first_active AS (
             SELECT task_id, MIN(created_at) AS first_active_at
             FROM task_history
-            WHERE action_type = 'status_changed'
+            WHERE field_name = 'status'
               AND new_value IN ('TODO', 'WAITING_STOCK', 'IN_PROGRESS')
             GROUP BY task_id
           )
@@ -156,7 +156,7 @@ const analyticsController = {
             SELECT task_id, new_value AS status, created_at,
               LEAD(created_at) OVER (PARTITION BY task_id ORDER BY created_at) AS next_at
             FROM task_history
-            WHERE action_type = 'status_changed'
+            WHERE field_name = 'status'
           )
           SELECT status,
                  AVG(EXTRACT(EPOCH FROM (next_at - created_at)))::float AS avg_secs,
@@ -180,7 +180,7 @@ const analyticsController = {
         pool.query(`
           SELECT task_id, old_value, new_value, created_at
           FROM task_history
-          WHERE action_type = 'status_changed'
+          WHERE field_name = 'status'
           ORDER BY task_id, created_at
         `),
 
