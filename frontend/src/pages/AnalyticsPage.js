@@ -10,7 +10,10 @@ import Spinner from '../components/Spinner';
 import EmptyState from '../components/EmptyState';
 import './AnalyticsPage.css';
 
-const COLORS = { validated: '#16a34a', pending: '#f59e0b', delivered: '#2563eb' };
+// Tunnel commercial : En attente (à valider) → En cours (validée, en production) → Livrées.
+const COLORS = { pending: '#f59e0b', inProgress: '#6366f1', delivered: '#16a34a' };
+
+const inProgressOf = (c) => Math.max(0, (c.validated || 0) - (c.delivered || 0));
 
 function CommercialSection() {
   const [loading, setLoading] = useState(true);
@@ -38,14 +41,30 @@ function CommercialSection() {
     () => commercials
       .filter((c) => c.totalOrders > 0)
       .slice(0, 12)
-      .map((c) => ({ name: c.name || c.commercialId, validées: c.validated, 'en attente': c.pending })),
+      .map((c) => ({
+        name: c.name || c.commercialId,
+        'en attente': c.pending,
+        'en cours': inProgressOf(c),
+        'livrées': c.delivered || 0,
+      })),
     [commercials]
   );
 
+  const totalInProgress = summary ? Math.max(0, summary.totalValidated - summary.totalDelivered) : 0;
+
   const pieData = useMemo(() => summary ? [
-    { name: 'Validées', value: summary.totalValidated, key: 'validated' },
     { name: 'En attente', value: summary.totalPending, key: 'pending' },
+    { name: 'En cours', value: Math.max(0, summary.totalValidated - summary.totalDelivered), key: 'inProgress' },
+    { name: 'Livrées', value: summary.totalDelivered, key: 'delivered' },
   ] : [], [summary]);
+
+  // « Meilleur commercial » = celui qui a le plus de commandes LIVRÉES (business abouti).
+  const bestByDelivered = useMemo(() => {
+    if (!commercials.length) return null;
+    const sorted = [...commercials].filter((c) => (c.delivered || 0) > 0)
+      .sort((a, b) => (b.delivered || 0) - (a.delivered || 0));
+    return sorted[0] || null;
+  }, [commercials]);
 
   if (loading) return <Spinner message="Chargement des analyses…" />;
   if (error) return <div className="analytics-error">{error}</div>;
@@ -57,14 +76,15 @@ function CommercialSection() {
         <div className="analytics-kpi analytics-kpi--ok"><span>Actifs (&lt; {summary.activeDays} j)</span><strong>{summary.activeCount}</strong></div>
         <div className="analytics-kpi analytics-kpi--muted"><span>Inactifs</span><strong>{summary.inactiveCount}</strong></div>
         <div className="analytics-kpi"><span>Commandes</span><strong>{formatQuantity(summary.totalOrders)}</strong></div>
-        <div className="analytics-kpi analytics-kpi--ok"><span>Validées</span><strong>{formatQuantity(summary.totalValidated)}</strong></div>
         <div className="analytics-kpi analytics-kpi--warn"><span>En attente</span><strong>{formatQuantity(summary.totalPending)}</strong></div>
+        <div className="analytics-kpi"><span>En cours</span><strong>{formatQuantity(totalInProgress)}</strong></div>
+        <div className="analytics-kpi analytics-kpi--ok"><span>Livrées</span><strong>{formatQuantity(summary.totalDelivered)}</strong></div>
       </div>
 
-      {summary.bestCommercial && (
+      {bestByDelivered && (
         <div className="analytics-best">
-          🏆 Meilleur commercial : <strong>{summary.bestCommercial.name || summary.bestCommercial.commercialId}</strong>
-          {' '}— {summary.bestCommercial.validated} commande(s) validée(s) ({summary.bestCommercial.validationRate}%)
+          🏆 Meilleur commercial : <strong>{bestByDelivered.name || bestByDelivered.commercialId}</strong>
+          {' '}— {bestByDelivered.delivered} commande(s) livrée(s) sur {bestByDelivered.totalOrders}
         </div>
       )}
 
@@ -79,15 +99,16 @@ function CommercialSection() {
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="validées" stackId="a" fill={COLORS.validated} />
-                <Bar dataKey="en attente" stackId="a" fill={COLORS.pending} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="en attente" stackId="a" fill={COLORS.pending} />
+                <Bar dataKey="en cours" stackId="a" fill={COLORS.inProgress} />
+                <Bar dataKey="livrées" stackId="a" fill={COLORS.delivered} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </section>
 
         <section className="analytics-card">
-          <h3>Validées vs en attente</h3>
+          <h3>Tunnel des commandes</h3>
           {summary.totalOrders === 0 ? <EmptyState message="Aucune commande." /> : (
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
@@ -111,14 +132,17 @@ function CommercialSection() {
                 <th>Commercial</th>
                 <th className="text-center">Statut</th>
                 <th className="text-center">Commandes</th>
-                <th className="text-center">Validées</th>
-                <th className="text-center">% validation</th>
-                <th className="text-center">Quantité</th>
+                <th className="text-center">En attente</th>
+                <th className="text-center">En cours</th>
+                <th className="text-center">Livrées</th>
+                <th className="text-center">% livré</th>
                 <th>Dernière commande</th>
               </tr>
             </thead>
             <tbody>
-              {commercials.map((c) => (
+              {commercials.map((c) => {
+                const deliveredRate = c.totalOrders > 0 ? Math.round(((c.delivered || 0) / c.totalOrders) * 100) : 0;
+                return (
                 <tr key={c.id}>
                   <td><strong>{c.name || '—'}</strong> <span className="analytics-cid">{c.commercialId}</span></td>
                   <td className="text-center">
@@ -127,12 +151,14 @@ function CommercialSection() {
                     </span>
                   </td>
                   <td className="text-center">{c.totalOrders}</td>
-                  <td className="text-center">{c.validated}</td>
-                  <td className="text-center">{c.validationRate}%</td>
-                  <td className="text-center">{formatQuantity(c.totalQuantity)}</td>
+                  <td className="text-center">{c.pending}</td>
+                  <td className="text-center">{inProgressOf(c)}</td>
+                  <td className="text-center">{c.delivered || 0}</td>
+                  <td className="text-center">{deliveredRate}%</td>
                   <td>{c.lastOrderAt ? formatDate(c.lastOrderAt) : '—'}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -192,19 +218,27 @@ function FlowSection() {
 
   const totalThroughput = throughputData.reduce((s, t) => s + t.livrées, 0);
 
+  // « En-cours actuel » = commandes actives (hors stock / à préparer / en prép. / bloquées)
+  // au dernier jour du CFD — une photo instantanée de la charge.
+  const latestCfd = (flow.cfd && flow.cfd.length) ? flow.cfd[flow.cfd.length - 1] : null;
+  const currentWip = latestCfd
+    ? ['WAITING_STOCK', 'TODO', 'IN_PROGRESS', 'BLOCKED'].reduce((s, k) => s + (latestCfd[k] || 0), 0)
+    : 0;
+
   return (
     <>
       <div className="analytics-kpis">
-        <div className="analytics-kpi"><span>Lead time moyen</span><strong>{flow.leadTime.avgDays} j</strong></div>
-        <div className="analytics-kpi"><span>Lead time médian</span><strong>{flow.leadTime.medianDays} j</strong></div>
-        <div className="analytics-kpi analytics-kpi--ok"><span>Cycle time moyen</span><strong>{flow.cycleTime.avgDays} j</strong></div>
-        <div className="analytics-kpi"><span>Cycle time médian</span><strong>{flow.cycleTime.medianDays} j</strong></div>
+        <div className="analytics-kpi"><span>Délai total moyen</span><strong>{flow.leadTime.avgDays} j</strong></div>
+        <div className="analytics-kpi"><span>Délai total médian</span><strong>{flow.leadTime.medianDays} j</strong></div>
+        <div className="analytics-kpi analytics-kpi--ok"><span>Délai production moyen</span><strong>{flow.cycleTime.avgDays} j</strong></div>
+        <div className="analytics-kpi"><span>Délai production médian</span><strong>{flow.cycleTime.medianDays} j</strong></div>
         <div className="analytics-kpi analytics-kpi--ok"><span>Livrées / {flow.window.throughputWeeks} sem.</span><strong>{totalThroughput}</strong></div>
-        <div className="analytics-kpi analytics-kpi--muted"><span>Base de calcul</span><strong>{flow.leadTime.count} livrées</strong></div>
+        <div className="analytics-kpi analytics-kpi--warn"><span>En-cours actuel</span><strong>{currentWip}</strong></div>
       </div>
       <p className="analytics-hint">
-        <strong>Lead time</strong> = création → livraison · <strong>Cycle time</strong> = mise en production → livraison.
-        Calculés sur les {flow.window.leadTimeDays} derniers jours.
+        <strong>Délai total</strong> (lead time) = création → livraison · <strong>Délai production</strong> (cycle time)
+        = mise en production → livraison. Calculés sur les {flow.window.leadTimeDays} derniers jours
+        ({flow.leadTime.count} commande{flow.leadTime.count > 1 ? 's' : ''} livrée{flow.leadTime.count > 1 ? 's' : ''}).
       </p>
 
       <section className="analytics-card analytics-card--wide">
