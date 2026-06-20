@@ -167,6 +167,7 @@ const KanbanBoard = ({
     return taskIdString ? parseInt(taskIdString, 10) : null;
   });
   const [error, setError] = useState('');
+  const [errorTone, setErrorTone] = useState('error'); // 'error' | 'warn'
   const [detailRefreshSignal, setDetailRefreshSignal] = useState(0);
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const [dateModal, setDateModal] = useState({ open: false, task: null });
@@ -221,10 +222,12 @@ const KanbanBoard = ({
   const visibleCount = visibleTaskIds.size;
   const totalCount = tasks.length;
 
-  const setErrorShort = (message) => {
+  // tone 'warn' = règle de flux / garde-fou (jaune, plus persistant) ; 'error' = échec (rouge).
+  const setErrorShort = (message, tone = 'error') => {
     setError(message);
+    setErrorTone(tone);
     window.clearTimeout(errorTimeoutRef.current);
-    errorTimeoutRef.current = window.setTimeout(() => setError(''), 4200);
+    errorTimeoutRef.current = window.setTimeout(() => setError(''), tone === 'warn' ? 6500 : 4200);
   };
 
   const refreshBoardAndPanels = async () => {
@@ -280,7 +283,7 @@ const KanbanBoard = ({
 
     // « Prêt à Livrer » est automatique (confirmation du stock PF) — pas de drop manuel.
     if (targetStatus === 'DONE') {
-      setErrorShort('Le passage en « Prêt à Livrer » est automatique (confirmation du stock PF).');
+      setErrorShort('Le passage en « Prêt à Livrer » est automatique (confirmation du stock PF).', 'warn');
       clearDragHighlights();
       return;
     }
@@ -288,12 +291,12 @@ const KanbanBoard = ({
     // Livreur : DONE → DELIVERED (livraison complète ou partielle via modale)
     if (targetStatus === 'DELIVERED') {
       if (!canMarkDelivered) {
-        setErrorShort('Seul le livreur peut confirmer une livraison.');
+        setErrorShort('Seul le livreur peut confirmer une livraison.', 'warn');
         clearDragHighlights();
         return;
       }
       if (task.status !== 'DONE') {
-        setErrorShort('Glissez uniquement les fiches « Prêt à Livrer » vers la colonne Livré.');
+        setErrorShort('Glissez uniquement les fiches « Prêt à Livrer » vers la colonne Livré.', 'warn');
         clearDragHighlights();
         return;
       }
@@ -313,7 +316,7 @@ const KanbanBoard = ({
     // ouverture de l'étape correcte (À Préparer). La mise en préparation se fera ensuite
     // depuis cette colonne, dans l'ordre du cycle de vie.
     if (canChangeStatus && task.status === 'WAITING_STOCK' && targetStatus === 'IN_PROGRESS') {
-      setErrorShort('Étape sautée : une commande « Hors Stock PF » doit d\'abord passer par « À Préparer ». On ouvre cette étape — lancez la préparation ensuite.');
+      setErrorShort('Étape sautée : une commande « Hors Stock PF » doit d\'abord passer par « À Préparer ». On ouvre cette étape — lancez la préparation ensuite.', 'warn');
       setDateModal({ open: true, task });
       clearDragHighlights();
       return;
@@ -327,7 +330,7 @@ const KanbanBoard = ({
       if (!allowed.includes(targetStatus)) {
         const fromLabel = TASK_STATUS_CONFIG[task.status]?.label || task.status;
         const toLabel = TASK_STATUS_CONFIG[targetStatus]?.label || targetStatus;
-        setErrorShort(`Transition non autorisée : « ${fromLabel} » → « ${toLabel} ». Suivez le flux À Préparer → En Préparation → Prêt à Livrer (auto) → Livré.`);
+        setErrorShort(`Transition non autorisée : « ${fromLabel} » → « ${toLabel} ». Suivez le flux À Préparer → En Préparation → Prêt à Livrer (auto) → Livré.`, 'warn');
         clearDragHighlights();
         return;
       }
@@ -566,7 +569,13 @@ const KanbanBoard = ({
         </div>
       </div>
 
-      {error && <div className="kanban-board__error">{error}</div>}
+      {error && (
+        <div className={`kanban-toast kanban-toast--${errorTone}`} role="alert" aria-live="assertive">
+          <span className="kanban-toast__icon" aria-hidden>{errorTone === 'warn' ? '⚠️' : '⛔'}</span>
+          <span className="kanban-toast__msg">{error}</span>
+          <button type="button" className="kanban-toast__close" onClick={() => setError('')} aria-label="Fermer l'alerte">×</button>
+        </div>
+      )}
 
       {isLivreur && readyToDeliverCount > 0 && (
         <div className="kanban-board__alert kanban-board__alert--deliver" role="status">
